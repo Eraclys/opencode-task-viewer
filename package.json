@@ -1,23 +1,24 @@
 {
-  "name": "claude-task-viewer",
-  "version": "1.8.1",
-  "description": "A web-based Kanban board for viewing Claude Code tasks",
+  "name": "opencode-task-viewer",
+  "version": "2.0.0",
+  "description": "A web-based Kanban board for viewing OpenCode todos",
   "main": "server.js",
   "bin": {
-    "claude-task-viewer": "./server.js"
+    "opencode-task-viewer": "./server.js"
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js --open"
+    "dev": "node server.js --open",
+    "test:e2e:install": "playwright install chromium",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/L1AD/claude-task-viewer.git"
   },
   "keywords": [
-    "claude",
-    "claude-code",
-    "anthropic",
+    "opencode",
     "tasks",
     "todo",
     "kanban",
@@ -30,9 +31,11 @@
   },
   "homepage": "https://github.com/L1AD/claude-task-viewer#readme",
   "dependencies": {
-    "chokidar": "^3.5.3",
     "express": "^4.18.2",
     "open": "^10.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0"
   },
   "engines": {
     "node": ">=18.0.0"

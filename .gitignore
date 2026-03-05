@@ -1,6 +1,10 @@
 node_modules/
 .DS_Store
 *.log
+.idea/
+.playwright-cli/
+playwright-report/
+test-results/
 .claude/
 CLAUDE.md
 AGENTS.md
