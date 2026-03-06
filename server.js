@@ -3,6 +3,8 @@
 const express = require('express');
 const path = require('path');
 
+const { createSonarOrchestrator } = require('./sonar-orchestrator');
+
 const app = express();
 
 const DEFAULT_PORT = 3456;
@@ -14,6 +16,13 @@ const MAX_PORT_ATTEMPTS = 10;
 const OPENCODE_URL = process.env.OPENCODE_URL || 'http://localhost:4096';
 const OPENCODE_USERNAME = process.env.OPENCODE_USERNAME || 'opencode';
 const OPENCODE_PASSWORD = process.env.OPENCODE_PASSWORD || '';
+const SONARQUBE_URL = process.env.SONARQUBE_URL || '';
+const SONARQUBE_TOKEN = process.env.SONARQUBE_TOKEN || '';
+const ORCHESTRATOR_DB_PATH = process.env.ORCHESTRATOR_DB_PATH
+  || path.join(__dirname, 'data', 'orchestrator.sqlite');
+const ORCH_MAX_ACTIVE = process.env.ORCH_MAX_ACTIVE || '3';
+const ORCH_POLL_MS = process.env.ORCH_POLL_MS || '3000';
+const ORCH_MAX_ATTEMPTS = process.env.ORCH_MAX_ATTEMPTS || '3';
 
 const SESSIONS_CACHE_TTL_MS = 1500;
 const STATUS_CACHE_TTL_MS = 1000;
@@ -50,6 +59,22 @@ const assistantPresenceInFlight = new Map();
 
 // Overrides from SSE events (keeps UI reactive even if status map TTL hasn't expired)
 const statusOverride = new Map(); // `${directory}::${sessionId}` -> {type, ts}
+
+const orchestrator = createSonarOrchestrator({
+  sonarUrl: SONARQUBE_URL,
+  sonarToken: SONARQUBE_TOKEN,
+  dbPath: ORCHESTRATOR_DB_PATH,
+  maxActive: ORCH_MAX_ACTIVE,
+  pollMs: ORCH_POLL_MS,
+  maxAttempts: ORCH_MAX_ATTEMPTS,
+  opencodeFetch,
+  normalizeDirectory,
+  buildOpenCodeSessionUrl,
+  onChange: () => {
+    invalidateAllCaches();
+    broadcast({ type: 'update' });
+  }
+});
 
 function getBasicAuthHeader() {
   if (!OPENCODE_PASSWORD) return null;
@@ -500,6 +525,52 @@ function deriveSessionKanbanStatus({ runtimeStatus, modifiedAt, hasAssistantResp
   return 'completed';
 }
 
+function mapQueueItemToSessionSummary(item) {
+  const qi = item && typeof item === 'object' ? item : {};
+  const queueId = Number.isFinite(qi.id) ? qi.id : null;
+  if (!queueId) return null;
+
+  const queueState = String(qi.state || '').trim().toLowerCase();
+  if (queueState !== 'queued' && queueState !== 'dispatching') return null;
+
+  const issueKey = String(qi.issueKey || '').trim();
+  const titleParts = [];
+  if (issueKey) titleParts.push(issueKey);
+  if (qi.rule) titleParts.push(String(qi.rule));
+  if (qi.message) titleParts.push(String(qi.message));
+  const name = titleParts.length > 0
+    ? `[Queued] ${titleParts.join(' - ')}`
+    : `[Queued] Item #${queueId}`;
+
+  const runtimeType = queueState === 'dispatching' ? 'busy' : 'queued';
+  const createdAt = parseTime(qi.createdAt) || new Date().toISOString();
+  const modifiedAt = parseTime(qi.updatedAt) || createdAt;
+
+  return {
+    id: `queue-${queueId}`,
+    name,
+    project: qi.directory || null,
+    description: qi.message || null,
+    gitBranch: null,
+    createdAt,
+    modifiedAt,
+    runtimeStatus: { type: runtimeType },
+    status: 'pending',
+    hasAssistantResponse: false,
+    openCodeUrl: null,
+    isQueueItem: true,
+    queueItemId: queueId,
+    queueState,
+    issueKey: issueKey || null,
+    issueType: qi.issueType || null,
+    issueSeverity: qi.severity || null,
+    issueRule: qi.rule || null,
+    issuePath: qi.relativePath || qi.absolutePath || null,
+    issueLine: qi.line || null,
+    lastError: qi.lastError || null
+  };
+}
+
 async function getHasAssistantResponse(sessionId) {
   if (!sessionId) return null;
   const cached = assistantPresenceCache.get(sessionId);
@@ -620,6 +691,19 @@ app.get('/api/sessions', async (req, res) => {
         openCodeUrl: buildOpenCodeSessionUrl({ sessionId, directory })
       };
     });
+
+    let queueSummaries = [];
+    try {
+      const queuedItems = await orchestrator.listQueue({ states: ['queued', 'dispatching'], limit: 1000 });
+      queueSummaries = queuedItems
+        .map(mapQueueItemToSessionSummary)
+        .filter(Boolean);
+    } catch (queueError) {
+      console.error('Error loading orchestrator queue for session list:', queueError);
+      queueSummaries = [];
+    }
+
+    for (const q of queueSummaries) summaries.push(q);
 
     // Sort newest first (OpenCode usually already does, but keep deterministic)
     summaries.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
@@ -744,6 +828,161 @@ app.post('/api/sessions/:sessionId/archive', async (req, res) => {
   } catch (error) {
     console.error('Error archiving session:', error);
     res.status(502).json({ error: 'Failed to archive session in OpenCode' });
+  }
+});
+
+app.get('/api/orch/config', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json(orchestrator.getPublicConfig());
+});
+
+app.get('/api/orch/mappings', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  try {
+    res.json(await orchestrator.listMappings());
+  } catch (error) {
+    console.error('Error listing orchestrator mappings:', error);
+    res.status(502).json({ error: 'Failed to list orchestration mappings' });
+  }
+});
+
+app.post('/api/orch/mappings', async (req, res) => {
+  try {
+    const mapping = await orchestrator.upsertMapping(req.body || {});
+    res.json(mapping);
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to save mapping');
+    const status = msg.includes('Missing') || msg.includes('not found') ? 400 : 502;
+    console.error('Error saving orchestrator mapping:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.get('/api/orch/instructions', async (req, res) => {
+  try {
+    const mappingId = req.query.mappingId;
+    const issueType = req.query.issueType;
+    const profile = await orchestrator.getInstructionProfile({ mappingId, issueType });
+    res.json({
+      mappingId: mappingId ? Number(mappingId) : null,
+      issueType: issueType ? String(issueType).toUpperCase() : null,
+      instructions: profile?.instructions || null
+    });
+  } catch (error) {
+    console.error('Error loading instruction profile:', error);
+    res.status(502).json({ error: 'Failed to load instruction profile' });
+  }
+});
+
+app.post('/api/orch/instructions', async (req, res) => {
+  try {
+    const profile = await orchestrator.upsertInstructionProfile({
+      mappingId: req.body?.mappingId,
+      issueType: req.body?.issueType,
+      instructions: req.body?.instructions
+    });
+    res.json({
+      mappingId: profile.mapping_id,
+      issueType: profile.issue_type,
+      instructions: profile.instructions,
+      updatedAt: profile.updated_at
+    });
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to save instruction profile');
+    const status = msg.includes('Missing') || msg.includes('not found') ? 400 : 502;
+    console.error('Error saving instruction profile:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.get('/api/orch/issues', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  try {
+    const mappingId = req.query.mappingId;
+    if (!mappingId) return res.status(400).json({ error: 'Missing mappingId' });
+
+    const result = await orchestrator.listIssues({
+      mappingId,
+      issueType: req.query.issueType,
+      severity: req.query.severity,
+      issueStatus: req.query.issueStatus,
+      page: req.query.page,
+      pageSize: req.query.pageSize
+    });
+
+    res.json(result);
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to load SonarQube issues');
+    const status = msg.includes('Mapping not found') ? 400 : 502;
+    console.error('Error loading SonarQube issues:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.post('/api/orch/enqueue', async (req, res) => {
+  try {
+    const result = await orchestrator.enqueueIssues({
+      mappingId: req.body?.mappingId,
+      issueType: req.body?.issueType,
+      instructions: req.body?.instructions,
+      issues: req.body?.issues
+    });
+    res.json(result);
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to enqueue issues');
+    const status = msg.includes('Missing') || msg.includes('No issues') || msg.includes('Mapping not found') ? 400 : 502;
+    console.error('Error enqueueing SonarQube issues:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.get('/api/orch/queue', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  try {
+    const items = await orchestrator.listQueue({
+      states: req.query.states,
+      limit: req.query.limit
+    });
+    res.json({
+      items,
+      stats: await orchestrator.getQueueStats()
+    });
+  } catch (error) {
+    console.error('Error loading queue items:', error);
+    res.status(502).json({ error: 'Failed to load orchestration queue' });
+  }
+});
+
+app.post('/api/orch/queue/:queueId/cancel', async (req, res) => {
+  try {
+    const ok = await orchestrator.cancelQueueItem(req.params.queueId);
+    if (!ok) {
+      return res.status(404).json({ error: 'Queue item not found or already terminal' });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to cancel queue item');
+    const status = msg.includes('Invalid queue id') ? 400 : 502;
+    console.error('Error cancelling queue item:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.post('/api/orch/queue/retry-failed', async (req, res) => {
+  try {
+    const retried = await orchestrator.retryFailed();
+    res.json({ retried });
+  } catch (error) {
+    console.error('Error retrying failed queue items:', error);
+    res.status(502).json({ error: 'Failed to retry failed queue items' });
   }
 });
 
@@ -998,4 +1237,5 @@ function startServer(port, attempt = 0) {
 }
 
 startUpstreamSse();
+orchestrator.start();
 startServer(explicitPort || DEFAULT_PORT);

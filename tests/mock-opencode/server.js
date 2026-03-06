@@ -24,6 +24,10 @@ function buildDefaultState() {
   const gammaDir = 'C:/Work/Gamma';
 
   return {
+    nextSessionIndex: 1,
+    failSessionCreateCount: 0,
+    failPromptAsyncCount: 0,
+    promptDelayMs: 0,
     projects: [
       { id: 'global', worktree: '/', time: { created: baseCreated, updated: iso(now - 5 * 1000) } },
       { id: 'p-alpha', worktree: alphaWorktree, time: { created: baseCreated, updated: iso(now - 5 * 1000) } },
@@ -221,6 +225,28 @@ const server = http.createServer(async (req, res) => {
       return writeJson(res, 200, { ok: true });
     }
 
+    if (pathname === '/__test__/setFailures' && req.method === 'POST') {
+      const body = await readBody(req);
+      const sessionCreateCount = parseInt(body?.sessionCreateCount, 10);
+      const promptAsyncCount = parseInt(body?.promptAsyncCount, 10);
+      const promptDelayMs = parseInt(body?.promptDelayMs, 10);
+      state.failSessionCreateCount = Number.isFinite(sessionCreateCount) && sessionCreateCount > 0
+        ? sessionCreateCount
+        : 0;
+      state.failPromptAsyncCount = Number.isFinite(promptAsyncCount) && promptAsyncCount > 0
+        ? promptAsyncCount
+        : 0;
+      state.promptDelayMs = Number.isFinite(promptDelayMs) && promptDelayMs > 0
+        ? promptDelayMs
+        : 0;
+      return writeJson(res, 200, {
+        ok: true,
+        failSessionCreateCount: state.failSessionCreateCount,
+        failPromptAsyncCount: state.failPromptAsyncCount,
+        promptDelayMs: state.promptDelayMs
+      });
+    }
+
     // --- OpenCode-like endpoints used by the viewer ---
     if (pathname === '/project' && req.method === 'GET') {
       return writeJson(res, 200, state.projects || []);
@@ -247,6 +273,52 @@ const server = http.createServer(async (req, res) => {
       }
 
       return writeJson(res, 200, sessions);
+    }
+
+    if (pathname === '/session' && req.method === 'POST') {
+      if (state.failSessionCreateCount > 0) {
+        state.failSessionCreateCount -= 1;
+        return writeJson(res, 500, { error: 'Injected session creation failure' });
+      }
+
+      const body = await readBody(req);
+      const title = String(body?.title || '').trim() || 'Untitled session';
+      const directory = normalizeDir(url.searchParams.get('directory') || req.headers['x-opencode-directory']);
+      if (!directory) return writeJson(res, 400, { error: 'Missing directory' });
+
+      const sessionId = `sess-auto-${state.nextSessionIndex++}`;
+      const now = nowIso();
+      const worktree = directory.replace(/\//g, '\\');
+      const created = {
+        id: sessionId,
+        title,
+        directory,
+        project: { worktree },
+        time: { created: now, updated: now }
+      };
+
+      state.sessions.unshift(created);
+      state.messagesBySessionId[sessionId] = [];
+      state.todosBySessionId[sessionId] = [];
+      state.statusByDirectory[directory] = state.statusByDirectory[directory] || {};
+
+      if (!state.projects.some(p => normalizeDir(p?.worktree) === directory)) {
+        state.projects.push({
+          id: `p-${sessionId}`,
+          worktree,
+          time: { created: now, updated: now }
+        });
+      }
+
+      broadcast({
+        directory,
+        payload: {
+          type: 'session.created',
+          properties: { sessionID: sessionId }
+        }
+      });
+
+      return writeJson(res, 200, created);
     }
 
     if (pathname === '/experimental/session' && req.method === 'GET') {
@@ -327,6 +399,68 @@ const server = http.createServer(async (req, res) => {
         if (!Number.isNaN(n) && n > 0) result = messages.slice(-n);
       }
       return writeJson(res, 200, result);
+    }
+
+    if (pathname.startsWith('/session/') && pathname.endsWith('/prompt_async') && req.method === 'POST') {
+      const parts = pathname.split('/').filter(Boolean);
+      const sessionId = parts[1];
+      if (!sessionId) return writeJson(res, 400, { error: 'Missing session id' });
+      const s = getSessionById(sessionId);
+      if (!s) return writeJson(res, 404, { error: 'Session not found' });
+
+      if (state.failPromptAsyncCount > 0) {
+        state.failPromptAsyncCount -= 1;
+        return writeJson(res, 500, { error: 'Injected prompt_async failure' });
+      }
+
+      if (state.promptDelayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, state.promptDelayMs));
+      }
+
+      const body = await readBody(req);
+      const text = Array.isArray(body?.parts)
+        ? body.parts.map(p => p?.text).filter(Boolean).join('\n').trim()
+        : '';
+      const nowMs = Date.now();
+      const now = nowIso();
+      const dir = normalizeDir(s?.directory);
+
+      state.statusByDirectory[dir] = state.statusByDirectory[dir] || {};
+      state.statusByDirectory[dir][sessionId] = { type: 'busy' };
+
+      const userMessage = {
+        info: { id: `m-${sessionId}-${nowMs}`, role: 'user', time: { created: nowMs } },
+        text: text || 'Queued prompt'
+      };
+      state.messagesBySessionId[sessionId] = state.messagesBySessionId[sessionId] || [];
+      state.messagesBySessionId[sessionId].push(userMessage);
+
+      s.time = s.time || {};
+      s.time.updated = now;
+
+      broadcast({
+        directory: dir,
+        payload: {
+          type: 'session.status',
+          properties: { sessionID: sessionId, status: { type: 'busy' } }
+        }
+      });
+
+      setTimeout(() => {
+        state.statusByDirectory[dir] = state.statusByDirectory[dir] || {};
+        delete state.statusByDirectory[dir][sessionId];
+        s.time.updated = nowIso();
+        broadcast({
+          directory: dir,
+          payload: {
+            type: 'session.status',
+            properties: { sessionID: sessionId, status: { type: 'idle' } }
+          }
+        });
+      }, 400);
+
+      res.writeHead(204);
+      return res.end();
     }
 
     if (pathname === '/global/event' && req.method === 'GET') {
