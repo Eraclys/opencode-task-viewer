@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj" />
+    <Project Path="tests/TaskViewer.Server.Tests/TaskViewer.Server.Tests.csproj" />
     <Project Path="tests/TaskViewer.MockOpenCode/TaskViewer.MockOpenCode.csproj" />
     <Project Path="tests/TaskViewer.MockSonarQube/TaskViewer.MockSonarQube.csproj" />
   </Folder>

@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+using System.Text.Json.Nodes;
+using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server;
 
@@ -12,6 +13,7 @@ public sealed class SonarOrchestratorOptions
     public required int MaxAttempts { get; init; }
     public required int MaxWorkingGlobal { get; init; }
     public required int WorkingResumeBelow { get; init; }
+    public ISonarGateway? SonarGateway { get; init; }
     public required Func<string, OpenCodeRequest, Task<JsonNode?>> OpenCodeFetch { get; init; }
     public required Func<string?, string?> NormalizeDirectory { get; init; }
     public required Func<string, string?, string?> BuildOpenCodeSessionUrl { get; init; }

@@ -4,10 +4,15 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.FileProviders;
+using TaskViewer.Server.Api;
+using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.Server.Application;
+using TaskViewer.Server.Application.Sessions;
+using TaskViewer.Server.Domain;
+using TaskViewer.Server.Infrastructure.Orchestration;
 using TaskViewer.Server;
 
 var defaultPort = 3456;
@@ -46,7 +51,6 @@ const int SessionsCacheTtlMs = 1500;
 const int StatusCacheTtlMs = 1000;
 const int TodoCacheTtlMs = 3000;
 const int TasksAllCacheTtlMs = 1500;
-const int RequestConcurrency = 6;
 const int MaxAllSessions = 750;
 const int ProjectsCacheTtlMs = 10_000;
 const int DirectorySessionsCacheTtlMs = 8_000;
@@ -188,6 +192,7 @@ var orchestrator = new SonarOrchestrator(
     {
         SonarUrl = sonarUrl,
         SonarToken = sonarToken,
+        SonarGateway = new HttpSonarGateway(sonarUrl, sonarToken),
         DbPath = orchestratorDbPath,
         MaxActive = orchMaxActive,
         PollMs = orchPollMs,
@@ -244,246 +249,32 @@ if (Directory.Exists(publicDir))
         });
 }
 
-app.MapGet(
-    "/api/sessions",
-    async (HttpContext ctx) =>
-    {
-        SetNoStore(ctx.Response);
+var sessionsUseCases = new SessionsUseCases(
+    listGlobalSessions: ListGlobalSessions,
+    getStatusMapForDirectory: GetStatusMapForDirectory,
+    getSessionDirectory: GetSessionDirectory,
+    getProjectDisplayPath: GetProjectDisplayPath,
+    normalizeRuntimeStatus: NormalizeRuntimeStatus,
+    getHasAssistantResponse: GetHasAssistantResponse,
+    deriveSessionKanbanStatus: DeriveSessionKanbanStatus,
+    buildOpenCodeSessionUrl: BuildOpenCodeSessionUrl,
+    parseTime: ParseTime,
+    orchestrator: orchestrator,
+    mapQueueItemToSessionSummary: MapQueueItemToSessionSummary,
+    findSessionInfo: FindSessionInfo,
+    getTodosForSession: GetTodosForSession,
+    mapTodosToViewerTasks: MapTodosToViewerTasks,
+    getLastAssistantMessage: GetLastAssistantMessage,
+    archiveSessionOnOpenCode: ArchiveSessionOnOpenCode,
+    invalidateAllCaches: InvalidateAllCaches,
+    broadcastUpdate: () => sseHub.Broadcast(new { type = "update" }));
 
-        try
-        {
-            var limitParam = ctx.Request.Query["limit"].ToString();
+app.MapSessionsEndpoints(sessionsUseCases);
 
-            if (string.IsNullOrWhiteSpace(limitParam))
-                limitParam = "20";
+var orchestrationGateway = new OrchestrationGatewayAdapter(orchestrator);
+var orchestrationUseCases = new OrchestrationUseCases(orchestrationGateway);
 
-            var globalSessions = await ListGlobalSessions(limitParam);
-
-            var directoriesByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var session in globalSessions)
-            {
-                var dir = GetSessionDirectory(session);
-                var key = GetDirectoryCacheKey(dir);
-
-                if (string.IsNullOrWhiteSpace(key))
-                    continue;
-
-                if (!directoriesByKey.ContainsKey(key))
-                    directoriesByKey[key] = dir!;
-            }
-
-            var statusByDir = new Dictionary<string, Dictionary<string, JsonObject>>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var dir in directoriesByKey.Values)
-            {
-                var map = await GetStatusMapForDirectory(dir);
-                statusByDir[GetDirectoryCacheKey(dir)] = map;
-            }
-
-            var summaries = new List<object>();
-            var semaphore = new SemaphoreSlim(RequestConcurrency);
-
-            var tasks = globalSessions.Select(async session =>
-            {
-                await semaphore.WaitAsync();
-
-                try
-                {
-                    var sessionId = session["id"]?.ToString();
-
-                    if (string.IsNullOrWhiteSpace(sessionId))
-                        return;
-
-                    var directory = GetSessionDirectory(session);
-                    var statusMap = statusByDir.GetValueOrDefault(GetDirectoryCacheKey(directory)) ?? new Dictionary<string, JsonObject>(StringComparer.Ordinal);
-                    var runtimeStatus = NormalizeRuntimeStatus(directory, sessionId, statusMap);
-                    var createdAt = ParseTime(session["time"]?["created"]?.ToString());
-                    var modifiedAt = ParseTime(session["time"]?["updated"]?.ToString()) ?? createdAt ?? DateTimeOffset.UtcNow.ToString("O");
-                    var hasAssistantResponse = IsRuntimeRunning(runtimeStatus) ? null : await GetHasAssistantResponse(sessionId);
-                    var status = DeriveSessionKanbanStatus(runtimeStatus, modifiedAt, hasAssistantResponse);
-
-                    lock (summaries)
-                    {
-                        summaries.Add(
-                            new
-                            {
-                                id = sessionId,
-                                name = session["title"]?.ToString() ?? session["name"]?.ToString(),
-                                project = GetProjectDisplayPath(session),
-                                description = (string?)null,
-                                gitBranch = (string?)null,
-                                createdAt,
-                                modifiedAt,
-                                runtimeStatus = new
-                                {
-                                    type = runtimeStatus
-                                },
-                                status,
-                                hasAssistantResponse,
-                                openCodeUrl = BuildOpenCodeSessionUrl(sessionId, directory)
-                            });
-                    }
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
-
-            await Task.WhenAll(tasks);
-
-            try
-            {
-                var queueItems = await orchestrator.ListQueue("queued,dispatching", 1000);
-                var queueSummaries = queueItems.Select(MapQueueItemToSessionSummary).Where(x => x is not null).Cast<object>();
-                summaries.AddRange(queueSummaries);
-            }
-            catch (Exception queueError)
-            {
-                Console.Error.WriteLine($"Error loading orchestrator queue for session list: {queueError}");
-            }
-
-            var sorted = summaries
-                .OrderByDescending(s => ParseTime((string?)s.GetType().GetProperty("modifiedAt")?.GetValue(s) ?? string.Empty))
-                .ToList();
-
-            return Results.Json(sorted);
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error listing sessions: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to list sessions from OpenCode"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapGet(
-    "/api/sessions/{sessionId}",
-    async (string sessionId) =>
-    {
-        try
-        {
-            var info = await FindSessionInfo(sessionId);
-
-            if (info is null)
-                return Results.Json(
-                    new
-                    {
-                        error = "Session not found"
-                    },
-                    statusCode: 404);
-
-            var directory = GetSessionDirectory(info);
-            var todos = await GetTodosForSession(sessionId, directory);
-            var tasks = MapTodosToViewerTasks(todos);
-
-            return Results.Json(tasks);
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error getting session todos: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to load session todos from OpenCode"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapGet(
-    "/api/sessions/{sessionId}/last-assistant-message",
-    async (string sessionId) =>
-    {
-        try
-        {
-            var info = await FindSessionInfo(sessionId);
-
-            if (info is null)
-                return Results.Json(
-                    new
-                    {
-                        error = "Session not found"
-                    },
-                    statusCode: 404);
-
-            var last = await GetLastAssistantMessage(sessionId);
-
-            return Results.Json(
-                new
-                {
-                    sessionId,
-                    message = last?.Message,
-                    createdAt = last?.CreatedAt
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error getting last assistant message: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to load session messages from OpenCode"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapPost(
-    "/api/sessions/{sessionId}/archive",
-    async (string sessionId) =>
-    {
-        try
-        {
-            var info = await FindSessionInfo(sessionId);
-
-            if (info is null)
-                return Results.Json(
-                    new
-                    {
-                        error = "Session not found"
-                    },
-                    statusCode: 404);
-
-            var directory = GetSessionDirectory(info);
-            var archivedAt = await ArchiveSessionOnOpenCode(sessionId, directory);
-            InvalidateAllCaches();
-
-            await sseHub.Broadcast(
-                new
-                {
-                    type = "update"
-                });
-
-            return Results.Json(
-                new
-                {
-                    ok = true,
-                    archivedAt
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error archiving session: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to archive session in OpenCode"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapGet("/api/orch/config", () => Results.Json(orchestrator.GetPublicConfig()));
+app.MapOrchestrationEndpoints(orchestrationUseCases);
 
 app.MapGet(
     "/api/health",
@@ -492,399 +283,6 @@ app.MapGet(
         {
             ok = true
         }));
-
-app.MapGet(
-    "/api/orch/mappings",
-    async () =>
-    {
-        try
-        {
-            return Results.Json(await orchestrator.ListMappings());
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error listing orchestrator mappings: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to list orchestration mappings"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/mappings",
-    async (HttpContext ctx) =>
-    {
-        try
-        {
-            var body = await JsonNode.ParseAsync(ctx.Request.Body);
-            var mapping = await orchestrator.UpsertMapping(body);
-
-            return Results.Json(mapping);
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-            var status = msg.Contains("Missing", StringComparison.OrdinalIgnoreCase) || msg.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-            Console.Error.WriteLine($"Error saving orchestrator mapping: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapGet(
-    "/api/orch/instructions",
-    async (HttpContext ctx) =>
-    {
-        try
-        {
-            var mappingId = ctx.Request.Query["mappingId"].ToString();
-            var issueType = ctx.Request.Query["issueType"].ToString();
-            var profile = await orchestrator.GetInstructionProfile(mappingId, issueType);
-
-            return Results.Json(
-                new
-                {
-                    mappingId = int.TryParse(mappingId, out var id) ? id : (int?)null,
-                    issueType = string.IsNullOrWhiteSpace(issueType) ? null : issueType.ToUpperInvariant(),
-                    instructions = profile?["instructions"]?.ToString()
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error loading instruction profile: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to load instruction profile"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/instructions",
-    async (HttpContext ctx) =>
-    {
-        try
-        {
-            var body = await JsonNode.ParseAsync(ctx.Request.Body);
-            var profile = await orchestrator.UpsertInstructionProfile(body?["mappingId"]?.ToString(), body?["issueType"]?.ToString(), body?["instructions"]?.ToString());
-
-            return Results.Json(
-                new
-                {
-                    mappingId = profile["mapping_id"]?.GetValue<int>(),
-                    issueType = profile["issue_type"]?.ToString(),
-                    instructions = profile["instructions"]?.ToString(),
-                    updatedAt = profile["updated_at"]?.ToString()
-                });
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-            var status = msg.Contains("Missing", StringComparison.OrdinalIgnoreCase) || msg.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-            Console.Error.WriteLine($"Error saving instruction profile: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapGet(
-    "/api/orch/issues",
-    async (HttpContext ctx) =>
-    {
-        SetNoStore(ctx.Response);
-
-        try
-        {
-            var mappingId = ctx.Request.Query["mappingId"].ToString();
-
-            if (string.IsNullOrWhiteSpace(mappingId))
-                return Results.Json(
-                    new
-                    {
-                        error = "Missing mappingId"
-                    },
-                    statusCode: 400);
-
-            var result = await orchestrator.ListIssues(
-                mappingId,
-                ctx.Request.Query["issueType"].ToString(),
-                ctx.Request.Query["severity"].ToString(),
-                ctx.Request.Query["issueStatus"].ToString(),
-                ctx.Request.Query["page"].ToString(),
-                ctx.Request.Query["pageSize"].ToString(),
-                ctx.Request.Query["ruleKeys"].ToString() is { Length: > 0 } rk ? rk : ctx.Request.Query["rules"].ToString() is { Length: > 0 } rs ? rs : ctx.Request.Query["rule"].ToString());
-
-            return Results.Json(result);
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-            var status = msg.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-            Console.Error.WriteLine($"Error loading SonarQube issues: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapGet(
-    "/api/orch/rules",
-    async (HttpContext ctx) =>
-    {
-        SetNoStore(ctx.Response);
-
-        try
-        {
-            var mappingId = ctx.Request.Query["mappingId"].ToString();
-
-            if (string.IsNullOrWhiteSpace(mappingId))
-                return Results.Json(
-                    new
-                    {
-                        error = "Missing mappingId"
-                    },
-                    statusCode: 400);
-
-            var result = await orchestrator.ListRules(
-                mappingId,
-                ctx.Request.Query["issueType"].ToString(),
-                ctx.Request.Query["issueStatus"].ToString());
-
-            return Results.Json(result);
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-            var status = msg.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-            Console.Error.WriteLine($"Error loading SonarQube rules: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/enqueue",
-    async (HttpContext ctx) =>
-    {
-        try
-        {
-            var body = await JsonNode.ParseAsync(ctx.Request.Body);
-            var issues = body?["issues"] as JsonArray;
-
-            var result = await orchestrator.EnqueueIssues(
-                body?["mappingId"]?.ToString(),
-                body?["issueType"]?.ToString(),
-                body?["instructions"]?.ToString(),
-                issues);
-
-            return Results.Json(result);
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-
-            var status = msg.Contains("Missing", StringComparison.OrdinalIgnoreCase) || msg.Contains("No issues", StringComparison.OrdinalIgnoreCase) || msg.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
-                ? 400
-                : 502;
-
-            Console.Error.WriteLine($"Error enqueueing SonarQube issues: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/enqueue-all",
-    async (HttpContext ctx) =>
-    {
-        try
-        {
-            var body = await JsonNode.ParseAsync(ctx.Request.Body);
-            var ruleKeys = body?["ruleKeys"] ?? body?["rules"] ?? body?["rule"];
-
-            var result = await orchestrator.EnqueueAllMatching(
-                body?["mappingId"]?.ToString(),
-                body?["issueType"]?.ToString(),
-                ruleKeys,
-                body?["issueStatus"]?.ToString(),
-                body?["severity"]?.ToString(),
-                body?["instructions"]?.ToString());
-
-            return Results.Json(result);
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-
-            var status = msg.Contains("required", StringComparison.OrdinalIgnoreCase) || msg.Contains("Missing", StringComparison.OrdinalIgnoreCase) || msg.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
-                ? 400
-                : 502;
-
-            Console.Error.WriteLine($"Error enqueueing all matching SonarQube issues: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapGet(
-    "/api/orch/queue",
-    async (HttpContext ctx) =>
-    {
-        SetNoStore(ctx.Response);
-
-        try
-        {
-            var items = await orchestrator.ListQueue(ctx.Request.Query["states"].ToString(), ctx.Request.Query["limit"].ToString());
-            var stats = await orchestrator.GetQueueStats();
-            var worker = await orchestrator.GetWorkerState();
-
-            return Results.Json(
-                new
-                {
-                    items,
-                    stats,
-                    worker
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error loading queue items: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to load orchestration queue"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/queue/{queueId}/cancel",
-    async (string queueId) =>
-    {
-        try
-        {
-            var ok = await orchestrator.CancelQueueItem(queueId);
-
-            if (!ok)
-                return Results.Json(
-                    new
-                    {
-                        error = "Queue item not found or already terminal"
-                    },
-                    statusCode: 404);
-
-            return Results.Json(
-                new
-                {
-                    ok = true
-                });
-        }
-        catch (Exception error)
-        {
-            var msg = error.Message;
-            var status = msg.Contains("Invalid queue id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-            Console.Error.WriteLine($"Error cancelling queue item: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = msg
-                },
-                statusCode: status);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/queue/retry-failed",
-    async () =>
-    {
-        try
-        {
-            var retried = await orchestrator.RetryFailed();
-
-            return Results.Json(
-                new
-                {
-                    retried
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error retrying failed queue items: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to retry failed queue items"
-                },
-                statusCode: 502);
-        }
-    });
-
-app.MapPost(
-    "/api/orch/queue/clear",
-    async () =>
-    {
-        try
-        {
-            var cleared = await orchestrator.ClearQueued();
-
-            return Results.Json(
-                new
-                {
-                    cleared
-                });
-        }
-        catch (Exception error)
-        {
-            Console.Error.WriteLine($"Error clearing queued items: {error}");
-
-            return Results.Json(
-                new
-                {
-                    error = "Failed to clear queued items"
-                },
-                statusCode: 502);
-        }
-    });
 
 app.MapGet(
     "/api/tasks/all",
@@ -1127,65 +525,19 @@ string FindWorkspaceRoot()
 
 string? ParseTime(string? value)
 {
-    if (string.IsNullOrWhiteSpace(value))
-        return null;
-
-    return DateTimeOffset.TryParse(
-        value,
-        CultureInfo.InvariantCulture,
-        DateTimeStyles.AssumeUniversal,
-        out var dt)
-        ? dt.ToUniversalTime().ToString("O")
-        : null;
+    return TimeParser.ParseIsoTime(value);
 }
 
 string? NormalizeDirectory(string? value)
 {
-    if (string.IsNullOrWhiteSpace(value))
-        return null;
-
-    var s = value.Trim();
-
-    if (s is "/" or "\\")
-        return s;
-
-    if (Regex.IsMatch(s, "^[a-zA-Z]:[\\\\/]$"))
-        return s;
-
-    return s.TrimEnd('/', '\\');
+    return DirectoryPath.Normalize(value);
 }
 
-string? ToForwardSlashDirectory(string? value)
-{
-    var dir = NormalizeDirectory(value);
-
-    return dir?.Replace('\\', '/');
-}
-
-string GetDirectoryCacheKey(string? value) => ToForwardSlashDirectory(value) ?? string.Empty;
+string GetDirectoryCacheKey(string? value) => DirectoryPath.GetCacheKey(value);
 
 List<string> GetDirectoryVariants(string? value)
 {
-    var dir = NormalizeDirectory(value);
-
-    if (string.IsNullOrWhiteSpace(dir))
-        return [];
-
-    var variants = new List<string>
-    {
-        dir
-    };
-
-    var forward = dir.Replace('\\', '/');
-    var backward = dir.Replace('/', '\\');
-
-    if (!variants.Contains(forward, StringComparer.Ordinal))
-        variants.Add(forward);
-
-    if (!variants.Contains(backward, StringComparer.Ordinal))
-        variants.Add(backward);
-
-    return variants;
+    return DirectoryPath.GetVariants(value);
 }
 
 string? GetSessionDirectory(JsonObject? session)
@@ -1200,25 +552,7 @@ string? GetProjectDisplayPath(JsonObject? session)
 
 string? BuildOpenCodeSessionUrl(string sessionId, string? directory)
 {
-    var sid = (sessionId ?? string.Empty).Trim();
-
-    if (string.IsNullOrWhiteSpace(sid))
-        return null;
-
-    var baseUrl = opencodeUrl.TrimEnd('/');
-
-    if (string.IsNullOrWhiteSpace(baseUrl))
-        return null;
-
-    var dir = NormalizeDirectory(directory);
-
-    if (string.IsNullOrWhiteSpace(dir))
-        return $"{baseUrl}/session/{Uri.EscapeDataString(sid)}";
-
-    var bytes = Encoding.UTF8.GetBytes(dir);
-    var slug = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    return $"{baseUrl}/{slug}/session/{Uri.EscapeDataString(sid)}";
+    return OpenCodeSessionUrlBuilder.Build(opencodeUrl, sessionId, directory);
 }
 
 List<JsonObject> ToArrayResponse(JsonNode? value)
@@ -1555,51 +889,9 @@ async Task<Dictionary<string, JsonObject>> GetStatusMapForDirectory(string? dire
     return statusMap;
 }
 
-string NormalizeTodoStatus(string? raw)
-{
-    if (string.IsNullOrWhiteSpace(raw))
-        return "pending";
-
-    var compact = raw.Trim().ToLowerInvariant().Replace("-", "_").Replace(" ", "_");
-
-    return compact switch
-    {
-        "inprogress" or "in_progress" => "in_progress",
-        "done" or "complete" or "completed" => "completed",
-        "canceled" or "cancelled" => "cancelled",
-        "pending" or "todo" or "idle" => "pending",
-        _ => compact
-    };
-}
-
-string? NormalizeTodoPriority(string? raw)
-{
-    if (string.IsNullOrWhiteSpace(raw))
-        return null;
-
-    var s = raw.Trim().ToLowerInvariant();
-
-    return s switch
-    {
-        "p0" or "0" or "urgent" or "p1" or "1" => "high",
-        "p2" or "2" => "medium",
-        "p3" or "3" => "low",
-        "high" or "medium" or "low" => s,
-        _ => s
-    };
-}
-
 JsonObject NormalizeTodo(JsonObject? todo)
 {
-    var t = todo ?? new JsonObject();
-    var content = t["content"]?.ToString() ?? t["text"]?.ToString() ?? t["title"]?.ToString() ?? string.Empty;
-
-    return new JsonObject
-    {
-        ["content"] = content,
-        ["status"] = NormalizeTodoStatus(t["status"]?.ToString() ?? t["state"]?.ToString()),
-        ["priority"] = NormalizeTodoPriority(t["priority"]?.ToString())
-    };
+    return TodoNormalization.NormalizeTodo(todo);
 }
 
 async Task<List<JsonObject>> GetTodosForSession(string sessionId, string? directory)
@@ -1652,28 +944,12 @@ string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<st
 
 bool IsRuntimeRunning(string? type)
 {
-    var t = (type ?? string.Empty).Trim().ToLowerInvariant();
-
-    return t is "busy" or "retry" or "running";
+    return SessionStatusPolicy.IsRuntimeRunning(type);
 }
 
 string DeriveSessionKanbanStatus(string runtimeType, string modifiedAt, bool? hasAssistantResponse)
 {
-    if (IsRuntimeRunning(runtimeType))
-        return "in_progress";
-
-    if (hasAssistantResponse == true)
-        return "completed";
-
-    if (hasAssistantResponse == false)
-        return "pending";
-
-    if (!DateTimeOffset.TryParse(modifiedAt, out var ts))
-        return "pending";
-
-    var age = DateTimeOffset.UtcNow - ts;
-
-    return age.TotalMilliseconds <= SessionRecentWindowMs ? "pending" : "completed";
+    return SessionStatusPolicy.DeriveKanbanStatus(runtimeType, modifiedAt, hasAssistantResponse, SessionRecentWindowMs);
 }
 
 async Task<JsonObject?> FindSessionInfo(string sessionId)
@@ -1771,101 +1047,17 @@ async Task<string?> ArchiveSessionOnOpenCode(string sessionId, string? directory
 
 string GetMessageRole(JsonObject? message)
 {
-    return (message?["info"]?["role"]?.ToString() ?? message?["role"]?.ToString() ?? message?["author"]?["role"]?.ToString() ?? string.Empty).Trim().ToLowerInvariant();
-}
-
-string ExtractTextFragment(JsonNode? value, int depth = 0)
-{
-    if (depth > 5 ||
-        value is null)
-        return string.Empty;
-
-    switch (value)
-    {
-        case JsonValue v: return v.ToString().Trim();
-        case JsonArray arr: return string.Join("\n", arr.Select(x => ExtractTextFragment(x, depth + 1)).Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
-        case JsonObject obj:
-            {
-                foreach (var key in new[]
-                {
-                    "text",
-                    "content",
-                    "message",
-                    "body",
-                    "value",
-                    "markdown"
-                })
-                {
-                    var outText = ExtractTextFragment(obj[key], depth + 1);
-
-                    if (!string.IsNullOrWhiteSpace(outText))
-                        return outText;
-                }
-
-                if (obj["parts"] is JsonArray parts)
-                {
-                    var outText = ExtractTextFragment(parts, depth + 1);
-
-                    if (!string.IsNullOrWhiteSpace(outText))
-                        return outText;
-                }
-
-                if (string.Equals(obj["type"]?.ToString(), "text", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(obj["text"]?.ToString()))
-                    return obj["text"]!.ToString().Trim();
-
-                return string.Empty;
-            }
-        default: return string.Empty;
-    }
+    return AssistantMessageParser.GetMessageRole(message);
 }
 
 string ExtractAssistantMessageText(JsonObject? message)
 {
-    var candidates = new[]
-    {
-        message?["content"],
-        message?["text"],
-        message?["message"],
-        message?["body"],
-        message?["output"],
-        message?["response"],
-        message?["parts"],
-        message?["data"],
-        message?["info"]?["content"],
-        message?["info"]?["text"]
-    };
-
-    foreach (var c in candidates)
-    {
-        var txt = ExtractTextFragment(c);
-
-        if (!string.IsNullOrWhiteSpace(txt))
-            return txt;
-    }
-
-    return string.Empty;
+    return AssistantMessageParser.ExtractAssistantMessageText(message);
 }
 
 string? ExtractMessageCreatedAt(JsonObject? message)
 {
-    var candidates = new[]
-    {
-        message?["info"]?["time"]?["created"]?.ToString(),
-        message?["time"]?["created"]?.ToString(),
-        message?["createdAt"]?.ToString(),
-        message?["timestamp"]?.ToString()
-    };
-
-    foreach (var c in candidates)
-    {
-        var t = ParseTime(c);
-
-        if (!string.IsNullOrWhiteSpace(t))
-            return t;
-    }
-
-    return null;
+    return AssistantMessageParser.ExtractMessageCreatedAt(message);
 }
 
 LastAssistantMessage? FindLastAssistantMessage(List<JsonObject> messages)
