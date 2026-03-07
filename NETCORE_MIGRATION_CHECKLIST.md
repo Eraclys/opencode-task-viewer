@@ -104,10 +104,10 @@ Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) w
 
 ## 7) Test Harness Migration
 
-- [x] Update `tests/e2e/global-setup.js` to start the ASP.NET Core server instead of Node `server.js`.
-- [x] Keep mock OpenCode and mock Sonar servers unchanged initially.
-- [x] Preserve runtime `.runtime.json` contract expected by tests.
-- [x] Run all Playwright tests and fix parity regressions.
+- [x] Replace JavaScript Playwright tests with .NET Playwright + xUnit tests.
+- [x] Replace Node mock OpenCode and Node mock Sonar servers with .NET mock hosts.
+- [x] Remove `.runtime.json` setup/teardown dependency by using xUnit fixture-managed process orchestration.
+- [x] Run all Playwright parity tests and fix regressions.
 - [ ] Add backend-level integration tests for critical API and SSE behavior in .NET.
 
 ## 8) Operational Readiness
@@ -123,7 +123,7 @@ Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) w
 ## 9) Cutover and Cleanup
 
 - [x] Switch default run scripts/docs to .NET host commands.
-- [ ] Keep Node implementation behind temporary fallback flag (optional, short-lived).
+- [x] Remove obsolete JavaScript runtime and test harness files (`package.json`, JS Playwright specs/config, JS mock servers).
 - [x] Remove obsolete Node server/orchestrator files once parity is confirmed.
 - [x] Update README/AGENTS docs for new architecture and run/test commands.
 - [x] Run final parity pass with Playwright and manual smoke checks.

@@ -1,0 +1,1 @@
+﻿sealed record LastAssistantMessage(string? Message, string? CreatedAt);

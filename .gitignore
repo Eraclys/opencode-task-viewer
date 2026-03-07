@@ -418,7 +418,6 @@ FodyWeavers.xsd
 *.msp
 
 
-node_modules/
 .DS_Store
 *.log
 .idea/
@@ -427,4 +426,3 @@ playwright-report/
 test-results/
 .claude/
 CLAUDE.md
-AGENTS.md

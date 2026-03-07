@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaskViewer.Server/TaskViewer.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj" />
+    <Project Path="tests/TaskViewer.MockOpenCode/TaskViewer.MockOpenCode.csproj" />
+    <Project Path="tests/TaskViewer.MockSonarQube/TaskViewer.MockSonarQube.csproj" />
+  </Folder>
+</Solution>

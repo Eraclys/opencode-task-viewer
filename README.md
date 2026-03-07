@@ -21,17 +21,9 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 ## Requirements
 
 - .NET SDK >= 8.0
-- Node.js >= 18 (for Playwright E2E tests and mock servers)
 - OpenCode Web Mode server running (default: `http://localhost:4096`)
 
 ## Run
-
-```bash
-npm install
-npm start
-```
-
-Equivalent direct host command:
 
 ```bash
 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
@@ -43,20 +35,20 @@ Open http://127.0.0.1:3456
 
 ```bash
 # Viewer server
-PORT=8080 npm start
-HOST=127.0.0.1 npm start
+PORT=8080 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+HOST=127.0.0.1 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 
 # OpenCode server
-OPENCODE_URL=http://localhost:4096 npm start
+OPENCODE_URL=http://localhost:4096 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 
 # SonarQube orchestration (optional)
-SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... npm start
-ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite npm start
-ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 npm start
-ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 npm start
+SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 
 # If your OpenCode server uses Basic Auth
-OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
+OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 ```
 
 ## API (Viewer)
@@ -89,6 +81,12 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
 ## Tests
 
 ```bash
-npm run test:e2e:install
-npm run test:e2e
+dotnet test TaskViewer.slnx
+```
+
+Playwright browser install (first run):
+
+```bash
+dotnet build tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj
+powershell ./tests/TaskViewer.E2E.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
 ```
