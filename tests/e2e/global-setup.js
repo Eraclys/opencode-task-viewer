@@ -118,7 +118,7 @@ module.exports = async () => {
       SONARQUBE_URL: sonarUrl,
       SONARQUBE_TOKEN: 'test-token',
       ORCH_POLL_MS: '1200',
-      ORCH_MAX_ACTIVE: '2',
+      ORCH_MAX_ACTIVE: '1',
       ORCH_MAX_ATTEMPTS: '1'
     },
     stdio: ['ignore', 'pipe', 'pipe']

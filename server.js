@@ -23,6 +23,8 @@ const ORCHESTRATOR_DB_PATH = process.env.ORCHESTRATOR_DB_PATH
 const ORCH_MAX_ACTIVE = process.env.ORCH_MAX_ACTIVE || '3';
 const ORCH_POLL_MS = process.env.ORCH_POLL_MS || '3000';
 const ORCH_MAX_ATTEMPTS = process.env.ORCH_MAX_ATTEMPTS || '3';
+const ORCH_MAX_WORKING_GLOBAL = process.env.ORCH_MAX_WORKING_GLOBAL || '5';
+const ORCH_WORKING_RESUME_BELOW = process.env.ORCH_WORKING_RESUME_BELOW || '';
 
 const SESSIONS_CACHE_TTL_MS = 1500;
 const STATUS_CACHE_TTL_MS = 1000;
@@ -67,6 +69,8 @@ const orchestrator = createSonarOrchestrator({
   maxActive: ORCH_MAX_ACTIVE,
   pollMs: ORCH_POLL_MS,
   maxAttempts: ORCH_MAX_ATTEMPTS,
+  maxWorkingGlobal: ORCH_MAX_WORKING_GLOBAL,
+  workingResumeBelow: ORCH_WORKING_RESUME_BELOW,
   opencodeFetch,
   normalizeDirectory,
   buildOpenCodeSessionUrl,
@@ -178,9 +182,82 @@ function normalizeDirectory(value) {
   if (!value) return null;
   const s = String(value).trim();
   if (!s) return null;
-  // OpenCode's per-directory endpoints accept Windows paths, but the /session endpoint
-  // directory filter only works reliably with forward slashes.
-  return s.replace(/\\/g, '/').replace(/\/+$/g, '');
+  if (s === '/' || s === '\\') return s;
+  if (/^[a-zA-Z]:[\\/]$/.test(s)) return s;
+  return s.replace(/[\\/]+$/g, '');
+}
+
+function toForwardSlashDirectory(value) {
+  const dir = normalizeDirectory(value);
+  if (!dir) return null;
+  return dir.replace(/\\/g, '/');
+}
+
+function getDirectoryCacheKey(value) {
+  return toForwardSlashDirectory(value) || '';
+}
+
+function getDirectoryVariants(value) {
+  const dir = normalizeDirectory(value);
+  if (!dir) return [];
+
+  const variants = [dir];
+  const forward = dir.replace(/\\/g, '/');
+  const backward = dir.replace(/\//g, '\\');
+  if (forward && !variants.includes(forward)) variants.push(forward);
+  if (backward && !variants.includes(backward)) variants.push(backward);
+  return variants;
+}
+
+function collectSandboxDirectoryCandidates(value, out) {
+  if (value === null || value === undefined) return;
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const dir = normalizeDirectory(String(value));
+    if (dir) out.push(dir);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectSandboxDirectoryCandidates(entry, out);
+    }
+    return;
+  }
+
+  if (typeof value === 'object') {
+    const maybePath = value.directory || value.path || value.worktree || value.root;
+    if (maybePath) {
+      const dir = normalizeDirectory(maybePath);
+      if (dir) out.push(dir);
+    }
+  }
+}
+
+function getProjectSearchDirectories(project) {
+  const candidates = [];
+
+  const worktree = normalizeDirectory(project?.worktree);
+  if (worktree && worktree !== '/' && worktree !== '\\') {
+    candidates.push(worktree);
+  }
+
+  collectSandboxDirectoryCandidates(project?.sandboxes, candidates);
+
+  const deduped = [];
+  const seen = new Set();
+  for (const dir of candidates) {
+    if (!dir || dir === '/' || dir === '\\') continue;
+    const key = getDirectoryCacheKey(dir);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(dir);
+  }
+
+  return {
+    worktree: worktree && worktree !== '/' && worktree !== '\\' ? worktree : null,
+    directories: deduped
+  };
 }
 
 function parseTime(value) {
@@ -356,19 +433,29 @@ async function listGlobalSessions(limitParam) {
   // `time.archived` on the per-directory `/session` listing. Build the cross-project
   // list by enumerating projects and listing sessions per worktree.
   const projects = await listProjects();
-  const projectWorktrees = (projects || [])
-    .map(p => p?.worktree)
-    .filter(Boolean)
-    .filter(wt => String(wt) !== '/');
+  const projectSearchEntries = [];
+  const seenDirectoryKeys = new Set();
+  for (const p of projects || []) {
+    const searchInfo = getProjectSearchDirectories(p);
+    for (const directory of searchInfo.directories) {
+      const key = getDirectoryCacheKey(directory);
+      if (!key || seenDirectoryKeys.has(key)) continue;
+      seenDirectoryKeys.add(key);
+      projectSearchEntries.push({
+        directory,
+        projectWorktree: searchInfo.worktree || directory
+      });
+    }
+  }
 
   const perDirLimit = limitParam === 'all'
     ? MAX_SESSIONS_PER_PROJECT
     : Math.max(120, Math.min(MAX_SESSIONS_PER_PROJECT, limit * 8));
 
-  const perProjectSessions = await mapLimit(projectWorktrees, Math.min(REQUEST_CONCURRENCY, 4), async (worktree) => {
-    const directory = normalizeDirectory(worktree);
+  const perProjectSessions = await mapLimit(projectSearchEntries, Math.min(REQUEST_CONCURRENCY, 4), async (entry) => {
+    const directory = normalizeDirectory(entry?.directory);
     if (!directory) return [];
-    return listSessionsForDirectory({ directory, projectWorktree: worktree, limit: perDirLimit });
+    return listSessionsForDirectory({ directory, projectWorktree: entry.projectWorktree || directory, limit: perDirLimit });
   });
 
   let sessions = perProjectSessions.flat();
@@ -411,57 +498,95 @@ async function listSessionsForDirectory({ directory, projectWorktree, limit }) {
   const dir = normalizeDirectory(directory);
   if (!dir) return [];
 
+  const dirKey = getDirectoryCacheKey(dir);
+  if (!dirKey) return [];
+
   const now = Date.now();
-  const cached = sessionsCacheByDirectory.get(dir);
+  const cached = sessionsCacheByDirectory.get(dirKey);
   if (cached && (now - cached.ts) < DIRECTORY_SESSIONS_CACHE_TTL_MS) {
     return cached.data;
   }
 
-  const data = await opencodeFetch('/session', {
-    query: {
-      roots: 'true',
-      limit: Math.max(1, Math.min(parseInt(String(limit || '200'), 10) || 200, MAX_SESSIONS_PER_PROJECT))
-    },
-    directory: dir
-  });
+  const perRequestLimit = Math.max(1, Math.min(parseInt(String(limit || '200'), 10) || 200, MAX_SESSIONS_PER_PROJECT));
+  const variants = getDirectoryVariants(dir);
+  const mergedById = new Map();
+  let hadSuccess = false;
+  let lastError = null;
 
-  const sessions = toArrayResponse(data)
-    .filter(s => s && s.id)
-    .filter(s => !s?.time?.archived)
-    .map(s => ({
-      ...s,
-      directory: dir,
-      projectWorktree: projectWorktree || null,
-      project: projectWorktree ? { worktree: projectWorktree } : s.project
-    }));
+  for (const candidateDir of variants) {
+    try {
+      const data = await opencodeFetch('/session', {
+        query: {
+          roots: 'true',
+          limit: perRequestLimit
+        },
+        directory: candidateDir
+      });
 
-  sessionsCacheByDirectory.set(dir, { ts: now, data: sessions });
+      hadSuccess = true;
+      const list = toArrayResponse(data)
+        .filter(s => s && s.id)
+        .filter(s => !s?.time?.archived)
+        .map(s => ({
+          ...s,
+          directory: normalizeDirectory(s?.directory) || candidateDir,
+          projectWorktree: projectWorktree || null,
+          project: projectWorktree ? { worktree: projectWorktree } : s.project
+        }));
+
+      for (const s of list) {
+        if (!mergedById.has(s.id)) mergedById.set(s.id, s);
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!hadSuccess && lastError) throw lastError;
+
+  const sessions = Array.from(mergedById.values());
+  sessionsCacheByDirectory.set(dirKey, { ts: now, data: sessions });
   return sessions;
 }
 
 async function getStatusMapForDirectory(directory) {
-  if (!directory) return {};
+  const dir = normalizeDirectory(directory);
+  if (!dir) return {};
+
+  const dirKey = getDirectoryCacheKey(dir);
+  if (!dirKey) return {};
+
   const now = Date.now();
-  const cached = statusCacheByDirectory.get(directory);
+  const cached = statusCacheByDirectory.get(dirKey);
   if (cached && (now - cached.ts) < STATUS_CACHE_TTL_MS) {
     return cached.data;
   }
 
   let statusMap = {};
-  try {
-    statusMap = await opencodeFetch('/session/status', { directory });
-  } catch (e) {
-    // Treat as empty (everything idle) if status fetch fails.
-    statusMap = {};
+  for (const candidateDir of getDirectoryVariants(dir)) {
+    try {
+      const result = await opencodeFetch('/session/status', { directory: candidateDir });
+      const normalized = (result && typeof result === 'object' && !Array.isArray(result)) ? result : {};
+      if (Object.keys(normalized).length > 0) {
+        statusMap = normalized;
+        break;
+      }
+
+      if (Object.keys(statusMap).length === 0) {
+        statusMap = normalized;
+      }
+    } catch {
+      // Best effort: try next directory variant.
+    }
   }
 
-  statusCacheByDirectory.set(directory, { ts: now, data: statusMap || {} });
+  statusCacheByDirectory.set(dirKey, { ts: now, data: statusMap || {} });
   return statusMap || {};
 }
 
 async function getTodosForSession({ sessionId, directory }) {
   if (!sessionId) return [];
-  const cacheKey = `${directory || ''}::${sessionId}`;
+  const cacheKey = `${getDirectoryCacheKey(directory)}::${sessionId}`;
   const now = Date.now();
   const cached = todoCache.get(cacheKey);
   if (cached && (now - cached.ts) < TODO_CACHE_TTL_MS) {
@@ -482,7 +607,7 @@ async function getTodosForSession({ sessionId, directory }) {
 }
 
 function normalizeRuntimeStatus({ directory, sessionId, statusMap }) {
-  const overrideKey = `${directory || ''}::${sessionId}`;
+  const overrideKey = `${getDirectoryCacheKey(directory)}::${sessionId}`;
   const override = statusOverride.get(overrideKey);
   if (override && (Date.now() - override.ts) < 60_000) {
     return { type: override.type || 'idle' };
@@ -657,17 +782,24 @@ app.get('/api/sessions', async (req, res) => {
     const limitParam = req.query.limit || '20';
     const globalSessions = await listGlobalSessions(limitParam);
 
-    const directories = Array.from(new Set(globalSessions.map(getSessionDirectory).filter(Boolean)));
+    const directoriesByKey = new Map();
+    for (const session of globalSessions) {
+      const dir = getSessionDirectory(session);
+      const key = getDirectoryCacheKey(dir);
+      if (!key || directoriesByKey.has(key)) continue;
+      directoriesByKey.set(key, dir);
+    }
+    const directories = Array.from(directoriesByKey.values());
     const statusMaps = await mapLimit(directories, Math.min(REQUEST_CONCURRENCY, 4), async (dir) => {
       const m = await getStatusMapForDirectory(dir);
-      return [dir, m];
+      return [getDirectoryCacheKey(dir), m];
     });
     const statusByDir = new Map(statusMaps);
 
     const summaries = await mapLimit(globalSessions, REQUEST_CONCURRENCY, async (session) => {
       const sessionId = session?.id;
       const directory = getSessionDirectory(session);
-      const statusMap = statusByDir.get(directory) || {};
+      const statusMap = statusByDir.get(getDirectoryCacheKey(directory)) || {};
       const runtimeStatus = normalizeRuntimeStatus({ directory, sessionId, statusMap });
 
       const createdAt = parseTime(session?.time?.created) || null;
@@ -912,6 +1044,7 @@ app.get('/api/orch/issues', async (req, res) => {
       issueType: req.query.issueType,
       severity: req.query.severity,
       issueStatus: req.query.issueStatus,
+      ruleKeys: req.query.ruleKeys || req.query.rules || req.query.rule,
       page: req.query.page,
       pageSize: req.query.pageSize
     });
@@ -921,6 +1054,29 @@ app.get('/api/orch/issues', async (req, res) => {
     const msg = String(error?.message || 'Failed to load SonarQube issues');
     const status = msg.includes('Mapping not found') ? 400 : 502;
     console.error('Error loading SonarQube issues:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.get('/api/orch/rules', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  try {
+    const mappingId = req.query.mappingId;
+    if (!mappingId) return res.status(400).json({ error: 'Missing mappingId' });
+
+    const result = await orchestrator.listRules({
+      mappingId,
+      issueType: req.query.issueType,
+      issueStatus: req.query.issueStatus
+    });
+
+    res.json(result);
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to load SonarQube rules');
+    const status = msg.includes('Mapping not found') ? 400 : 502;
+    console.error('Error loading SonarQube rules:', error);
     res.status(status).json({ error: msg });
   }
 });
@@ -942,6 +1098,25 @@ app.post('/api/orch/enqueue', async (req, res) => {
   }
 });
 
+app.post('/api/orch/enqueue-all', async (req, res) => {
+  try {
+    const result = await orchestrator.enqueueAllMatching({
+      mappingId: req.body?.mappingId,
+      issueType: req.body?.issueType,
+      ruleKeys: req.body?.ruleKeys || req.body?.rules || req.body?.rule,
+      issueStatus: req.body?.issueStatus,
+      severity: req.body?.severity,
+      instructions: req.body?.instructions
+    });
+    res.json(result);
+  } catch (error) {
+    const msg = String(error?.message || 'Failed to queue all matching issues');
+    const status = msg.includes('required') || msg.includes('Missing') || msg.includes('Mapping not found') ? 400 : 502;
+    console.error('Error enqueueing all matching SonarQube issues:', error);
+    res.status(status).json({ error: msg });
+  }
+});
+
 app.get('/api/orch/queue', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
@@ -953,7 +1128,8 @@ app.get('/api/orch/queue', async (req, res) => {
     });
     res.json({
       items,
-      stats: await orchestrator.getQueueStats()
+      stats: await orchestrator.getQueueStats(),
+      worker: await orchestrator.getWorkerState()
     });
   } catch (error) {
     console.error('Error loading queue items:', error);
@@ -986,6 +1162,16 @@ app.post('/api/orch/queue/retry-failed', async (req, res) => {
   }
 });
 
+app.post('/api/orch/queue/clear', async (req, res) => {
+  try {
+    const cleared = await orchestrator.clearQueued();
+    res.json({ cleared });
+  } catch (error) {
+    console.error('Error clearing queued items:', error);
+    res.status(502).json({ error: 'Failed to clear queued items' });
+  }
+});
+
 // API: Get all tasks across sessions currently known (used for Live Updates + search)
 app.get('/api/tasks/all', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -1002,10 +1188,17 @@ app.get('/api/tasks/all', async (req, res) => {
     // calls /api/sessions (e.g. no sidebar), we still want a complete board.
     const sessions = sessionsCache.data || await listGlobalSessions('all');
 
-    const directories = Array.from(new Set(sessions.map(getSessionDirectory).filter(Boolean)));
+    const directoriesByKey = new Map();
+    for (const session of sessions) {
+      const dir = getSessionDirectory(session);
+      const key = getDirectoryCacheKey(dir);
+      if (!key || directoriesByKey.has(key)) continue;
+      directoriesByKey.set(key, dir);
+    }
+    const directories = Array.from(directoriesByKey.values());
     const statusMaps = await mapLimit(directories, Math.min(REQUEST_CONCURRENCY, 4), async (dir) => {
       const m = await getStatusMapForDirectory(dir);
-      return [dir, m];
+      return [getDirectoryCacheKey(dir), m];
     });
     const statusByDir = new Map(statusMaps);
 
@@ -1015,7 +1208,7 @@ app.get('/api/tasks/all', async (req, res) => {
       if (!sessionId) return;
 
       const directory = getSessionDirectory(session);
-      const statusMap = statusByDir.get(directory) || {};
+      const statusMap = statusByDir.get(getDirectoryCacheKey(directory)) || {};
       const runtimeStatus = normalizeRuntimeStatus({ directory, sessionId, statusMap });
 
       let todos = [];
@@ -1100,12 +1293,12 @@ function invalidateAllCaches() {
 
 function invalidateTodos(directory, sessionId) {
   tasksAllCache.ts = 0;
-  const key = `${directory || ''}::${sessionId}`;
+  const key = `${getDirectoryCacheKey(directory)}::${sessionId}`;
   todoCache.delete(key);
 }
 
 function noteStatusOverride(directory, sessionId, type) {
-  const key = `${directory || ''}::${sessionId}`;
+  const key = `${getDirectoryCacheKey(directory)}::${sessionId}`;
   statusOverride.set(key, { type, ts: Date.now() });
 }
 

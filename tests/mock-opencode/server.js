@@ -30,7 +30,12 @@ function buildDefaultState() {
     promptDelayMs: 0,
     projects: [
       { id: 'global', worktree: '/', time: { created: baseCreated, updated: iso(now - 5 * 1000) } },
-      { id: 'p-alpha', worktree: alphaWorktree, time: { created: baseCreated, updated: iso(now - 5 * 1000) } },
+      {
+        id: 'p-alpha',
+        worktree: alphaWorktree,
+        sandboxes: [[`${alphaWorktree}\\SandboxOnly`]],
+        time: { created: baseCreated, updated: iso(now - 5 * 1000) }
+      },
       { id: 'p-beta', worktree: betaWorktree, time: { created: baseCreated, updated: iso(now - 5 * 1000) } },
       { id: 'p-gamma', worktree: gammaWorktree, time: { created: baseCreated, updated: iso(now - 5 * 1000) } }
     ],
@@ -245,6 +250,59 @@ const server = http.createServer(async (req, res) => {
         failPromptAsyncCount: state.failPromptAsyncCount,
         promptDelayMs: state.promptDelayMs
       });
+    }
+
+    if (pathname === '/__test__/addSandboxSession' && req.method === 'POST') {
+      const body = await readBody(req);
+
+      const projectWorktree = String(body?.projectWorktree || body?.worktree || '').trim();
+      const sandboxPath = String(body?.sandboxPath || body?.sandbox || '').trim();
+      const sessionId = String(body?.sessionId || '').trim() || `sess-sandbox-${state.nextSessionIndex++}`;
+      const title = String(body?.title || 'Sandbox Session').trim();
+      const directory = normalizeDir(body?.directory || sandboxPath);
+
+      if (!projectWorktree || !sandboxPath || !directory) {
+        return writeJson(res, 400, { error: 'Expected { projectWorktree, sandboxPath, directory? }' });
+      }
+
+      const now = nowIso();
+      let project = state.projects.find(p => normalizeDir(p?.worktree) === normalizeDir(projectWorktree));
+      if (!project) {
+        project = {
+          id: `p-sandbox-${state.nextSessionIndex++}`,
+          worktree: projectWorktree,
+          sandboxes: [],
+          time: { created: now, updated: now }
+        };
+        state.projects.push(project);
+      }
+
+      const sandboxes = Array.isArray(project.sandboxes) ? project.sandboxes : [];
+      if (!sandboxes.some(x => normalizeDir(x) === normalizeDir(sandboxPath))) {
+        sandboxes.push(sandboxPath);
+      }
+      project.sandboxes = sandboxes;
+      project.time = project.time || {};
+      project.time.updated = now;
+
+      const existing = getSessionById(sessionId);
+      if (!existing) {
+        state.sessions.unshift({
+          id: sessionId,
+          title,
+          directory,
+          project: { worktree: projectWorktree },
+          time: { created: now, updated: now }
+        });
+      }
+
+      state.messagesBySessionId[sessionId] = state.messagesBySessionId[sessionId] || [
+        { info: { id: `m-${sessionId}`, role: 'user', time: { created: Date.now() } }, text: 'Sandbox-only session prompt.' }
+      ];
+      state.todosBySessionId[sessionId] = state.todosBySessionId[sessionId] || [];
+      state.statusByDirectory[directory] = state.statusByDirectory[directory] || {};
+
+      return writeJson(res, 200, { ok: true, sessionId, directory, projectWorktree, sandboxPath });
     }
 
     // --- OpenCode-like endpoints used by the viewer ---

@@ -36,7 +36,7 @@ async function setupGammaMapping(page) {
 async function loadCodeSmellIssues(page) {
   await page.getByTestId('orch-issue-type').selectOption('CODE_SMELL');
   await page.getByTestId('orch-load-issues-btn').click();
-  await expect(page.locator('.orch-issue-row')).toHaveCount(2);
+  await expect(page.locator('.orch-issue-row')).toHaveCount(3);
 }
 
 async function getLatestQueueItemForIssue(request, viewerUrl, issueKey) {
@@ -47,6 +47,23 @@ async function getLatestQueueItemForIssue(request, viewerUrl, issueKey) {
   const matches = items.filter(item => item?.issueKey === issueKey);
   if (matches.length === 0) return null;
   return matches.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0];
+}
+
+async function getQueueResponse(request, viewerUrl) {
+  const res = await request.get(`${viewerUrl}/api/orch/queue?limit=500`);
+  if (!res.ok()) throw new Error('Failed to load queue');
+  return res.json();
+}
+
+async function waitForQueuedCountAtLeast(request, viewerUrl, minQueued, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const data = await getQueueResponse(request, viewerUrl);
+    const queued = Number(data?.stats?.queued || 0);
+    if (queued >= minQueued) return data;
+    await pageWait(200);
+  }
+  throw new Error(`Timed out waiting for queued count >= ${minQueued}`);
 }
 
 async function waitForQueueItemStateById(request, viewerUrl, queueId, expectedState, timeoutMs = 15_000) {
@@ -74,9 +91,23 @@ async function pageWait(ms) {
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function waitForNoActiveQueue(request, viewerUrl, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await request.post(`${viewerUrl}/api/orch/queue/clear`);
+    const data = await getQueueResponse(request, viewerUrl);
+    const queued = Number(data?.stats?.queued || 0);
+    const dispatching = Number(data?.stats?.dispatching || 0);
+    if (queued === 0 && dispatching === 0) return;
+    await pageWait(250);
+  }
+  throw new Error('Timed out waiting for queue to become idle');
+}
+
 test('orchestration flow queues per issue and creates OpenCode sessions', async ({ page, request }) => {
   const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
   await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
 
   await page.goto(viewerUrl);
 
@@ -101,9 +132,91 @@ test('orchestration flow queues per issue and creates OpenCode sessions', async 
   await expect(page.getByTestId('column-pending')).not.toContainText('[Queued]', { timeout: 15_000 });
 });
 
+test('rule filter shows readable labels, ordered by count, and filters by exact key', async ({ page, request }) => {
+  const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
+  await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
+
+  await page.goto(viewerUrl);
+  await expect(page.getByTestId('orchestrator-panel')).toBeVisible();
+
+  await setupGammaMapping(page);
+  await page.getByTestId('orch-issue-type').selectOption('CODE_SMELL');
+
+  const ruleFilter = page.getByTestId('orch-rule-filter');
+  await expect(ruleFilter.locator('option')).toHaveCount(3);
+
+  const firstRuleText = await ruleFilter.locator('option').nth(1).textContent();
+  const secondRuleText = await ruleFilter.locator('option').nth(2).textContent();
+  expect(String(firstRuleText || '')).toContain('Cognitive Complexity of functions should not be too high (javascript:S3776) - 2');
+  expect(String(secondRuleText || '')).toContain('Assignments should not be redundant (javascript:S1126) - 1');
+
+  await ruleFilter.selectOption('javascript:S1126');
+  await page.getByTestId('orch-load-issues-btn').click();
+
+  const issueRows = page.locator('.orch-issue-row');
+  await expect(issueRows).toHaveCount(1);
+  await expect(issueRows.first()).toContainText('javascript:S1126');
+  await expect(issueRows.first()).not.toContainText('javascript:S3776');
+});
+
+test('queue all matching is enabled only for a specific rule key', async ({ page, request }) => {
+  const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
+  await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
+
+  await page.goto(viewerUrl);
+  await expect(page.getByTestId('orchestrator-panel')).toBeVisible();
+
+  await setupGammaMapping(page);
+  await page.getByTestId('orch-issue-type').selectOption('CODE_SMELL');
+
+  const queueAllBtn = page.getByTestId('orch-enqueue-all-btn');
+  await expect(queueAllBtn).toBeDisabled();
+
+  await page.getByTestId('orch-rule-filter').selectOption('javascript:S3776');
+  await expect(queueAllBtn).toBeEnabled();
+
+  await page.getByTestId('orch-instructions').fill('Queue-all rule selection test');
+  await queueAllBtn.click();
+  await expect(page.getByTestId('orch-issues-status')).toContainText('Queued 2 of 2 matching issue(s)');
+});
+
+test('clear queue cancels queued items only', async ({ page, request }) => {
+  const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
+  await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
+
+  await request.post(`${mockUrl}/__test__/setFailures`, {
+    data: { sessionCreateCount: 0, promptAsyncCount: 0, promptDelayMs: 3000 }
+  });
+
+  await page.goto(viewerUrl);
+  await expect(page.getByTestId('orchestrator-panel')).toBeVisible();
+
+  await setupGammaMapping(page);
+  await page.getByTestId('orch-issue-type').selectOption('CODE_SMELL');
+  await page.getByTestId('orch-rule-filter').selectOption('javascript:S3776');
+  await expect(page.getByTestId('orch-enqueue-all-btn')).toBeEnabled();
+
+  await page.getByTestId('orch-enqueue-all-btn').click();
+  await expect(page.getByTestId('orch-issues-status')).toContainText('Queued 2 of 2 matching issue(s)');
+
+  await waitForQueuedCountAtLeast(request, viewerUrl, 1, 20_000);
+
+  page.once('dialog', d => d.accept());
+  await page.getByTestId('orch-clear-queue-btn').click();
+  await expect(page.getByTestId('orch-issues-status')).toContainText('Cleared ');
+
+  const queueData = await getQueueResponse(request, viewerUrl);
+  expect(Number(queueData?.stats?.queued || 0)).toBe(0);
+  expect(Number(queueData?.stats?.cancelled || 0)).toBeGreaterThan(0);
+});
+
 test('failed queue item can be retried and then creates session', async ({ page, request }) => {
   const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
   await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
 
   await request.post(`${mockUrl}/__test__/setFailures`, {
     data: { sessionCreateCount: 1, promptAsyncCount: 0 }
@@ -150,6 +263,7 @@ test('failed queue item can be retried and then creates session', async ({ page,
 test('queue item can be cancelled while queued or dispatching', async ({ page, request }) => {
   const { viewerUrl, mockUrl, sonarUrl } = getRuntime();
   await resetMocks(request, mockUrl, sonarUrl);
+  await waitForNoActiveQueue(request, viewerUrl);
 
   await request.post(`${mockUrl}/__test__/setFailures`, {
     data: { sessionCreateCount: 0, promptAsyncCount: 0, promptDelayMs: 2500 }

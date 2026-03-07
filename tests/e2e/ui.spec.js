@@ -57,6 +57,27 @@ test('loads with no sidebar and shows All Sessions board', async ({ page }) => {
   await expect(page.getByText('Archived Session (Should Not Show)')).toHaveCount(0);
 });
 
+test('includes sessions discovered via project sandboxes', async ({ page, request }) => {
+  const { viewerUrl, mockUrl } = getRuntime();
+
+  await request.post(`${mockUrl}/__test__/addSandboxSession`, {
+    data: {
+      projectWorktree: 'C:\\Work\\Alpha',
+      sandboxPath: 'C:\\Work\\Alpha\\SandboxOnly',
+      directory: 'C:\\Work\\Alpha\\SandboxOnly',
+      sessionId: 'sess-sandbox-only',
+      title: 'Sandbox Only Session'
+    }
+  });
+
+  await page.goto(viewerUrl);
+
+  await expect(page.getByTestId('column-pending')).toContainText('Sandbox Only Session');
+
+  await page.getByTestId('project-filter').selectOption('C:/Work/Alpha');
+  await expect(page.getByTestId('column-pending')).toContainText('Sandbox Only Session');
+});
+
 test('project filter applies and persists via local storage', async ({ page }) => {
   const { viewerUrl } = getRuntime();
   await page.goto(viewerUrl);

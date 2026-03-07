@@ -1539,6 +1539,10 @@
               <option value="VULNERABILITY">Vulnerability</option>
               <option value="SECURITY_HOTSPOT">Security Hotspot</option>
             </select>
+            <span class="orch-label">Rule</span>
+            <select id="orch-rule-filter" class="orch-select" data-testid="orch-rule-filter">
+              <option value="all">All rules</option>
+            </select>
             <button id="orch-load-issues-btn" class="orch-btn" data-testid="orch-load-issues-btn" type="button">Load issues</button>
             <span id="orch-issues-status" class="orch-inline-status" data-testid="orch-issues-status"></span>
           </div>
@@ -1551,6 +1555,8 @@
               data-testid="orch-instructions"
               placeholder="Instructions applied to each queued issue for this issue type"></textarea>
             <button id="orch-enqueue-btn" class="orch-btn" data-testid="orch-enqueue-btn" type="button" disabled>Queue selected (0)</button>
+            <button id="orch-enqueue-all-btn" class="orch-btn" data-testid="orch-enqueue-all-btn" type="button" disabled>Queue all matching</button>
+            <button id="orch-clear-queue-btn" class="orch-btn" data-testid="orch-clear-queue-btn" type="button" disabled>Clear queue</button>
           </div>
 
           <div id="orch-issues" class="orch-issues" data-testid="orch-issues"></div>
@@ -1654,8 +1660,11 @@
     let bulkArchiveInFlight = false;
     let orchestratorConfigured = false;
     let orchestrationMappings = [];
+    let orchestrationRules = [];
+    let selectedRuleFilter = 'all';
     let orchestrationIssues = [];
     let selectedIssueKeys = new Set();
+    let orchActionInFlight = false;
 
     // DOM
     const noSession = document.getElementById('no-session');
@@ -1685,10 +1694,13 @@
     const orchestratorPanel = document.getElementById('orchestrator-panel');
     const orchMappingSelect = document.getElementById('orch-mapping-select');
     const orchIssueType = document.getElementById('orch-issue-type');
+    const orchRuleFilter = document.getElementById('orch-rule-filter');
     const orchLoadIssuesBtn = document.getElementById('orch-load-issues-btn');
     const orchIssuesStatus = document.getElementById('orch-issues-status');
     const orchInstructions = document.getElementById('orch-instructions');
     const orchEnqueueBtn = document.getElementById('orch-enqueue-btn');
+    const orchEnqueueAllBtn = document.getElementById('orch-enqueue-all-btn');
+    const orchClearQueueBtn = document.getElementById('orch-clear-queue-btn');
     const orchIssues = document.getElementById('orch-issues');
     const orchNewProjectKey = document.getElementById('orch-new-project-key');
     const orchNewDirectory = document.getElementById('orch-new-directory');
@@ -1915,9 +1927,21 @@
       return value;
     }
 
+    function canQueueAllMatching() {
+      const mappingId = getSelectedMappingId();
+      const issueType = String(orchIssueType.value || '').trim();
+      const hasSpecificRule = Boolean(selectedRuleFilter && selectedRuleFilter !== 'all');
+      return Boolean(orchestratorConfigured && mappingId && issueType && hasSpecificRule);
+    }
+
     function updateOrchEnqueueButton() {
       orchEnqueueBtn.textContent = `Queue selected (${selectedIssueKeys.size})`;
-      orchEnqueueBtn.disabled = !orchestratorConfigured || selectedIssueKeys.size === 0;
+      orchEnqueueBtn.disabled = orchActionInFlight || !orchestratorConfigured || selectedIssueKeys.size === 0;
+      orchEnqueueAllBtn.disabled = orchActionInFlight || !canQueueAllMatching();
+      orchEnqueueAllBtn.title = canQueueAllMatching()
+        ? 'Queue all issues matching selected mapping/type/rule'
+        : 'Select a specific rule key to enable queue-all';
+      orchClearQueueBtn.disabled = orchActionInFlight || !orchestratorConfigured;
     }
 
     function renderOrchestrationIssues() {
@@ -1982,6 +2006,70 @@
       }
     }
 
+    function syncOrchestrationRuleOptions() {
+      if (!orchestratorConfigured) {
+        orchRuleFilter.innerHTML = '<option value="all">All rules</option>';
+        orchRuleFilter.value = 'all';
+        selectedRuleFilter = 'all';
+        updateOrchEnqueueButton();
+        return;
+      }
+
+      const options = ['<option value="all">All rules</option>'];
+      for (const rule of orchestrationRules) {
+        const key = String(rule?.key || '').trim();
+        if (!key) continue;
+        const name = String(rule?.name || key).trim() || key;
+        const count = Number.isFinite(rule?.count) ? rule.count : 0;
+        const label = `${name} (${key}) - ${count}`;
+        options.push(`<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`);
+      }
+      orchRuleFilter.innerHTML = options.join('');
+
+      const validKeys = new Set(orchestrationRules.map(r => String(r?.key || '').trim()).filter(Boolean));
+      if (selectedRuleFilter !== 'all' && !validKeys.has(selectedRuleFilter)) {
+        selectedRuleFilter = 'all';
+      }
+      orchRuleFilter.value = selectedRuleFilter;
+      updateOrchEnqueueButton();
+    }
+
+    async function loadOrchestrationRules() {
+      if (!orchestratorConfigured) {
+        orchestrationRules = [];
+        selectedRuleFilter = 'all';
+        syncOrchestrationRuleOptions();
+        return;
+      }
+
+      const mappingId = getSelectedMappingId();
+      const issueType = String(orchIssueType.value || '').trim();
+      if (!mappingId || !issueType) {
+        orchestrationRules = [];
+        selectedRuleFilter = 'all';
+        syncOrchestrationRuleOptions();
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          mappingId: String(mappingId),
+          issueType,
+          issueStatus: 'OPEN,CONFIRMED,REOPENED'
+        });
+        const res = await fetch(`/api/orch/rules?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load rules (${res.status})`);
+        }
+        const data = await res.json();
+        orchestrationRules = Array.isArray(data?.rules) ? data.rules : [];
+      } catch {
+        orchestrationRules = [];
+      }
+
+      syncOrchestrationRuleOptions();
+    }
+
     async function loadInstructionProfile() {
       if (!orchestratorConfigured) return;
       const mappingId = getSelectedMappingId();
@@ -2008,6 +2096,9 @@
         if (!orchestratorConfigured) {
           orchestratorPanel.classList.remove('visible');
           orchSettingsToggle.style.display = 'none';
+          orchestrationRules = [];
+          selectedRuleFilter = 'all';
+          syncOrchestrationRuleOptions();
           closeOrchSettingsModal();
           setOrchStatus('Set SONARQUBE_URL and SONARQUBE_TOKEN to enable orchestration.');
           return;
@@ -2021,6 +2112,7 @@
         orchestratorPanel.classList.add('visible');
         orchSettingsToggle.style.display = 'flex';
         syncOrchestrationMappingOptions();
+        await loadOrchestrationRules();
         setOrchStatus(orchestrationMappings.length > 0
           ? `${orchestrationMappings.length} mapping(s) configured`
           : 'Add a mapping to load SonarQube issues');
@@ -2030,6 +2122,9 @@
         orchestratorConfigured = false;
         orchestratorPanel.classList.remove('visible');
         orchSettingsToggle.style.display = 'none';
+        orchestrationRules = [];
+        selectedRuleFilter = 'all';
+        syncOrchestrationRuleOptions();
         closeOrchSettingsModal();
         setOrchStatus('Orchestration unavailable.');
       }
@@ -2057,6 +2152,9 @@
           pageSize: '200',
           issueStatus: 'OPEN,CONFIRMED,REOPENED'
         });
+        if (selectedRuleFilter && selectedRuleFilter !== 'all') {
+          params.set('ruleKeys', selectedRuleFilter);
+        }
         const res = await fetch(`/api/orch/issues?${params.toString()}`);
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -2098,7 +2196,8 @@
       const selected = orchestrationIssues.filter(i => selectedIssueKeys.has(String(i?.key || '')));
       if (selected.length === 0) return;
 
-      orchEnqueueBtn.disabled = true;
+      orchActionInFlight = true;
+      updateOrchEnqueueButton();
       setOrchStatus('Queueing selected issues...');
       try {
         const res = await fetch('/api/orch/enqueue', {
@@ -2124,6 +2223,84 @@
       } catch (error) {
         setOrchStatus(`Failed to queue issues: ${error?.message || 'Unknown error'}`);
       } finally {
+        orchActionInFlight = false;
+        updateOrchEnqueueButton();
+      }
+    }
+
+    async function enqueueAllMatchingIssues() {
+      if (!canQueueAllMatching()) return;
+
+      const mappingId = getSelectedMappingId();
+      if (!mappingId) return;
+      const issueType = String(orchIssueType.value || '').trim();
+      const instructions = String(orchInstructions.value || '').trim();
+      const ruleKey = String(selectedRuleFilter || '').trim();
+      if (!ruleKey || ruleKey === 'all') {
+        setOrchStatus('Select a specific rule key before queueing all matching issues.');
+        return;
+      }
+
+      orchActionInFlight = true;
+      updateOrchEnqueueButton();
+      setOrchStatus('Queueing all matching issues...');
+      try {
+        const res = await fetch('/api/orch/enqueue-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({
+            mappingId,
+            issueType,
+            ruleKeys: ruleKey,
+            issueStatus: 'OPEN,CONFIRMED,REOPENED',
+            instructions
+          })
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+
+        const data = await res.json();
+        const matched = Number.isFinite(data?.matched) ? data.matched : 0;
+        const created = Number.isFinite(data?.created) ? data.created : 0;
+        const skipped = Array.isArray(data?.skipped) ? data.skipped.length : 0;
+        const truncated = Boolean(data?.truncated);
+        setOrchStatus(`Queued ${created} of ${matched} matching issue(s)${skipped ? ` (${skipped} skipped)` : ''}${truncated ? ' [truncated]' : ''}.`);
+        await showAllSessions();
+      } catch (error) {
+        setOrchStatus(`Failed to queue all matching issues: ${error?.message || 'Unknown error'}`);
+      } finally {
+        orchActionInFlight = false;
+        updateOrchEnqueueButton();
+      }
+    }
+
+    async function clearQueuedItems() {
+      if (!orchestratorConfigured) return;
+      const ok = window.confirm('Cancel all currently queued items? Dispatching items are not affected.');
+      if (!ok) return;
+
+      orchActionInFlight = true;
+      updateOrchEnqueueButton();
+      setOrchStatus('Clearing queued items...');
+      try {
+        const res = await fetch('/api/orch/queue/clear', {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+
+        const data = await res.json();
+        const cleared = Number.isFinite(data?.cleared) ? data.cleared : 0;
+        setOrchStatus(`Cleared ${cleared} queued item(s).`);
+        await showAllSessions();
+      } catch (error) {
+        setOrchStatus(`Failed to clear queued items: ${error?.message || 'Unknown error'}`);
+      } finally {
+        orchActionInFlight = false;
         updateOrchEnqueueButton();
       }
     }
@@ -2560,10 +2737,16 @@
     projectFilter.addEventListener('change', onProjectFilterChanged);
     orchMappingSelect.addEventListener('change', async () => {
       await loadInstructionProfile();
+      await loadOrchestrationRules();
       await loadOrchestrationIssues();
     });
     orchIssueType.addEventListener('change', async () => {
       await loadInstructionProfile();
+      await loadOrchestrationRules();
+      await loadOrchestrationIssues();
+    });
+    orchRuleFilter.addEventListener('change', async () => {
+      selectedRuleFilter = orchRuleFilter.value || 'all';
       await loadOrchestrationIssues();
     });
     orchLoadIssuesBtn.addEventListener('click', () => {
@@ -2571,6 +2754,12 @@
     });
     orchEnqueueBtn.addEventListener('click', () => {
       enqueueSelectedIssues().catch(() => {});
+    });
+    orchEnqueueAllBtn.addEventListener('click', () => {
+      enqueueAllMatchingIssues().catch(() => {});
+    });
+    orchClearQueueBtn.addEventListener('click', () => {
+      clearQueuedItems().catch(() => {});
     });
     orchSaveMappingBtn.addEventListener('click', () => {
       saveOrchestrationMapping().catch(() => {});

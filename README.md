@@ -15,6 +15,7 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 - Single and bulk archive actions
 - Detail panel: last agent message + direct link to OpenCode Web session
 - Optional SonarQube orchestration queue (per-issue session creation)
+- Queue-all action for a selected specific rule key + clear-queued failsafe
 - Live updates via SSE (proxied from OpenCode `/global/event`)
 
 ## Requirements
@@ -45,6 +46,7 @@ OPENCODE_URL=http://localhost:4096 npm start
 SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... npm start
 ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite npm start
 ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 npm start
+ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 npm start
 
 # If your OpenCode server uses Basic Auth
 OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
@@ -59,10 +61,13 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
 | `/api/orch/config` | GET | SonarQube orchestration runtime config/status |
 | `/api/orch/mappings` | GET/POST | List and upsert Sonar project key -> worktree mappings |
 | `/api/orch/issues` | GET | Fetch SonarQube issues for selected mapping and issue type |
+| `/api/orch/rules` | GET | Fetch rule keys with display names and counts for selected mapping/type |
 | `/api/orch/enqueue` | POST | Queue per-issue orchestration jobs with custom instructions |
-| `/api/orch/queue` | GET | Read queue items and queue stats |
+| `/api/orch/enqueue-all` | POST | Queue all matching issues for selected mapping/type/specific rule key |
+| `/api/orch/queue` | GET | Read queue items, queue stats, and worker backpressure state |
 | `/api/orch/queue/:queueId/cancel` | POST | Cancel queued/dispatching queue item |
 | `/api/orch/queue/retry-failed` | POST | Requeue failed items |
+| `/api/orch/queue/clear` | POST | Cancel all currently queued (not dispatching) items |
 | `/api/tasks/all` | GET | (Legacy) Get todos across sessions |
 | `/api/events` | GET | SSE stream (proxied from OpenCode global events) |
 
@@ -71,6 +76,7 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
 - The UI currently ignores OpenCode todos and focuses on sessions only.
 - Session archive actions are supported (single and bulk archive).
 - When SonarQube orchestration is configured, queued jobs appear as synthetic Pending cards until an OpenCode session is created.
+- Dispatcher backpressure: dequeue pauses when active OpenCode working sessions reach `ORCH_MAX_WORKING_GLOBAL`, and resumes when below `ORCH_WORKING_RESUME_BELOW`.
 
 ## Tests
 

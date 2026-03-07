@@ -20,6 +20,12 @@ function notFound(res) {
 
 function buildDefaultState() {
   return {
+    rules: {
+      'javascript:S1126': 'Assignments should not be redundant',
+      'javascript:S3776': 'Cognitive Complexity of functions should not be too high',
+      'javascript:S5144': 'Constructing URLs from user input is security-sensitive',
+      'javascript:S1481': 'Unused local variables should be removed'
+    },
     issues: [
       {
         key: 'sq-gamma-001',
@@ -50,6 +56,16 @@ function buildDefaultState() {
         type: 'VULNERABILITY',
         status: 'OPEN',
         message: 'Review this URL construction for SSRF risk.'
+      },
+      {
+        key: 'sq-gamma-004',
+        component: 'gamma-key:src/jobs.js',
+        line: 91,
+        rule: 'javascript:S3776',
+        severity: 'MAJOR',
+        type: 'CODE_SMELL',
+        status: 'OPEN',
+        message: 'Reduce the Cognitive Complexity of this function.'
       },
       {
         key: 'sq-alpha-001',
@@ -85,6 +101,7 @@ const server = http.createServer((req, res) => {
       const componentKeys = String(url.searchParams.get('componentKeys') || '').trim();
       const typesRaw = String(url.searchParams.get('types') || '').trim();
       const statusesRaw = String(url.searchParams.get('statuses') || '').trim();
+      const rulesRaw = String(url.searchParams.get('rules') || '').trim();
 
       const pageIndex = Math.max(1, parseInt(String(url.searchParams.get('p') || '1'), 10) || 1);
       const pageSize = Math.max(1, Math.min(500, parseInt(String(url.searchParams.get('ps') || '100'), 10) || 100));
@@ -95,6 +112,10 @@ const server = http.createServer((req, res) => {
 
       const statusSet = new Set(statusesRaw
         ? statusesRaw.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)
+        : []);
+
+      const ruleSet = new Set(rulesRaw
+        ? rulesRaw.split(',').map(x => x.trim()).filter(Boolean)
         : []);
 
       let issues = state.issues.slice();
@@ -116,6 +137,10 @@ const server = http.createServer((req, res) => {
         issues = issues.filter(issue => statusSet.has(String(issue.status || '').toUpperCase()));
       }
 
+      if (ruleSet.size > 0) {
+        issues = issues.filter(issue => ruleSet.has(String(issue.rule || '').trim()));
+      }
+
       const total = issues.length;
       const start = (pageIndex - 1) * pageSize;
       const paged = issues.slice(start, start + pageSize);
@@ -130,6 +155,19 @@ const server = http.createServer((req, res) => {
           total
         },
         issues: paged
+      });
+    }
+
+    if (pathname === '/api/rules/show' && req.method === 'GET') {
+      const key = String(url.searchParams.get('key') || '').trim();
+      if (!key) return writeJson(res, 400, { error: 'Missing rule key' });
+      const name = state.rules[key];
+      if (!name) return writeJson(res, 404, { error: 'Rule not found' });
+      return writeJson(res, 200, {
+        rule: {
+          key,
+          name
+        }
       });
     }
 

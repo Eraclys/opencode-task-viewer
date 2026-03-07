@@ -6,7 +6,10 @@ const initSqlJs = require('sql.js');
 const DEFAULT_MAX_ACTIVE = 3;
 const DEFAULT_POLL_MS = 3000;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_WORKING_GLOBAL = 5;
 const MAX_ENQUEUE_BATCH = 1000;
+const MAX_RULE_SCAN_ISSUES = 5000;
+const MAX_ENQUEUE_ALL_SCAN_ISSUES = 20_000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -22,6 +25,51 @@ function normalizeIssueType(value) {
   const v = String(value || '').trim().toUpperCase();
   if (!v) return null;
   return v;
+}
+
+function normalizeRuleKeys(value) {
+  const parts = Array.isArray(value)
+    ? value
+    : String(value || '').split(',');
+  const out = [];
+  for (const raw of parts) {
+    const key = String(raw || '').trim();
+    if (!key) continue;
+    out.push(key);
+  }
+  return Array.from(new Set(out));
+}
+
+function normalizeDirectoryForCompatibility(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (s === '/' || s === '\\') return s;
+  if (/^[a-zA-Z]:[\\/]$/.test(s)) return s;
+  return s.replace(/[\\/]+$/g, '');
+}
+
+function getDirectoryVariants(value) {
+  const dir = normalizeDirectoryForCompatibility(value);
+  if (!dir) return [];
+
+  const variants = [dir];
+  const forward = dir.replace(/\\/g, '/');
+  const backward = dir.replace(/\//g, '\\');
+  if (forward && !variants.includes(forward)) variants.push(forward);
+  if (backward && !variants.includes(backward)) variants.push(backward);
+  return variants;
+}
+
+function getDirectoryCacheKey(value) {
+  const normalized = normalizeDirectoryForCompatibility(value);
+  if (!normalized) return '';
+  return normalized.replace(/\\/g, '/');
+}
+
+function isRunningStatusType(value) {
+  const t = String(value || '').trim().toLowerCase();
+  return t === 'busy' || t === 'retry' || t === 'running';
 }
 
 function normalizeQueueStateList(states) {
@@ -94,6 +142,12 @@ class SonarOrchestrator {
     this.maxActive = Math.max(1, parseIntSafe(options?.maxActive, DEFAULT_MAX_ACTIVE));
     this.pollMs = Math.max(1000, parseIntSafe(options?.pollMs, DEFAULT_POLL_MS));
     this.maxAttempts = Math.max(1, parseIntSafe(options?.maxAttempts, DEFAULT_MAX_ATTEMPTS));
+    this.maxWorkingGlobal = Math.max(0, parseIntSafe(options?.maxWorkingGlobal, DEFAULT_MAX_WORKING_GLOBAL));
+    const resumeFallback = this.maxWorkingGlobal > 1 ? this.maxWorkingGlobal - 1 : this.maxWorkingGlobal;
+    this.workingResumeBelow = Math.max(0, parseIntSafe(options?.workingResumeBelow, resumeFallback));
+    if (this.maxWorkingGlobal > 0 && this.workingResumeBelow >= this.maxWorkingGlobal) {
+      this.workingResumeBelow = Math.max(0, this.maxWorkingGlobal - 1);
+    }
     this.onChange = typeof options?.onChange === 'function' ? options.onChange : () => {};
 
     this.opencodeFetch = options?.opencodeFetch;
@@ -111,6 +165,12 @@ class SonarOrchestrator {
     this.timer = null;
     this.inFlight = new Set();
     this.tickRunning = false;
+    this.ruleNameCache = new Map();
+    this.workloadPaused = false;
+    this.latestWorkingCount = 0;
+    this.latestWorkingSampleAt = null;
+    this.workingSampleCacheTtlMs = Math.max(500, Math.min(5000, this.pollMs));
+    this.cachedWorkingSample = { ts: 0, count: 0 };
 
     this.readyPromise = this.initialize();
   }
@@ -422,7 +482,98 @@ class SonarOrchestrator {
     return res.json();
   }
 
-  async listIssues({ mappingId, issueType, severity, issueStatus, page, pageSize }) {
+  async getRuleDisplayName(ruleKey) {
+    const key = String(ruleKey || '').trim();
+    if (!key) return '';
+    const cached = this.ruleNameCache.get(key);
+    if (cached) return cached;
+
+    try {
+      const data = await this.sonarFetch('/api/rules/show', { key });
+      const name = String(data?.rule?.name || '').trim() || key;
+      this.ruleNameCache.set(key, name);
+      return name;
+    } catch {
+      this.ruleNameCache.set(key, key);
+      return key;
+    }
+  }
+
+  async listRules({ mappingId, issueType, issueStatus }) {
+    await this.ensureReady();
+    const mapping = await this.getMappingById(mappingId);
+    if (!mapping || !mapping.enabled) {
+      throw new Error('Mapping not found or disabled');
+    }
+
+    const type = normalizeIssueType(issueType);
+    const status = String(issueStatus || '').trim().toUpperCase();
+
+    const counts = new Map();
+    const pageSize = 500;
+    let page = 1;
+    let scanned = 0;
+    let total = null;
+
+    while (true) {
+      const query = {
+        componentKeys: mapping.sonarProjectKey,
+        p: page,
+        ps: pageSize
+      };
+      if (type) query.types = type;
+      if (status) query.statuses = status;
+      if (mapping.branch) query.branch = mapping.branch;
+
+      const data = await this.sonarFetch('/api/issues/search', query);
+      const issuesRaw = Array.isArray(data?.issues) ? data.issues : [];
+      total = Number.isFinite(data?.paging?.total) ? data.paging.total : total;
+
+      for (const raw of issuesRaw) {
+        const key = String(raw?.rule || '').trim();
+        if (!key) continue;
+        counts.set(key, (counts.get(key) || 0) + 1);
+        scanned += 1;
+      }
+
+      const endReached = issuesRaw.length < pageSize
+        || (Number.isFinite(total) && (page * pageSize >= total))
+        || scanned >= MAX_RULE_SCAN_ISSUES;
+      if (endReached) break;
+      page += 1;
+    }
+
+    const keys = Array.from(counts.keys());
+    const nameMap = new Map();
+    await Promise.all(keys.map(async (key) => {
+      const name = await this.getRuleDisplayName(key);
+      nameMap.set(key, name || key);
+    }));
+
+    const rules = keys.map((key) => ({
+      key,
+      name: nameMap.get(key) || key,
+      count: counts.get(key) || 0
+    }));
+
+    rules.sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      const byName = String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' });
+      if (byName !== 0) return byName;
+      return String(a.key).localeCompare(String(b.key), undefined, { sensitivity: 'base' });
+    });
+
+    return {
+      mapping,
+      issueType: type || null,
+      issueStatus: status || null,
+      scannedIssues: scanned,
+      truncated: scanned >= MAX_RULE_SCAN_ISSUES,
+      rules
+    };
+  }
+
+  async listIssues({ mappingId, issueType, severity, issueStatus, page, pageSize, ruleKeys }) {
     await this.ensureReady();
     const mapping = await this.getMappingById(mappingId);
     if (!mapping || !mapping.enabled) {
@@ -432,6 +583,7 @@ class SonarOrchestrator {
     const type = normalizeIssueType(issueType);
     const sev = String(severity || '').trim().toUpperCase();
     const status = String(issueStatus || '').trim().toUpperCase();
+    const rules = normalizeRuleKeys(ruleKeys);
     const p = Math.max(1, parseIntSafe(page, 1));
     const ps = Math.max(1, Math.min(500, parseIntSafe(pageSize, 100)));
 
@@ -443,6 +595,7 @@ class SonarOrchestrator {
     if (type) query.types = type;
     if (sev) query.severities = sev;
     if (status) query.statuses = status;
+    if (rules.length > 0) query.rules = rules.join(',');
     if (mapping.branch) query.branch = mapping.branch;
 
     const data = await this.sonarFetch('/api/issues/search', query);
@@ -477,16 +630,10 @@ class SonarOrchestrator {
     };
   }
 
-  async enqueueIssues({ mappingId, issueType, instructions, issues }) {
-    await this.ensureReady();
+  async resolveEnqueueContext({ mappingId, issueType, instructions }) {
     const mapping = await this.getMappingById(mappingId);
     if (!mapping || !mapping.enabled) {
       throw new Error('Mapping not found or disabled');
-    }
-
-    const rawIssues = Array.isArray(issues) ? issues.slice(0, MAX_ENQUEUE_BATCH) : [];
-    if (rawIssues.length === 0) {
-      throw new Error('No issues provided');
     }
 
     const type = normalizeIssueType(issueType);
@@ -505,6 +652,14 @@ class SonarOrchestrator {
       `, [mapping.id, type, instructionText, nowProfile, nowProfile]);
     }
 
+    return {
+      mapping,
+      type,
+      instructionText
+    };
+  }
+
+  enqueueRawIssues({ mapping, type, instructionText, rawIssues }) {
     const createdItems = [];
     const skipped = [];
     const now = nowIso();
@@ -569,12 +724,113 @@ class SonarOrchestrator {
       if (inserted) createdItems.push(this.mapQueueRow(inserted));
     }
 
+    return { createdItems, skipped };
+  }
+
+  async collectIssuesForEnqueueAll({ mapping, issueType, severity, issueStatus, ruleKeys }) {
+    const type = normalizeIssueType(issueType);
+    const sev = String(severity || '').trim().toUpperCase();
+    const status = String(issueStatus || '').trim().toUpperCase();
+    const rules = normalizeRuleKeys(ruleKeys);
+
+    const pageSize = 500;
+    let page = 1;
+    let total = null;
+    const out = [];
+
+    while (out.length < MAX_ENQUEUE_ALL_SCAN_ISSUES) {
+      const query = {
+        componentKeys: mapping.sonarProjectKey,
+        p: page,
+        ps: pageSize
+      };
+      if (type) query.types = type;
+      if (sev) query.severities = sev;
+      if (status) query.statuses = status;
+      if (rules.length > 0) query.rules = rules.join(',');
+      if (mapping.branch) query.branch = mapping.branch;
+
+      const data = await this.sonarFetch('/api/issues/search', query);
+      const paging = data?.paging || {};
+      if (Number.isFinite(paging.total)) total = paging.total;
+
+      const issuesRaw = Array.isArray(data?.issues) ? data.issues : [];
+      for (const raw of issuesRaw) {
+        if (out.length >= MAX_ENQUEUE_ALL_SCAN_ISSUES) break;
+        out.push(raw);
+      }
+
+      const endReached = issuesRaw.length < pageSize
+        || (Number.isFinite(total) && (page * pageSize >= total))
+        || out.length >= MAX_ENQUEUE_ALL_SCAN_ISSUES;
+      if (endReached) break;
+      page += 1;
+    }
+
+    return {
+      issues: out,
+      matched: Number.isFinite(total) ? total : out.length,
+      truncated: out.length >= MAX_ENQUEUE_ALL_SCAN_ISSUES
+    };
+  }
+
+  async enqueueIssues({ mappingId, issueType, instructions, issues }) {
+    await this.ensureReady();
+    const rawIssues = Array.isArray(issues) ? issues.slice(0, MAX_ENQUEUE_BATCH) : [];
+    if (rawIssues.length === 0) {
+      throw new Error('No issues provided');
+    }
+
+    const context = await this.resolveEnqueueContext({ mappingId, issueType, instructions });
+    const mapping = context.mapping;
+    const type = context.type;
+    const instructionText = context.instructionText;
+
+    const { createdItems, skipped } = this.enqueueRawIssues({ mapping, type, instructionText, rawIssues });
+
     this.persist();
     if (createdItems.length > 0) this.onChange({ type: 'queue.enqueued' });
 
     return {
       created: createdItems.length,
       skipped,
+      items: createdItems
+    };
+  }
+
+  async enqueueAllMatching({ mappingId, issueType, ruleKeys, issueStatus, severity, instructions }) {
+    await this.ensureReady();
+
+    const rules = normalizeRuleKeys(ruleKeys);
+    const hasSingleSpecificRule = rules.length === 1 && String(rules[0]).trim().toLowerCase() !== 'all';
+    if (!hasSingleSpecificRule) {
+      throw new Error('A specific rule key is required to queue all matching issues');
+    }
+
+    const context = await this.resolveEnqueueContext({ mappingId, issueType, instructions });
+    const mapping = context.mapping;
+    const type = context.type;
+    const instructionText = context.instructionText;
+
+    const collected = await this.collectIssuesForEnqueueAll({
+      mapping,
+      issueType: type,
+      severity,
+      issueStatus,
+      ruleKeys: rules
+    });
+
+    const rawIssues = Array.isArray(collected.issues) ? collected.issues : [];
+    const { createdItems, skipped } = this.enqueueRawIssues({ mapping, type, instructionText, rawIssues });
+
+    this.persist();
+    if (createdItems.length > 0) this.onChange({ type: 'queue.enqueued' });
+
+    return {
+      matched: Number.isFinite(collected.matched) ? collected.matched : rawIssues.length,
+      created: createdItems.length,
+      skipped,
+      truncated: Boolean(collected.truncated),
       items: createdItems
     };
   }
@@ -602,6 +858,146 @@ class SonarOrchestrator {
     `, params);
 
     return rows.map(r => this.mapQueueRow(r));
+  }
+
+  async listEnabledMappingDirectories() {
+    await this.ensureReady();
+    const rows = this.all(`
+      SELECT directory
+      FROM project_mappings
+      WHERE enabled = 1
+    `);
+
+    const directories = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const dir = String(row?.directory || '').trim();
+      if (!dir) continue;
+      const key = getDirectoryCacheKey(dir);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      directories.push(dir);
+    }
+
+    return directories;
+  }
+
+  async fetchStatusMapForDirectory(directory) {
+    const variants = getDirectoryVariants(directory);
+    if (variants.length === 0) return {};
+
+    let fallback = {};
+    for (const candidate of variants) {
+      try {
+        const data = await this.opencodeFetch('/session/status', { directory: candidate });
+        const map = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+        if (Object.keys(map).length > 0) return map;
+        if (Object.keys(fallback).length === 0) fallback = map;
+      } catch {
+        // Try next variant.
+      }
+    }
+
+    return fallback;
+  }
+
+  countRunningStatusesFromMap(statusMap) {
+    let count = 0;
+    if (!statusMap || typeof statusMap !== 'object') return count;
+
+    for (const value of Object.values(statusMap)) {
+      const statusType = String(value?.type || value?.status?.type || value || '').trim().toLowerCase();
+      if (isRunningStatusType(statusType)) count += 1;
+    }
+
+    return count;
+  }
+
+  async getWorkingSessionsCount({ forceRefresh = false } = {}) {
+    await this.ensureReady();
+
+    const now = Date.now();
+    if (!forceRefresh && (now - this.cachedWorkingSample.ts) < this.workingSampleCacheTtlMs) {
+      return this.cachedWorkingSample;
+    }
+
+    if (!this.opencodeFetch) {
+      const sample = { ts: now, count: 0 };
+      this.cachedWorkingSample = sample;
+      this.latestWorkingCount = sample.count;
+      this.latestWorkingSampleAt = new Date(sample.ts).toISOString();
+      return sample;
+    }
+
+    const directories = await this.listEnabledMappingDirectories();
+    let totalRunning = 0;
+    for (const directory of directories) {
+      const statusMap = await this.fetchStatusMapForDirectory(directory);
+      totalRunning += this.countRunningStatusesFromMap(statusMap);
+    }
+
+    const sample = { ts: now, count: totalRunning };
+    this.cachedWorkingSample = sample;
+    this.latestWorkingCount = totalRunning;
+    this.latestWorkingSampleAt = new Date(now).toISOString();
+    return sample;
+  }
+
+  async evaluateWorkloadBackpressure({ forceRefresh = false } = {}) {
+    if (this.maxWorkingGlobal <= 0) {
+      if (this.workloadPaused) {
+        this.workloadPaused = false;
+      }
+      return {
+        paused: false,
+        workingCount: 0,
+        maxWorkingGlobal: this.maxWorkingGlobal,
+        workingResumeBelow: this.workingResumeBelow,
+        sampleAt: this.latestWorkingSampleAt
+      };
+    }
+
+    const sample = await this.getWorkingSessionsCount({ forceRefresh });
+    const count = Number.isFinite(sample?.count) ? sample.count : 0;
+
+    let nextPaused = this.workloadPaused;
+    if (!nextPaused && count >= this.maxWorkingGlobal) {
+      nextPaused = true;
+    } else if (nextPaused && count < this.workingResumeBelow) {
+      nextPaused = false;
+    }
+
+    if (nextPaused !== this.workloadPaused) {
+      this.workloadPaused = nextPaused;
+      this.onChange({
+        type: nextPaused ? 'queue.paused_by_workload' : 'queue.resumed_from_workload',
+        workingCount: count,
+        maxWorkingGlobal: this.maxWorkingGlobal,
+        workingResumeBelow: this.workingResumeBelow
+      });
+    }
+
+    return {
+      paused: this.workloadPaused,
+      workingCount: count,
+      maxWorkingGlobal: this.maxWorkingGlobal,
+      workingResumeBelow: this.workingResumeBelow,
+      sampleAt: this.latestWorkingSampleAt
+    };
+  }
+
+  async getWorkerState() {
+    await this.ensureReady();
+    const backpressure = await this.evaluateWorkloadBackpressure({ forceRefresh: false });
+    return {
+      inFlightDispatches: this.inFlight.size,
+      maxActiveDispatches: this.maxActive,
+      pausedByWorking: Boolean(backpressure.paused),
+      workingCount: Number(backpressure.workingCount || 0),
+      maxWorkingGlobal: this.maxWorkingGlobal,
+      workingResumeBelow: this.workingResumeBelow,
+      workingSampleAt: backpressure.sampleAt || null
+    };
   }
 
   async getQueueStats() {
@@ -669,12 +1065,32 @@ class SonarOrchestrator {
     return changed;
   }
 
+  async clearQueued() {
+    await this.ensureReady();
+    const now = nowIso();
+    this.run(`
+      UPDATE queue_items
+      SET state = 'cancelled',
+          cancelled_at = ?,
+          updated_at = ?
+      WHERE state = 'queued'
+    `, [now, now]);
+    const changed = this.changes();
+    if (changed > 0) {
+      this.persist();
+      this.onChange({ type: 'queue.cleared', cleared: changed });
+    }
+    return changed;
+  }
+
   getPublicConfig() {
     return {
       configured: this.isConfigured(),
       maxActive: this.maxActive,
       pollMs: this.pollMs,
-      maxAttempts: this.maxAttempts
+      maxAttempts: this.maxAttempts,
+      maxWorkingGlobal: this.maxWorkingGlobal,
+      workingResumeBelow: this.workingResumeBelow
     };
   }
 
@@ -816,6 +1232,9 @@ class SonarOrchestrator {
     try {
       await this.ensureReady();
       if (!this.isConfigured()) return;
+
+      const workload = await this.evaluateWorkloadBackpressure({ forceRefresh: true });
+      if (workload.paused) return;
 
       while (this.inFlight.size < this.maxActive) {
         const claim = await this.claimNextQueuedItem();
