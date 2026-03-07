@@ -79,7 +79,7 @@ module.exports = async () => {
   const rootDir = path.join(__dirname, '..', '..');
   const mockPath = path.join(rootDir, 'tests', 'mock-opencode', 'server.js');
   const mockSonarPath = path.join(rootDir, 'tests', 'mock-sonarqube', 'server.js');
-  const viewerPath = path.join(rootDir, 'server.js');
+  const viewerProjectPath = path.join(rootDir, 'src', 'TaskViewer.Server', 'TaskViewer.Server.csproj');
 
   const mockProc = spawn(process.execPath, [mockPath], {
     cwd: rootDir,
@@ -107,7 +107,7 @@ module.exports = async () => {
   const sonarUrl = await waitForLine(mockSonarProc, 'MOCK_SONAR_URL=', 15_000);
   await waitForOk(`${sonarUrl}/__test__/health`, 10_000);
 
-  const viewerProc = spawn(process.execPath, [viewerPath], {
+  const viewerProc = spawn('dotnet', ['run', '--project', viewerProjectPath], {
     cwd: rootDir,
     env: {
       ...process.env,

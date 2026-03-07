@@ -20,7 +20,8 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 
 ## Requirements
 
-- Node.js >= 18
+- .NET SDK >= 8.0
+- Node.js >= 18 (for Playwright E2E tests and mock servers)
 - OpenCode Web Mode server running (default: `http://localhost:4096`)
 
 ## Run
@@ -28,6 +29,12 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 ```bash
 npm install
 npm start
+```
+
+Equivalent direct host command:
+
+```bash
+dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 ```
 
 Open http://127.0.0.1:3456
@@ -57,6 +64,7 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... npm start
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/sessions` | GET | List sessions with derived kanban status + runtime status |
+| `/api/health` | GET | Lightweight health check for the viewer host |
 | `/api/sessions/:sessionId/last-assistant-message` | GET | Fetch latest assistant message text for a session |
 | `/api/orch/config` | GET | SonarQube orchestration runtime config/status |
 | `/api/orch/mappings` | GET/POST | List and upsert Sonar project key -> worktree mappings |

@@ -2,13 +2,9 @@
   "name": "opencode-task-viewer",
   "version": "2.0.0",
   "description": "A web-based Kanban board for viewing OpenCode todos",
-  "main": "server.js",
-  "bin": {
-    "opencode-task-viewer": "./server.js"
-  },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js --open",
+    "start": "dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj",
+    "dev": "dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj",
     "test:e2e:install": "playwright install chromium",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
@@ -30,19 +26,10 @@
     "url": "https://github.com/L1AD/claude-task-viewer/issues"
   },
   "homepage": "https://github.com/L1AD/claude-task-viewer#readme",
-  "dependencies": {
-    "express": "^4.18.2",
-    "open": "^10.0.0",
-    "sql.js": "^1.13.0"
-  },
   "devDependencies": {
     "@playwright/test": "^1.53.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "files": [
-    "server.js",
-    "public/**/*"
-  ]
+  }
 }
