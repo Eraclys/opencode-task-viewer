@@ -187,12 +187,20 @@ async Task<JsonNode?> OpenCodeFetch(string endpointPath, OpenCodeRequest req)
     return JsonValue.Create(text);
 }
 
+var sonarGateway = new HttpSonarGateway(sonarUrl, sonarToken);
+var sonarRuleReadService = new CachedSonarRuleReadService(sonarGateway);
+var sonarRulesReadService = new SonarRulesReadService(sonarGateway, sonarRuleReadService);
+var sonarIssuesReadService = new SonarIssuesReadService(sonarGateway);
+
 var orchestrator = new SonarOrchestrator(
     new SonarOrchestratorOptions
     {
+        SonarGateway = sonarGateway,
+        SonarRuleReadService = sonarRuleReadService,
+        SonarRulesReadService = sonarRulesReadService,
+        SonarIssuesReadService = sonarIssuesReadService,
         SonarUrl = sonarUrl,
         SonarToken = sonarToken,
-        SonarGateway = new HttpSonarGateway(sonarUrl, sonarToken),
         DbPath = orchestratorDbPath,
         MaxActive = orchMaxActive,
         PollMs = orchPollMs,

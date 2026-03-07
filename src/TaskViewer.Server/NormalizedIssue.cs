@@ -1,6 +1,6 @@
 ﻿namespace TaskViewer.Server;
 
-internal sealed class NormalizedIssue
+public sealed class NormalizedIssue
 {
     public required string Key { get; init; }
     public required string Type { get; init; }
