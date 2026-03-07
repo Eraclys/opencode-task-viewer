@@ -42,7 +42,7 @@ public sealed class DispatchFailurePolicyTests
         var result = sut.Decide(1, 3, now);
 
         Assert.Equal("queued", result.State);
-        Assert.Equal(now.AddMilliseconds(2500).ToString("O"), result.NextAttemptAt);
+        Assert.Equal(now.AddMilliseconds(2500), result.NextAttemptAt);
     }
 
     [Fact]
@@ -61,6 +61,6 @@ public sealed class DispatchFailurePolicyTests
 
         var result = sut.Decide(20, 21, now);
 
-        Assert.Equal(now.AddSeconds(60).ToString("O"), result.NextAttemptAt);
+        Assert.Equal(now.AddSeconds(60), result.NextAttemptAt);
     }
 }

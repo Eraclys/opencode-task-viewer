@@ -1,14 +1,15 @@
-using System.Text.Json.Nodes;
+using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class SonarIssuesReadService : ISonarIssuesReadService
 {
-    readonly ISonarGateway _sonarGateway;
+    readonly ISonarQubeService _sonarQubeService;
 
-    public SonarIssuesReadService(ISonarGateway sonarGateway)
+    public SonarIssuesReadService(ISonarQubeService sonarQubeService)
     {
-        _sonarGateway = sonarGateway;
+        _sonarQubeService = sonarQubeService;
     }
 
     public async Task<SonarIssuesPage> ListIssuesAsync(
@@ -33,38 +34,34 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
             status,
             ruleKeys);
 
-        var data = await _sonarGateway.Fetch("/api/issues/search", query);
-        var rawIssues = data?["issues"] as JsonArray ?? [];
+        var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
         var issues = new List<SonarIssueSummaryItem>();
 
-        foreach (var raw in rawIssues)
+        foreach (var raw in response.Issues)
         {
             var issue = SonarIssueNormalizer.NormalizeForQueue(raw, mapping);
 
             if (issue is null)
                 continue;
 
-            issues.Add(
-                new SonarIssueSummaryItem(
-                    issue.Key,
-                    issue.Type,
-                    issue.Severity,
-                    issue.Rule,
-                    issue.Message,
-                    issue.Component,
-                    issue.Line,
-                    issue.Status,
-                    issue.RelativePath,
-                    issue.AbsolutePath));
+            issues.Add(new SonarIssueSummaryItem(
+                issue.Key,
+                issue.Type,
+                issue.Severity,
+                issue.Rule,
+                issue.Message,
+                issue.Component,
+                issue.Line,
+                issue.Status,
+                issue.RelativePath,
+                issue.AbsolutePath));
         }
 
-        var pageIndex = ParseIntSafe(data?["paging"]?["pageIndex"]?.ToString(), page);
-        var parsedPageSize = ParseIntSafe(data?["paging"]?["pageSize"]?.ToString(), pageSize);
-        var total = ParseIntSafe(data?["paging"]?["total"]?.ToString(), issues.Count);
+        var total = response.Total ?? issues.Count;
 
         return new SonarIssuesPage(
-            pageIndex,
-            parsedPageSize,
+            response.PageIndex,
+            response.PageSize,
             total,
             issues);
     }
@@ -74,20 +71,5 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
 
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
-    static int ParseIntSafe(object? value, int fallback)
-    {
-        if (value is null)
-            return fallback;
-
-        if (value is int i)
-            return i;
-
-        if (value is long l &&
-            l is >= int.MinValue and <= int.MaxValue)
-            return (int)l;
-
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : fallback;
     }
 }

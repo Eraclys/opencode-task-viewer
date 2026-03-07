@@ -19,8 +19,8 @@ public sealed class QueueWorkerCoordinatorTests
                 MappingId = 1,
                 SonarProjectKey = "k",
                 Directory = "C:/Work",
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             },
             new QueueItemRecord
             {
@@ -29,8 +29,8 @@ public sealed class QueueWorkerCoordinatorTests
                 MappingId = 1,
                 SonarProjectKey = "k",
                 Directory = "C:/Work",
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             },
             new QueueItemRecord
             {
@@ -39,8 +39,8 @@ public sealed class QueueWorkerCoordinatorTests
                 MappingId = 1,
                 SonarProjectKey = "k",
                 Directory = "C:/Work",
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             }
         ]);
 
@@ -87,8 +87,8 @@ public sealed class QueueWorkerCoordinatorTests
                 MappingId = 1,
                 SonarProjectKey = "k",
                 Directory = "C:/Work",
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             },
             null
         ]);

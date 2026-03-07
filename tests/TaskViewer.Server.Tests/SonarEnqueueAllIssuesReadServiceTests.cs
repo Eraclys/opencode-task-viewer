@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -57,12 +57,12 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
             Directory = "C:/Work/Alpha",
             Branch = "main",
             Enabled = true,
-            CreatedAt = "",
-            UpdatedAt = ""
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            UpdatedAt = DateTimeOffset.UnixEpoch
         };
     }
 
-    sealed class PagingGateway : ISonarGateway
+    sealed class PagingGateway : ISonarQubeService
     {
         readonly int _firstPageIssueCount;
         readonly int _firstTotal;
@@ -78,7 +78,13 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
         public string? LastSeverity { get; private set; }
         public string? LastIssueStatus { get; private set; }
 
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+            => Task.FromResult(new SonarRuleDetailsResponse(null));
+
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
+            Dictionary<string, string?> query,
+            int fallbackPageIndex,
+            int fallbackPageSize)
         {
             RequestCount += 1;
             LastIssueType = query.GetValueOrDefault("types");
@@ -87,47 +93,20 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
 
             if (RequestCount == 1)
             {
-                var issues = new JsonArray();
+                var issues = new List<SonarIssueTransport>();
 
                 for (var i = 1; i <= _firstPageIssueCount; i += 1)
-                {
-                    issues.Add(
-                        new JsonObject
-                        {
-                            ["key"] = $"sq-{i}"
-                        });
-                }
+                    issues.Add(new SonarIssueTransport($"sq-{i}", null, null, null, null, null, null, null, null, null, null));
 
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["paging"] = new JsonObject
-                        {
-                            ["pageIndex"] = 1,
-                            ["pageSize"] = 500,
-                            ["total"] = _firstTotal
-                        },
-                        ["issues"] = issues
-                    });
+                return Task.FromResult(new SonarIssuesSearchResponse(1, 500, _firstTotal, issues));
             }
 
-            return Task.FromResult<JsonNode?>(
-                new JsonObject
-                {
-                    ["paging"] = new JsonObject
-                    {
-                        ["pageIndex"] = 2,
-                        ["pageSize"] = 500,
-                        ["total"] = 3
-                    },
-                    ["issues"] = new JsonArray
-                    {
-                        new JsonObject
-                        {
-                            ["key"] = "sq-3"
-                        }
-                    }
-                });
+            return Task.FromResult(
+                new SonarIssuesSearchResponse(
+                    2,
+                    500,
+                    3,
+                    [new SonarIssueTransport("sq-3", null, null, null, null, null, null, null, null, null, null)]));
         }
     }
 }

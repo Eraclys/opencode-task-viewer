@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
@@ -6,100 +6,98 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 {
     readonly IOrchestrationGateway _gateway;
 
-    public OrchestrationUseCases(IOrchestrationGateway gateway)
+    internal OrchestrationUseCases(SonarOrchestrator orchestrator)
+        : this((IOrchestrationGateway)orchestrator)
+    {
+    }
+
+    internal OrchestrationUseCases(IOrchestrationGateway gateway)
     {
         _gateway = gateway;
     }
 
-    public object GetPublicConfig() => _gateway.GetPublicConfig();
+    public OrchestrationConfigDto GetPublicConfig() => _gateway.GetPublicConfig();
 
     public Task<List<MappingRecord>> ListMappingsAsync() => _gateway.ListMappings();
 
-    public Task<MappingRecord> UpsertMappingAsync(JsonNode? payload) => _gateway.UpsertMapping(payload);
+    public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => _gateway.UpsertMapping(request);
 
-    public async Task<object> GetInstructionProfileAsync(string? mappingId, string? issueType)
+    public async Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType)
     {
-        var profile = await _gateway.GetInstructionProfile(mappingId, issueType);
+        var parsedMappingId = int.TryParse(mappingId, out var parsed) ? parsed : (int?)null;
+        var profile = await _gateway.GetInstructionProfile(parsedMappingId, issueType);
 
-        return new
+        return new InstructionProfileDto
         {
-            mappingId = int.TryParse(mappingId, out var parsed) ? parsed : (int?)null,
-            issueType = string.IsNullOrWhiteSpace(issueType) ? null : issueType.ToUpperInvariant(),
-            instructions = profile?["instructions"]?.ToString()
+            MappingId = parsedMappingId,
+            IssueType = string.IsNullOrWhiteSpace(issueType) ? null : issueType.ToUpperInvariant(),
+            Instructions = profile?.Instructions
         };
     }
 
-    public async Task<object> UpsertInstructionProfileAsync(JsonNode? payload)
+    public async Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request)
     {
-        var profile = await _gateway.UpsertInstructionProfile(
-            payload?["mappingId"]?.ToString(),
-            payload?["issueType"]?.ToString(),
-            payload?["instructions"]?.ToString());
+        var profile = await _gateway.UpsertInstructionProfile(request);
 
-        return new
+        return new InstructionProfileDto
         {
-            mappingId = profile["mapping_id"]?.GetValue<int>(),
-            issueType = profile["issue_type"]?.ToString(),
-            instructions = profile["instructions"]?.ToString(),
-            updatedAt = profile["updated_at"]?.ToString()
+            MappingId = profile.MappingId,
+            IssueType = profile.IssueType,
+            Instructions = profile.Instructions,
+            UpdatedAt = profile.UpdatedAt
         };
     }
 
-    public Task<object> ListIssuesAsync(
+    public Task<IssuesListDto> ListIssuesAsync(
         string mappingId,
         string? issueType,
         string? severity,
         string? issueStatus,
         string? page,
         string? pageSize,
-        string? ruleKeys) => _gateway.ListIssues(
-        mappingId,
-        issueType,
-        severity,
-        issueStatus,
-        page,
-        pageSize,
-        ruleKeys);
-
-    public Task<object> ListRulesAsync(string mappingId, string? issueType, string? issueStatus) => _gateway.ListRules(mappingId, issueType, issueStatus);
-
-    public Task<object> EnqueueIssuesAsync(JsonNode? payload)
+        string? ruleKeys)
     {
-        return _gateway.EnqueueIssues(
-            payload?["mappingId"]?.ToString(),
-            payload?["issueType"]?.ToString(),
-            payload?["instructions"]?.ToString(),
-            payload?["issues"] as JsonArray);
+        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
+
+        return _gateway.ListIssues(
+            parsedMappingId,
+            issueType,
+            severity,
+            issueStatus,
+            page,
+            pageSize,
+            ruleKeys);
     }
 
-    public Task<object> EnqueueAllMatchingAsync(JsonNode? payload)
+    public Task<RulesListDto> ListRulesAsync(string mappingId, string? issueType, string? issueStatus)
     {
-        var ruleKeys = payload?["ruleKeys"] ?? payload?["rules"] ?? payload?["rule"];
-
-        return _gateway.EnqueueAllMatching(
-            payload?["mappingId"]?.ToString(),
-            payload?["issueType"]?.ToString(),
-            ruleKeys,
-            payload?["issueStatus"]?.ToString(),
-            payload?["severity"]?.ToString(),
-            payload?["instructions"]?.ToString());
+        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
+        return _gateway.ListRules(parsedMappingId, issueType, issueStatus);
     }
 
-    public async Task<object> GetQueueAsync(string? states, string? limit)
+    public Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request) => _gateway.EnqueueIssues(request);
+
+    public Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request) => _gateway.EnqueueAllMatching(request);
+
+    public async Task<QueueOverviewDto> GetQueueAsync(string? states, string? limit)
     {
         var items = await _gateway.ListQueue(states, limit);
         var stats = await _gateway.GetQueueStats();
         var worker = await _gateway.GetWorkerState();
 
-        return new
+        return new QueueOverviewDto
         {
-            items,
-            stats,
-            worker
+            Items = items,
+            Stats = stats,
+            Worker = worker
         };
     }
 
-    public Task<bool> CancelQueueItemAsync(string queueId) => _gateway.CancelQueueItem(queueId);
+    public Task<bool> CancelQueueItemAsync(string queueId)
+    {
+        var parsedQueueId = int.TryParse(queueId, out var id) ? id : (int?)null;
+        return _gateway.CancelQueueItem(parsedQueueId);
+    }
 
     public Task<int> RetryFailedAsync() => _gateway.RetryFailed();
 

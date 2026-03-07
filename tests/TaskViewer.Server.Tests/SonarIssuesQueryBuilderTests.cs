@@ -14,8 +14,8 @@ public sealed class SonarIssuesQueryBuilderTests
             Directory = "C:/Work/Alpha",
             Branch = "main",
             Enabled = true,
-            CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-            UpdatedAt = "2026-01-01T00:00:00.0000000+00:00"
+            CreatedAt = DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"),
+            UpdatedAt = DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00")
         };
 
         var query = SonarIssuesQueryBuilder.Build(
@@ -47,8 +47,8 @@ public sealed class SonarIssuesQueryBuilderTests
             Directory = "C:/Work/Beta",
             Branch = null,
             Enabled = true,
-            CreatedAt = "",
-            UpdatedAt = ""
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            UpdatedAt = DateTimeOffset.UnixEpoch
         };
 
         var query = SonarIssuesQueryBuilder.Build(

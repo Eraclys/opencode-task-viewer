@@ -1,4 +1,4 @@
-﻿namespace TaskViewer.Server;
+namespace TaskViewer.Server;
 
 public sealed class MappingRecord
 {
@@ -7,6 +7,6 @@ public sealed class MappingRecord
     public string Directory { get; init; } = "";
     public string? Branch { get; init; }
     public bool Enabled { get; init; }
-    public string CreatedAt { get; init; } = "";
-    public string UpdatedAt { get; init; } = "";
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
 }

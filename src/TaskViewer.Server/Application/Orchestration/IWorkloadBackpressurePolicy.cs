@@ -8,5 +8,3 @@ public interface IWorkloadBackpressurePolicy
         int maxWorkingGlobal,
         int workingResumeBelow);
 }
-
-public sealed record BackpressureTransition(bool NextPaused, bool Changed);

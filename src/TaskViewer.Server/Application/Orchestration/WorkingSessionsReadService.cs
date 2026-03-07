@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
@@ -6,15 +6,15 @@ namespace TaskViewer.Server.Application.Orchestration;
 public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
 {
     readonly IMappingRepository _mappingRepository;
-    readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
+    readonly IOpenCodeStatusReader _openCodeStatusReader;
     (DateTimeOffset Ts, int Count) _cachedSample = (DateTimeOffset.MinValue, 0);
 
     public WorkingSessionsReadService(
         IMappingRepository mappingRepository,
-        Func<string, OpenCodeRequest, Task<JsonNode?>> openCodeFetch)
+        IOpenCodeStatusReader openCodeStatusReader)
     {
         _mappingRepository = mappingRepository;
-        _openCodeFetch = openCodeFetch;
+        _openCodeStatusReader = openCodeStatusReader;
     }
 
     public async Task<WorkingSessionsSample> GetWorkingSessionsCountAsync(bool forceRefresh, int pollMs)
@@ -53,27 +53,7 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         {
             try
             {
-                var data = await _openCodeFetch(
-                    "/session/status",
-                    new OpenCodeRequest
-                    {
-                        Directory = variant
-                    });
-
-                var map = new Dictionary<string, string>(StringComparer.Ordinal);
-
-                if (data is JsonObject obj)
-                {
-                    foreach (var kv in obj)
-                    {
-                        var statusType = kv.Value?["type"]?.ToString()?.Trim()?.ToLowerInvariant();
-
-                        if (string.IsNullOrWhiteSpace(statusType))
-                            continue;
-
-                        map[kv.Key] = statusType;
-                    }
-                }
+                var map = await _openCodeStatusReader.ReadWorkingStatusMapAsync(variant);
 
                 if (map.Count > 0)
                     return map;
@@ -123,4 +103,5 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
 
         return t is "busy" or "retry" or "running";
     }
+
 }

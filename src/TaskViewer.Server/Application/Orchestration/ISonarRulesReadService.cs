@@ -8,12 +8,3 @@ public interface ISonarRulesReadService
         string? issueStatus,
         int maxScanIssues);
 }
-
-public sealed record SonarRuleSummaryItem(string Key, string Name, int Count);
-
-public sealed record SonarRulesSummary(
-    string? IssueType,
-    string? IssueStatus,
-    int ScannedIssues,
-    bool Truncated,
-    IReadOnlyList<SonarRuleSummaryItem> Rules);

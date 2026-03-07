@@ -20,7 +20,7 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 
 ## Requirements
 
-- .NET SDK >= 8.0
+- .NET SDK >= 9.0
 - OpenCode Web Mode server running (default: `http://localhost:4096`)
 
 ## Run
@@ -88,5 +88,10 @@ Playwright browser install (first run):
 
 ```bash
 dotnet build tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj
-powershell ./tests/TaskViewer.E2E.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
+powershell ./tests/TaskViewer.E2E.Tests/bin/Debug/net9.0/playwright.ps1 install chromium
 ```
+
+## Package Management
+
+- NuGet package versions are centrally managed in `Directory.Packages.props`.
+- Use `dotnet add package ...` and `dotnet remove package ...` so project files keep versionless `PackageReference` entries under CPM.

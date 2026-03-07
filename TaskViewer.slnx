@@ -1,11 +1,15 @@
 <Solution>
     <Folder Name="/src/">
+        <Project Path="src/TaskViewer.OpenCode/TaskViewer.OpenCode.csproj"/>
         <Project Path="src/TaskViewer.Server/TaskViewer.Server.csproj"/>
+        <Project Path="src/TaskViewer.SonarQube/TaskViewer.SonarQube.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj"/>
+        <Project Path="tests/TaskViewer.OpenCode.Tests/TaskViewer.OpenCode.Tests.csproj"/>
         <Project Path="tests/TaskViewer.Server.Tests/TaskViewer.Server.Tests.csproj"/>
         <Project Path="tests/TaskViewer.MockOpenCode/TaskViewer.MockOpenCode.csproj"/>
         <Project Path="tests/TaskViewer.MockSonarQube/TaskViewer.MockSonarQube.csproj"/>
+        <Project Path="tests/TaskViewer.SonarQube.Tests/TaskViewer.SonarQube.Tests.csproj"/>
     </Folder>
 </Solution>

@@ -1,16 +1,17 @@
 using System.Collections.Concurrent;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
 
 public sealed class CachedSonarRuleReadService : ISonarRuleReadService
 {
     readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.OrdinalIgnoreCase);
-    readonly ISonarGateway _sonarGateway;
+    readonly ISonarQubeService _sonarQubeService;
 
-    public CachedSonarRuleReadService(ISonarGateway sonarGateway)
+    public CachedSonarRuleReadService(ISonarQubeService sonarQubeService)
     {
-        _sonarGateway = sonarGateway;
+        _sonarQubeService = sonarQubeService;
     }
 
     public async Task<string> GetRuleDisplayName(string ruleKey)
@@ -25,14 +26,8 @@ public sealed class CachedSonarRuleReadService : ISonarRuleReadService
 
         try
         {
-            var data = await _sonarGateway.Fetch(
-                "/api/rules/show",
-                new Dictionary<string, string?>
-                {
-                    ["key"] = normalizedKey
-                });
-
-            var name = data?["rule"]?["name"]?.ToString()?.Trim();
+            var rule = await _sonarQubeService.GetRuleAsync(normalizedKey);
+            var name = rule.Name;
 
             if (string.IsNullOrWhiteSpace(name))
                 name = normalizedKey;

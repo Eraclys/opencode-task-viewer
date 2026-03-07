@@ -65,10 +65,11 @@ sealed class SqliteQueueRepository : IQueueRepository
         string instructionText,
         IReadOnlyList<NormalizedIssue> issues,
         int maxAttempts,
-        string now)
+        DateTimeOffset now)
     {
         var createdItems = new List<QueueItemRecord>();
         var skipped = new List<QueueSkip>();
+        var nowIso = now.ToString("O");
 
         await _dbLock.WaitAsync();
 
@@ -115,21 +116,21 @@ sealed class SqliteQueueRepository : IQueueRepository
                 insert.Parameters.AddWithValue("$mapping_id", mapping.Id);
                 insert.Parameters.AddWithValue("$sonar_key", mapping.SonarProjectKey);
                 insert.Parameters.AddWithValue("$directory", mapping.Directory);
-                insert.Parameters.AddWithValue("$branch", (object?)mapping.Branch ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$issue_type", (object?)(type ?? issue.Type) ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$severity", (object?)issue.Severity ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$rule", (object?)issue.Rule ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$message", (object?)issue.Message ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$component", (object?)issue.Component ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$relative_path", (object?)issue.RelativePath ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$absolute_path", (object?)issue.AbsolutePath ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$line", (object?)issue.Line ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$issue_status", (object?)issue.Status ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$instructions", string.IsNullOrWhiteSpace(instructionText) ? DBNull.Value : instructionText);
+                AddNullableText(insert.Parameters, "$branch", mapping.Branch);
+                AddNullableText(insert.Parameters, "$issue_type", type ?? issue.Type);
+                AddNullableText(insert.Parameters, "$severity", issue.Severity);
+                AddNullableText(insert.Parameters, "$rule", issue.Rule);
+                AddNullableText(insert.Parameters, "$message", issue.Message);
+                AddNullableText(insert.Parameters, "$component", issue.Component);
+                AddNullableText(insert.Parameters, "$relative_path", issue.RelativePath);
+                AddNullableText(insert.Parameters, "$absolute_path", issue.AbsolutePath);
+                AddNullableInt(insert.Parameters, "$line", issue.Line);
+                AddNullableText(insert.Parameters, "$issue_status", issue.Status);
+                AddNullableText(insert.Parameters, "$instructions", instructionText);
                 insert.Parameters.AddWithValue("$max_attempts", maxAttempts);
-                insert.Parameters.AddWithValue("$next_attempt_at", now);
-                insert.Parameters.AddWithValue("$created_at", now);
-                insert.Parameters.AddWithValue("$updated_at", now);
+                insert.Parameters.AddWithValue("$next_attempt_at", nowIso);
+                insert.Parameters.AddWithValue("$created_at", nowIso);
+                insert.Parameters.AddWithValue("$updated_at", nowIso);
                 insert.ExecuteNonQuery();
 
                 using var readInserted = conn.CreateCommand();
@@ -193,8 +194,9 @@ sealed class SqliteQueueRepository : IQueueRepository
             stats["cancelled"]);
     }
 
-    public async Task<bool> CancelQueueItem(int id, string now)
+    public async Task<bool> CancelQueueItem(int id, DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -207,7 +209,7 @@ sealed class SqliteQueueRepository : IQueueRepository
         SET state = 'cancelled', cancelled_at = $now, updated_at = $now
         WHERE id = $id AND state IN ('queued', 'dispatching')";
 
-            cmd.Parameters.AddWithValue("$now", now);
+            cmd.Parameters.AddWithValue("$now", nowIso);
             cmd.Parameters.AddWithValue("$id", id);
             var changed = cmd.ExecuteNonQuery();
 
@@ -222,8 +224,9 @@ sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    public async Task<int> RetryFailed(string now)
+    public async Task<int> RetryFailed(DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -236,7 +239,7 @@ sealed class SqliteQueueRepository : IQueueRepository
         SET state = 'queued', next_attempt_at = $now, updated_at = $now, last_error = NULL
         WHERE state = 'failed'";
 
-            cmd.Parameters.AddWithValue("$now", now);
+            cmd.Parameters.AddWithValue("$now", nowIso);
             var changed = cmd.ExecuteNonQuery();
 
             if (changed > 0)
@@ -250,8 +253,9 @@ sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    public async Task<int> ClearQueued(string now)
+    public async Task<int> ClearQueued(DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -264,7 +268,7 @@ sealed class SqliteQueueRepository : IQueueRepository
         SET state = 'cancelled', cancelled_at = $now, updated_at = $now
         WHERE state = 'queued'";
 
-            cmd.Parameters.AddWithValue("$now", now);
+            cmd.Parameters.AddWithValue("$now", nowIso);
             var changed = cmd.ExecuteNonQuery();
 
             if (changed > 0)
@@ -278,8 +282,9 @@ sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    public async Task<QueueItemRecord?> ClaimNextQueuedItem(string now)
+    public async Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -295,7 +300,7 @@ sealed class SqliteQueueRepository : IQueueRepository
         ORDER BY datetime(created_at) ASC, id ASC
         LIMIT 1";
 
-            select.Parameters.AddWithValue("$now", now);
+            select.Parameters.AddWithValue("$now", nowIso);
 
             using var reader = select.ExecuteReader();
 
@@ -314,7 +319,7 @@ sealed class SqliteQueueRepository : IQueueRepository
             last_error = NULL
         WHERE id = $id AND state = 'queued'";
 
-            claim.Parameters.AddWithValue("$now", now);
+            claim.Parameters.AddWithValue("$now", nowIso);
             claim.Parameters.AddWithValue("$id", id);
 
             if (claim.ExecuteNonQuery() == 0)
@@ -337,8 +342,9 @@ sealed class SqliteQueueRepository : IQueueRepository
         int id,
         string sessionId,
         string? openCodeUrl,
-        string timestamp)
+        DateTimeOffset timestamp)
     {
+        var timestampIso = timestamp.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -358,8 +364,8 @@ sealed class SqliteQueueRepository : IQueueRepository
           WHERE id = $id AND state = 'dispatching'";
 
             cmd.Parameters.AddWithValue("$sid", sessionId);
-            cmd.Parameters.AddWithValue("$url", (object?)openCodeUrl ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$ts", timestamp);
+            AddNullableText(cmd.Parameters, "$url", openCodeUrl);
+            cmd.Parameters.AddWithValue("$ts", timestampIso);
             cmd.Parameters.AddWithValue("$id", id);
 
             var changed = cmd.ExecuteNonQuery();
@@ -390,8 +396,11 @@ sealed class SqliteQueueRepository : IQueueRepository
             if (!reader.Read())
                 return (fallbackAttemptCount, fallbackMaxAttempts);
 
-            var attemptCount = ParseIntSafe(reader["attempt_count"], fallbackAttemptCount);
-            var maxAttempts = ParseIntSafe(reader["max_attempts"], fallbackMaxAttempts);
+            var attemptCountOrd = reader.GetOrdinal("attempt_count");
+            var maxAttemptsOrd = reader.GetOrdinal("max_attempts");
+
+            var attemptCount = reader.IsDBNull(attemptCountOrd) ? fallbackAttemptCount : reader.GetInt32(attemptCountOrd);
+            var maxAttempts = reader.IsDBNull(maxAttemptsOrd) ? fallbackMaxAttempts : reader.GetInt32(maxAttemptsOrd);
 
             return (attemptCount, maxAttempts);
         }
@@ -404,10 +413,11 @@ sealed class SqliteQueueRepository : IQueueRepository
     public async Task<bool> MarkDispatchFailure(
         int id,
         string state,
-        string? nextAttemptAt,
+        DateTimeOffset? nextAttemptAt,
         string lastError,
-        string updatedAt)
+        DateTimeOffset updatedAt)
     {
+        var updatedAtIso = updatedAt.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -424,9 +434,9 @@ sealed class SqliteQueueRepository : IQueueRepository
           WHERE id = $id AND state = 'dispatching'";
 
             update.Parameters.AddWithValue("$state", state);
-            update.Parameters.AddWithValue("$next", (object?)nextAttemptAt ?? DBNull.Value);
+            AddNullableDateTime(update.Parameters, "$next", nextAttemptAt);
             update.Parameters.AddWithValue("$error", lastError);
-            update.Parameters.AddWithValue("$updated", updatedAt);
+            update.Parameters.AddWithValue("$updated", updatedAtIso);
             update.Parameters.AddWithValue("$id", id);
 
             var changed = update.ExecuteNonQuery();
@@ -442,18 +452,28 @@ sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    static int ParseIntSafe(object? value, int fallback)
+    static void AddNullableText(SqliteParameterCollection parameters, string name, string? value)
     {
-        if (value is null)
-            return fallback;
+        if (string.IsNullOrWhiteSpace(value))
+            parameters.AddWithValue(name, DBNull.Value);
+        else
+            parameters.AddWithValue(name, value);
+    }
 
-        if (value is int i)
-            return i;
+    static void AddNullableInt(SqliteParameterCollection parameters, string name, int? value)
+    {
+        if (value.HasValue)
+            parameters.AddWithValue(name, value.Value);
+        else
+            parameters.AddWithValue(name, DBNull.Value);
+    }
 
-        if (int.TryParse(value.ToString(), out var parsed))
-            return parsed;
-
-        return fallback;
+    static void AddNullableDateTime(SqliteParameterCollection parameters, string name, DateTimeOffset? value)
+    {
+        if (value.HasValue)
+            parameters.AddWithValue(name, value.Value.ToString("O"));
+        else
+            parameters.AddWithValue(name, DBNull.Value);
     }
 
     static QueueItemRecord MapQueue(SqliteDataReader reader)
@@ -470,6 +490,34 @@ sealed class SqliteQueueRepository : IQueueRepository
             var ord = reader.GetOrdinal(name);
 
             return reader.IsDBNull(ord) ? null : reader.GetInt32(ord);
+        }
+
+        DateTimeOffset ParseDateTime(string name)
+        {
+            var ord = reader.GetOrdinal(name);
+
+            if (reader.IsDBNull(ord))
+                return DateTimeOffset.MinValue;
+
+            var raw = reader.GetString(ord);
+
+            return DateTimeOffset.TryParse(raw, out var parsed)
+                ? parsed
+                : DateTimeOffset.MinValue;
+        }
+
+        DateTimeOffset? ParseDateTimeNullable(string name)
+        {
+            var ord = reader.GetOrdinal(name);
+
+            if (reader.IsDBNull(ord))
+                return null;
+
+            var raw = reader.GetString(ord);
+
+            return DateTimeOffset.TryParse(raw, out var parsed)
+                ? parsed
+                : null;
         }
 
         return new QueueItemRecord
@@ -493,15 +541,15 @@ sealed class SqliteQueueRepository : IQueueRepository
             State = reader.GetString(reader.GetOrdinal("state")),
             AttemptCount = reader.GetInt32(reader.GetOrdinal("attempt_count")),
             MaxAttempts = reader.GetInt32(reader.GetOrdinal("max_attempts")),
-            NextAttemptAt = Str("next_attempt_at"),
+            NextAttemptAt = ParseDateTimeNullable("next_attempt_at"),
             SessionId = Str("session_id"),
             OpenCodeUrl = Str("open_code_url"),
             LastError = Str("last_error"),
-            CreatedAt = reader.GetString(reader.GetOrdinal("created_at")),
-            UpdatedAt = reader.GetString(reader.GetOrdinal("updated_at")),
-            DispatchedAt = Str("dispatched_at"),
-            CompletedAt = Str("completed_at"),
-            CancelledAt = Str("cancelled_at")
+            CreatedAt = ParseDateTime("created_at"),
+            UpdatedAt = ParseDateTime("updated_at"),
+            DispatchedAt = ParseDateTimeNullable("dispatched_at"),
+            CompletedAt = ParseDateTimeNullable("completed_at"),
+            CancelledAt = ParseDateTimeNullable("cancelled_at")
         };
     }
 }

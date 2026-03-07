@@ -1,12 +1,12 @@
-using System.Text.Json.Nodes;
+using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 interface IOrchestrationMappingService
 {
     Task<List<MappingRecord>> ListMappingsAsync();
-    Task<MappingRecord?> GetMappingByIdAsync(object? mappingId);
-    Task<MappingRecord> UpsertMappingAsync(JsonNode? payload);
-    Task<JsonObject?> GetInstructionProfileAsync(object? mappingId, string? issueType);
-    Task<JsonObject> UpsertInstructionProfileAsync(object? mappingId, string? issueType, string? instructions);
+    Task<MappingRecord?> GetMappingByIdAsync(int? mappingId);
+    Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request);
+    Task<InstructionProfileRecord?> GetInstructionProfileAsync(int? mappingId, string? issueType);
+    Task<InstructionProfileRecord> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request);
 }

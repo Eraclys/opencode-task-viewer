@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -19,8 +19,8 @@ public sealed class SonarRulesReadServiceTests
             Directory = "C:/Work/Alpha",
             Branch = "main",
             Enabled = true,
-            CreatedAt = "",
-            UpdatedAt = ""
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            UpdatedAt = DateTimeOffset.UnixEpoch
         };
 
         var summary = await service.SummarizeRulesAsync(
@@ -38,34 +38,25 @@ public sealed class SonarRulesReadServiceTests
         Assert.Equal(2, summary.Rules[0].Count);
     }
 
-    sealed class FakeGateway : ISonarGateway
+    sealed class FakeGateway : ISonarQubeService
     {
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
-        {
-            return Task.FromResult<JsonNode?>(
-                new JsonObject
-                {
-                    ["paging"] = new JsonObject
-                    {
-                        ["total"] = 3
-                    },
-                    ["issues"] = new JsonArray
-                    {
-                        new JsonObject
-                        {
-                            ["rule"] = "javascript:S1126"
-                        },
-                        new JsonObject
-                        {
-                            ["rule"] = "javascript:S1126"
-                        },
-                        new JsonObject
-                        {
-                            ["rule"] = "javascript:S3776"
-                        }
-                    }
-                });
-        }
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+            => Task.FromResult(new SonarRuleDetailsResponse(null));
+
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
+            Dictionary<string, string?> query,
+            int fallbackPageIndex,
+            int fallbackPageSize)
+            => Task.FromResult(
+                new SonarIssuesSearchResponse(
+                    fallbackPageIndex,
+                    fallbackPageSize,
+                    3,
+                    [
+                        new SonarIssueTransport(null, null, null, null, null, "javascript:S1126", null, null, null, null, null),
+                        new SonarIssueTransport(null, null, null, null, null, "javascript:S1126", null, null, null, null, null),
+                        new SonarIssueTransport(null, null, null, null, null, "javascript:S3776", null, null, null, null, null)
+                    ]));
     }
 
     sealed class FakeRuleReadService : ISonarRuleReadService

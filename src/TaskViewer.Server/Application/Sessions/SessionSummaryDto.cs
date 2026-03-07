@@ -7,8 +7,8 @@ public sealed class SessionSummaryDto
     public string? Project { get; init; }
     public string? Description { get; init; }
     public string? GitBranch { get; init; }
-    public string? CreatedAt { get; init; }
-    public required string ModifiedAt { get; init; }
+    public DateTimeOffset? CreatedAt { get; init; }
+    public required DateTimeOffset ModifiedAt { get; init; }
     public required SessionRuntimeStatus RuntimeStatus { get; init; }
     public required string Status { get; init; }
     public bool? HasAssistantResponse { get; init; }
@@ -25,11 +25,3 @@ public sealed class SessionSummaryDto
     public int? IssueLine { get; init; }
     public string? LastError { get; init; }
 }
-
-public sealed record OpenCodeSessionDto(
-    string Id,
-    string? Name,
-    string? Directory,
-    string? Project,
-    string? CreatedAt,
-    string? UpdatedAt);

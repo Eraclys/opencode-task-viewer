@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 
@@ -10,18 +10,23 @@ public sealed class OrchestrationUseCasesTests
     {
         var gateway = new FakeGateway
         {
-            InstructionProfileResult = new JsonObject
+            InstructionProfileResult = new InstructionProfileRecord
             {
-                ["instructions"] = "Apply safe fix"
+                Id = 1,
+                MappingId = 42,
+                IssueType = "CODE_SMELL",
+                Instructions = "Apply safe fix",
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             }
         };
 
         var sut = new OrchestrationUseCases(gateway);
         var result = await sut.GetInstructionProfileAsync("42", "code_smell");
 
-        Assert.Equal("42", result.GetType().GetProperty("mappingId")?.GetValue(result)?.ToString());
-        Assert.Equal("CODE_SMELL", result.GetType().GetProperty("issueType")?.GetValue(result)?.ToString());
-        Assert.Equal("Apply safe fix", result.GetType().GetProperty("instructions")?.GetValue(result)?.ToString());
+        Assert.Equal(42, result.MappingId);
+        Assert.Equal("CODE_SMELL", result.IssueType);
+        Assert.Equal("Apply safe fix", result.Instructions);
     }
 
     [Fact]
@@ -31,14 +36,15 @@ public sealed class OrchestrationUseCasesTests
         var sut = new OrchestrationUseCases(gateway);
 
         await sut.EnqueueAllMatchingAsync(
-            new JsonObject
-            {
-                ["mappingId"] = "9",
-                ["issueType"] = "CODE_SMELL",
-                ["rules"] = "javascript:S3776"
-            });
+            new EnqueueAllRequest(
+                MappingId: 9,
+                IssueType: "CODE_SMELL",
+                RuleKeys: "javascript:S3776",
+                IssueStatus: null,
+                Severity: null,
+                Instructions: null));
 
-        Assert.Equal("javascript:S3776", gateway.LastRuleKeys?.ToString());
+        Assert.Equal("javascript:S3776", gateway.LastRuleKeys);
     }
 
     [Fact]
@@ -55,128 +61,178 @@ public sealed class OrchestrationUseCasesTests
                     MappingId = 1,
                     SonarProjectKey = "k",
                     Directory = "C:/Work",
-                    CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-                    UpdatedAt = "2026-01-01T00:00:00.0000000+00:00"
+                    CreatedAt = DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"),
+                    UpdatedAt = DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00")
                 }
             ],
-            QueueStatsResult = new
+            QueueStatsResult = new QueueStatsDto
             {
-                queued = 1
+                Queued = 1,
+                Dispatching = 0,
+                SessionCreated = 0,
+                Done = 0,
+                Failed = 0,
+                Cancelled = 0
             },
-            WorkerStateResult = new
+            WorkerStateResult = new OrchestrationWorkerStateDto
             {
-                paused = false
+                InFlightDispatches = 0,
+                MaxActiveDispatches = 3,
+                PausedByWorking = false,
+                WorkingCount = 0,
+                MaxWorkingGlobal = 5,
+                WorkingResumeBelow = 4,
+                WorkingSampleAt = null
             }
         };
 
         var sut = new OrchestrationUseCases(gateway);
         var result = await sut.GetQueueAsync("queued", "100");
 
-        Assert.NotNull(result.GetType().GetProperty("items")?.GetValue(result));
-        Assert.NotNull(result.GetType().GetProperty("stats")?.GetValue(result));
-        Assert.NotNull(result.GetType().GetProperty("worker")?.GetValue(result));
+        Assert.NotNull(result.Items);
+        Assert.NotNull(result.Stats);
+        Assert.NotNull(result.Worker);
     }
 
     sealed class FakeGateway : IOrchestrationGateway
     {
-        public object? LastRuleKeys { get; private set; }
+        public string? LastRuleKeys { get; private set; }
 
-        public JsonObject? InstructionProfileResult { get; set; }
+        public InstructionProfileRecord? InstructionProfileResult { get; set; }
         public List<QueueItemRecord> QueueItemsResult { get; set; } = [];
 
-        public object QueueStatsResult { get; set; } = new
+        public QueueStatsDto QueueStatsResult { get; set; } = new()
         {
-            queued = 0
+            Queued = 0,
+            Dispatching = 0,
+            SessionCreated = 0,
+            Done = 0,
+            Failed = 0,
+            Cancelled = 0
         };
 
-        public object WorkerStateResult { get; set; } = new
+        public OrchestrationWorkerStateDto WorkerStateResult { get; set; } = new()
         {
-            paused = false
+            InFlightDispatches = 0,
+            MaxActiveDispatches = 3,
+            PausedByWorking = false,
+            WorkingCount = 0,
+            MaxWorkingGlobal = 5,
+            WorkingResumeBelow = 4,
+            WorkingSampleAt = null
         };
 
-        public object GetPublicConfig() => new
+        public OrchestrationConfigDto GetPublicConfig() => new()
         {
-            configured = true
+            Configured = true,
+            MaxActive = 3,
+            PollMs = 3000,
+            MaxAttempts = 3,
+            MaxWorkingGlobal = 5,
+            WorkingResumeBelow = 4
         };
 
         public Task<List<MappingRecord>> ListMappings() => Task.FromResult(new List<MappingRecord>());
 
-        public Task<MappingRecord> UpsertMapping(JsonNode? payload) => Task.FromResult(
+        public Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => Task.FromResult(
             new MappingRecord
             {
                 Id = 1,
                 SonarProjectKey = "key",
                 Directory = "C:/Work",
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             });
 
-        public Task<JsonObject?> GetInstructionProfile(object? mappingId, string? issueType) => Task.FromResult(InstructionProfileResult);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType) => Task.FromResult(InstructionProfileResult);
 
-        public Task<JsonObject> UpsertInstructionProfile(object? mappingId, string? issueType, string? instructions)
+        public Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request)
             => Task.FromResult(
-                new JsonObject
+                new InstructionProfileRecord
                 {
-                    ["mapping_id"] = 1,
-                    ["issue_type"] = issueType,
-                    ["instructions"] = instructions,
-                    ["updated_at"] = "now"
+                    Id = 1,
+                    MappingId = 1,
+                    IssueType = request.IssueType ?? string.Empty,
+                    Instructions = request.Instructions ?? string.Empty,
+                    CreatedAt = DateTimeOffset.UnixEpoch,
+                    UpdatedAt = DateTimeOffset.UnixEpoch
                 });
 
-        public Task<object> ListIssues(
-            object? mappingId,
+        public Task<IssuesListDto> ListIssues(
+            int? mappingId,
             string? issueType,
             string? severity,
             string? issueStatus,
-            object? page,
-            object? pageSize,
-            object? ruleKeys)
-            => Task.FromResult<object>(
-                new
+            string? page,
+            string? pageSize,
+            string? ruleKeys)
+            => Task.FromResult(
+                new IssuesListDto
                 {
-                    total = 0,
-                    issues = Array.Empty<object>()
+                    Mapping = new MappingRecord
+                    {
+                        Id = 1,
+                        SonarProjectKey = "k",
+                        Directory = "C:/Work",
+                        CreatedAt = DateTimeOffset.UnixEpoch,
+                        UpdatedAt = DateTimeOffset.UnixEpoch
+                    },
+                    Paging = new IssuesPagingDto
+                    {
+                        PageIndex = 1,
+                        PageSize = 100,
+                        Total = 0
+                    },
+                    Issues = []
                 });
 
-        public Task<object> ListRules(object? mappingId, string? issueType, string? issueStatus)
-            => Task.FromResult<object>(
-                new
+        public Task<RulesListDto> ListRules(int? mappingId, string? issueType, string? issueStatus)
+            => Task.FromResult(
+                new RulesListDto
                 {
-                    items = Array.Empty<object>()
+                    Mapping = new MappingRecord
+                    {
+                        Id = 1,
+                        SonarProjectKey = "k",
+                        Directory = "C:/Work",
+                        CreatedAt = DateTimeOffset.UnixEpoch,
+                        UpdatedAt = DateTimeOffset.UnixEpoch
+                    },
+                    IssueType = issueType,
+                    IssueStatus = issueStatus,
+                    ScannedIssues = 0,
+                    Truncated = false,
+                    Rules = []
                 });
 
-        public Task<object> EnqueueIssues(
-            object? mappingId,
-            string? issueType,
-            string? instructions,
-            JsonArray? issues)
-            => Task.FromResult<object>(
-                new
+        public Task<EnqueueIssuesResultDto> EnqueueIssues(EnqueueIssuesRequest request)
+            => Task.FromResult(
+                new EnqueueIssuesResultDto
                 {
-                    queued = 0
+                    Created = 0,
+                    Skipped = [],
+                    Items = []
                 });
 
-        public Task<object> EnqueueAllMatching(
-            object? mappingId,
-            string? issueType,
-            object? ruleKeys,
-            string? issueStatus,
-            string? severity,
-            string? instructions)
+        public Task<EnqueueAllResultDto> EnqueueAllMatching(EnqueueAllRequest request)
         {
-            LastRuleKeys = ruleKeys;
+            LastRuleKeys = request.RuleKeys;
 
-            return Task.FromResult<object>(
-                new
+            return Task.FromResult(
+                new EnqueueAllResultDto
                 {
-                    queued = 0
+                    Matched = 0,
+                    Created = 0,
+                    Skipped = [],
+                    Truncated = false,
+                    Items = []
                 });
         }
 
-        public Task<List<QueueItemRecord>> ListQueue(object? states, object? limit) => Task.FromResult(QueueItemsResult);
-        public Task<object> GetQueueStats() => Task.FromResult(QueueStatsResult);
-        public Task<object> GetWorkerState() => Task.FromResult(WorkerStateResult);
-        public Task<bool> CancelQueueItem(object? queueId) => Task.FromResult(true);
+        public Task<List<QueueItemRecord>> ListQueue(string? states, string? limit) => Task.FromResult(QueueItemsResult);
+        public Task<QueueStatsDto> GetQueueStats() => Task.FromResult(QueueStatsResult);
+        public Task<OrchestrationWorkerStateDto> GetWorkerState() => Task.FromResult(WorkerStateResult);
+        public Task<bool> CancelQueueItem(int? queueId) => Task.FromResult(true);
         public Task<int> RetryFailed() => Task.FromResult(0);
         public Task<int> ClearQueued() => Task.FromResult(0);
     }

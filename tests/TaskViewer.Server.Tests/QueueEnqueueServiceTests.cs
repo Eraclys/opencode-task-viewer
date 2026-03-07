@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -8,7 +6,7 @@ namespace TaskViewer.Server.Tests;
 public sealed class QueueEnqueueServiceTests
 {
     [Fact]
-    public async Task EnqueueRawIssuesAsync_NormalizesValidIssuesAndCollectsSkips()
+    public async Task EnqueueRawIssuesAsync_PassesNormalizedIssuesToRepository_AndCollectsRepoSkips()
     {
         var repo = new FakeQueueRepository
         {
@@ -21,46 +19,46 @@ public sealed class QueueEnqueueServiceTests
                     MappingId = 1,
                     SonarProjectKey = "alpha",
                     Directory = "C:/Work/Alpha",
-                    CreatedAt = "",
-                    UpdatedAt = ""
+                    CreatedAt = DateTimeOffset.UnixEpoch,
+                    UpdatedAt = DateTimeOffset.UnixEpoch
                 }
             ],
             RepoSkipped = [new QueueSkip("sq-dupe", "already-queued")]
         };
 
-        var sut = new QueueEnqueueService(repo, maxAttempts: 7, nowIso: () => "now");
-        var mapping = new MappingRecord
-        {
-            Id = 1,
-            SonarProjectKey = "alpha",
-            Directory = "C:/Work/Alpha",
-            Enabled = true,
-            CreatedAt = "",
-            UpdatedAt = ""
-        };
-
+        var now = DateTimeOffset.Parse("2026-01-01T00:00:00+00:00");
+        var sut = new QueueEnqueueService(repo, maxAttempts: 7, nowUtc: () => now);
         var result = await sut.EnqueueRawIssuesAsync(
-            mapping,
+            new MappingRecord
+            {
+                Id = 1,
+                SonarProjectKey = "alpha",
+                Directory = "C:/Work/Alpha",
+                Enabled = true,
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
+            },
             "CODE_SMELL",
             "instruction",
             [
-                new JsonObject(),
-                new JsonObject
+                new NormalizedIssue
                 {
-                    ["key"] = "sq-valid",
-                    ["component"] = "alpha:src/file.js"
+                    Key = "sq-valid",
+                    Type = "CODE_SMELL",
+                    Component = "alpha:src/file.js",
+                    RelativePath = "src/file.js",
+                    AbsolutePath = "C:/Work/Alpha/src/file.js"
                 }
             ]);
 
         Assert.Single(result.CreatedItems);
-        Assert.Equal(2, result.Skipped.Count);
-        Assert.Contains(result.Skipped, s => string.Equals(s.reason, "invalid-issue", StringComparison.Ordinal));
-        Assert.Contains(result.Skipped, s => string.Equals(s.reason, "already-queued", StringComparison.Ordinal));
+        Assert.Single(result.Skipped);
+        Assert.Contains(result.Skipped, s => string.Equals(s.Reason, "already-queued", StringComparison.Ordinal));
 
         var normalized = Assert.Single(repo.LastIssues);
         Assert.Equal("sq-valid", normalized.Key);
         Assert.Equal(7, repo.LastMaxAttempts);
-        Assert.Equal("now", repo.LastNow);
+        Assert.Equal(now, repo.LastNow);
     }
 
     private sealed class FakeQueueRepository : IQueueRepository
@@ -69,9 +67,9 @@ public sealed class QueueEnqueueServiceTests
         public List<QueueSkip> RepoSkipped { get; set; } = new();
         public List<NormalizedIssue> LastIssues { get; private set; } = new();
         public int LastMaxAttempts { get; private set; }
-        public string? LastNow { get; private set; }
+        public DateTimeOffset? LastNow { get; private set; }
 
-        public Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(MappingRecord mapping, string? type, string instructionText, IReadOnlyList<NormalizedIssue> issues, int maxAttempts, string now)
+        public Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(MappingRecord mapping, string? type, string instructionText, IReadOnlyList<NormalizedIssue> issues, int maxAttempts, DateTimeOffset now)
         {
             LastIssues = issues.ToList();
             LastMaxAttempts = maxAttempts;
@@ -81,12 +79,12 @@ public sealed class QueueEnqueueServiceTests
 
         public Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit) => throw new NotSupportedException();
         public Task<QueueStats> GetQueueStats() => throw new NotSupportedException();
-        public Task<bool> CancelQueueItem(int id, string now) => throw new NotSupportedException();
-        public Task<int> RetryFailed(string now) => throw new NotSupportedException();
-        public Task<int> ClearQueued(string now) => throw new NotSupportedException();
-        public Task<QueueItemRecord?> ClaimNextQueuedItem(string now) => throw new NotSupportedException();
-        public Task<bool> MarkSessionCreated(int id, string sessionId, string? openCodeUrl, string timestamp) => throw new NotSupportedException();
+        public Task<bool> CancelQueueItem(int id, DateTimeOffset now) => throw new NotSupportedException();
+        public Task<int> RetryFailed(DateTimeOffset now) => throw new NotSupportedException();
+        public Task<int> ClearQueued(DateTimeOffset now) => throw new NotSupportedException();
+        public Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now) => throw new NotSupportedException();
+        public Task<bool> MarkSessionCreated(int id, string sessionId, string? openCodeUrl, DateTimeOffset timestamp) => throw new NotSupportedException();
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts) => throw new NotSupportedException();
-        public Task<bool> MarkDispatchFailure(int id, string state, string? nextAttemptAt, string lastError, string updatedAt) => throw new NotSupportedException();
+        public Task<bool> MarkDispatchFailure(int id, string state, DateTimeOffset? nextAttemptAt, string lastError, DateTimeOffset updatedAt) => throw new NotSupportedException();
     }
 }

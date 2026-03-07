@@ -1,4 +1,4 @@
-﻿namespace TaskViewer.Server;
+namespace TaskViewer.Server;
 
 public sealed class QueueItemRecord
 {
@@ -21,13 +21,13 @@ public sealed class QueueItemRecord
     public string State { get; init; } = "queued";
     public int AttemptCount { get; init; }
     public int MaxAttempts { get; init; }
-    public string? NextAttemptAt { get; init; }
+    public DateTimeOffset? NextAttemptAt { get; init; }
     public string? SessionId { get; init; }
     public string? OpenCodeUrl { get; init; }
     public string? LastError { get; init; }
-    public string CreatedAt { get; init; } = "";
-    public string UpdatedAt { get; init; } = "";
-    public string? DispatchedAt { get; init; }
-    public string? CompletedAt { get; init; }
-    public string? CancelledAt { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+    public DateTimeOffset? DispatchedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public DateTimeOffset? CancelledAt { get; init; }
 }

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -24,8 +23,8 @@ public sealed class EnqueueContextResolverTests
             SonarProjectKey = "alpha",
             Directory = "C:/Work/Alpha",
             Enabled = false,
-            CreatedAt = "",
-            UpdatedAt = ""
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            UpdatedAt = DateTimeOffset.UnixEpoch
         };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(12, "CODE_SMELL", null));
@@ -42,17 +41,22 @@ public sealed class EnqueueContextResolverTests
                 SonarProjectKey = "alpha",
                 Directory = "C:/Work/Alpha",
                 Enabled = true,
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             },
-            Profile = new JsonObject
+            Profile = new InstructionProfileRecord
             {
-                ["instructions"] = "  default fix text  "
+                Id = 1,
+                MappingId = 7,
+                IssueType = "CODE_SMELL",
+                Instructions = "  default fix text  ",
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             }
         };
 
         var sut = new EnqueueContextResolver(repo);
-        var result = await sut.ResolveAsync("7", "code_smell", "  ");
+        var result = await sut.ResolveAsync(7, "code_smell", "  ");
 
         Assert.Equal("CODE_SMELL", result.Type);
         Assert.Equal("default fix text", result.InstructionText);
@@ -72,8 +76,8 @@ public sealed class EnqueueContextResolverTests
                 SonarProjectKey = "alpha",
                 Directory = "C:/Work/Alpha",
                 Enabled = true,
-                CreatedAt = "",
-                UpdatedAt = ""
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch
             }
         };
 
@@ -88,7 +92,7 @@ public sealed class EnqueueContextResolverTests
     sealed class FakeMappingRepository : IMappingRepository
     {
         public MappingRecord? Mapping { get; set; }
-        public JsonObject? Profile { get; set; }
+        public InstructionProfileRecord? Profile { get; set; }
         public int? UpsertMappingId { get; private set; }
         public string? UpsertIssueType { get; private set; }
         public string? UpsertInstructions { get; private set; }
@@ -103,27 +107,29 @@ public sealed class EnqueueContextResolverTests
             string directory,
             string? branch,
             bool enabled,
-            string now) => throw new NotSupportedException();
+            DateTimeOffset now) => throw new NotSupportedException();
 
-        public Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType) => Task.FromResult(Profile);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType) => Task.FromResult(Profile);
 
-        public Task<JsonObject> UpsertInstructionProfile(
+        public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
             string issueType,
             string instructions,
-            string now)
+            DateTimeOffset now)
         {
             UpsertMappingId = mappingId;
             UpsertIssueType = issueType;
             UpsertInstructions = instructions;
 
             return Task.FromResult(
-                new JsonObject
+                new InstructionProfileRecord
                 {
-                    ["mapping_id"] = mappingId,
-                    ["issue_type"] = issueType,
-                    ["instructions"] = instructions,
-                    ["updated_at"] = now
+                    Id = 1,
+                    MappingId = mappingId,
+                    IssueType = issueType,
+                    Instructions = instructions,
+                    CreatedAt = now,
+                    UpdatedAt = now
                 });
         }
 

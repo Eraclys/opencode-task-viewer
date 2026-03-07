@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -10,30 +10,26 @@ public sealed class WorkingSessionsReadServiceTests
     public async Task GetWorkingSessionsCountAsync_UsesCacheWithinTtl()
     {
         var repo = new FakeMappingRepository(["C:/Work/Alpha"]);
-        var requestCount = 0;
+        var statusReader = new FakeOpenCodeStatusReader(
+            readMap: directory =>
+            {
+                Assert.Equal("C:/Work/Alpha", directory);
+                return new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["s1"] = "busy"
+                };
+            });
 
         var service = new WorkingSessionsReadService(
             repo,
-            (_, _) =>
-            {
-                requestCount += 1;
-
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["s1"] = new JsonObject
-                        {
-                            ["type"] = "busy"
-                        }
-                    });
-            });
+            statusReader);
 
         var first = await service.GetWorkingSessionsCountAsync(false, 1000);
         var second = await service.GetWorkingSessionsCountAsync(false, 1000);
 
         Assert.Equal(1, first.Count);
         Assert.Equal(1, second.Count);
-        Assert.Equal(1, requestCount);
+        Assert.Equal(1, statusReader.RequestCount);
     }
 
     [Fact]
@@ -44,31 +40,21 @@ public sealed class WorkingSessionsReadServiceTests
 
         var service = new WorkingSessionsReadService(
             repo,
-            (_, request) =>
+            new FakeOpenCodeStatusReader(
+                readMap: dir =>
             {
-                var dir = request.Directory ?? string.Empty;
                 seenDirectories.Add(dir);
 
                 if (string.Equals(dir, "C:/Work/Alpha", StringComparison.Ordinal))
                     throw new InvalidOperationException("first variant fails");
 
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["s1"] = new JsonObject
-                        {
-                            ["type"] = "running"
-                        },
-                        ["s2"] = new JsonObject
-                        {
-                            ["type"] = "retry"
-                        },
-                        ["s3"] = new JsonObject
-                        {
-                            ["type"] = "done"
-                        }
-                    });
-            });
+                return new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["s1"] = "running",
+                    ["s2"] = "retry",
+                    ["s3"] = "done"
+                };
+            }));
 
         var result = await service.GetWorkingSessionsCountAsync(true, 1000);
 
@@ -98,14 +84,32 @@ public sealed class WorkingSessionsReadServiceTests
             string directory,
             string? branch,
             bool enabled,
-            string now) => throw new NotSupportedException();
+            DateTimeOffset now) => throw new NotSupportedException();
 
-        public Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType) => throw new NotSupportedException();
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType) => throw new NotSupportedException();
 
-        public Task<JsonObject> UpsertInstructionProfile(
+        public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
             string issueType,
             string instructions,
-            string now) => throw new NotSupportedException();
+            DateTimeOffset now) => throw new NotSupportedException();
+    }
+
+    sealed class FakeOpenCodeStatusReader : IOpenCodeStatusReader
+    {
+        readonly Func<string, Dictionary<string, string>> _readMap;
+
+        public FakeOpenCodeStatusReader(Func<string, Dictionary<string, string>> readMap)
+        {
+            _readMap = readMap;
+        }
+
+        public int RequestCount { get; private set; }
+
+        public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory)
+        {
+            RequestCount += 1;
+            return Task.FromResult(_readMap(directory));
+        }
     }
 }

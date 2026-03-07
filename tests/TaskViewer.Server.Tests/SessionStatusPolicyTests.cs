@@ -17,7 +17,7 @@ public sealed class SessionStatusPolicyTests
     {
         var status = SessionStatusPolicy.DeriveKanbanStatus(
             "busy",
-            DateTimeOffset.UtcNow.ToString("O"),
+            DateTimeOffset.UtcNow,
             null,
             300_000);
 
@@ -27,7 +27,7 @@ public sealed class SessionStatusPolicyTests
     [Fact]
     public void DeriveKanbanStatus_UsesAssistantSignal_WhenRuntimeNotRunning()
     {
-        var now = DateTimeOffset.UtcNow.ToString("O");
+        var now = DateTimeOffset.UtcNow;
 
         Assert.Equal(
             "completed",
@@ -49,8 +49,8 @@ public sealed class SessionStatusPolicyTests
     [Fact]
     public void DeriveKanbanStatus_FallsBackToTimestampWindow_WhenAssistantUnknown()
     {
-        var recent = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O");
-        var stale = DateTimeOffset.UtcNow.AddMinutes(-30).ToString("O");
+        var recent = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var stale = DateTimeOffset.UtcNow.AddMinutes(-30);
 
         Assert.Equal(
             "pending",

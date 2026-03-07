@@ -1,19 +1,17 @@
 using System.Globalization;
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Domain;
 
 namespace TaskViewer.Server.Application.Sessions;
 
 public sealed class SessionTodoViewService
 {
-    public SessionTodoDto NormalizeTodo(JsonObject? todo)
+    public SessionTodoDto NormalizeTodo(OpenCodeTodoTransport todo)
     {
-        var normalized = TodoNormalization.NormalizeTodo(todo);
-
         return new SessionTodoDto(
-            normalized["content"]?.ToString() ?? string.Empty,
-            normalized["status"]?.ToString() ?? "pending",
-            normalized["priority"]?.ToString());
+            todo.Content,
+            todo.Status,
+            todo.Priority);
     }
 
     public List<SessionTodoDto> InferInProgressTodoFromRuntime(List<SessionTodoDto> todos, string runtimeType)

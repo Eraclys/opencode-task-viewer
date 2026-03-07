@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -8,26 +8,10 @@ public sealed class QueueDispatchServiceTests
     [Fact]
     public async Task DispatchAsync_CreatesSessionThenPostsPrompt()
     {
-        var calls = new List<(string Path, OpenCodeRequest Request)>();
+        var client = new FakeOpenCodeDispatchClient();
 
         var sut = new QueueDispatchService(
-            (path, request) =>
-            {
-                calls.Add((path, request));
-
-                if (string.Equals(path, "/session", StringComparison.Ordinal))
-                    return Task.FromResult<JsonNode?>(
-                        new JsonObject
-                        {
-                            ["id"] = "sess-123"
-                        });
-
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["ok"] = true
-                    });
-            },
+            client,
             (sessionId, directory) => $"http://opencode.local/session/{sessionId}?dir={directory}");
 
         var result = await sut.DispatchAsync(
@@ -47,14 +31,13 @@ public sealed class QueueDispatchServiceTests
 
         Assert.Equal("sess-123", result.SessionId);
         Assert.Equal("http://opencode.local/session/sess-123?dir=C:/Work/Alpha", result.OpenCodeUrl);
-        Assert.Equal(2, calls.Count);
-        Assert.Equal("/session", calls[0].Path);
-        Assert.Equal("POST", calls[0].Request.Method);
-        Assert.Equal("C:/Work/Alpha", calls[0].Request.Directory);
-        Assert.Equal("[CODE_SMELL] sq-11", calls[0].Request.JsonBody?["title"]?.ToString());
-
-        Assert.Equal("/session/sess-123/prompt_async", calls[1].Path);
-        var text = calls[1].Request.JsonBody?["parts"]?[0]?["text"]?.ToString() ?? string.Empty;
+        var createCall = Assert.Single(client.CreateCalls);
+        var promptCall = Assert.Single(client.PromptCalls);
+        Assert.Equal("C:/Work/Alpha", createCall.Directory);
+        Assert.Equal("[CODE_SMELL] sq-11", createCall.Title);
+        Assert.Equal("C:/Work/Alpha", promptCall.Directory);
+        Assert.Equal("sess-123", promptCall.SessionId);
+        var text = promptCall.Prompt;
         Assert.Contains("Issue key: sq-11", text);
         Assert.Contains("Issue type: CODE_SMELL", text);
         Assert.Contains("File: src/file.js", text);
@@ -66,7 +49,7 @@ public sealed class QueueDispatchServiceTests
     public async Task DispatchAsync_ThrowsWhenSessionIdMissing()
     {
         var sut = new QueueDispatchService(
-            (_, _) => Task.FromResult<JsonNode?>(new JsonObject()),
+            new MissingSessionIdDispatchClient(),
             (sessionId, _) => sessionId);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DispatchAsync(
@@ -77,5 +60,33 @@ public sealed class QueueDispatchServiceTests
             }));
 
         Assert.Contains("session id", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    sealed class FakeOpenCodeDispatchClient : IOpenCodeDispatchClient
+    {
+        public List<(string Directory, string Title)> CreateCalls { get; } = [];
+
+        public List<(string Directory, string SessionId, string Prompt)> PromptCalls { get; } = [];
+
+        public Task<string> CreateSessionAsync(string directory, string title)
+        {
+            CreateCalls.Add((directory, title));
+            return Task.FromResult("sess-123");
+        }
+
+        public Task SendPromptAsync(string directory, string sessionId, string prompt)
+        {
+            PromptCalls.Add((directory, sessionId, prompt));
+            return Task.CompletedTask;
+        }
+    }
+
+    sealed class MissingSessionIdDispatchClient : IOpenCodeDispatchClient
+    {
+        public Task<string> CreateSessionAsync(string directory, string title)
+            => throw new InvalidOperationException("OpenCode did not return a session id");
+
+        public Task SendPromptAsync(string directory, string sessionId, string prompt)
+            => Task.CompletedTask;
     }
 }

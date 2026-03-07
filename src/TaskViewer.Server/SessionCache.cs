@@ -1,5 +1,7 @@
 ﻿using TaskViewer.Server.Application.Sessions;
 
+namespace TaskViewer.Server;
+
 sealed class SessionCache
 {
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.MinValue;

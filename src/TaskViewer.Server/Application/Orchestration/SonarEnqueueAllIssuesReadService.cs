@@ -1,14 +1,15 @@
-using System.Text.Json.Nodes;
+using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesReadService
 {
-    readonly ISonarGateway _sonarGateway;
+    readonly ISonarQubeService _sonarQubeService;
 
-    public SonarEnqueueAllIssuesReadService(ISonarGateway sonarGateway)
+    public SonarEnqueueAllIssuesReadService(ISonarQubeService sonarQubeService)
     {
-        _sonarGateway = sonarGateway;
+        _sonarQubeService = sonarQubeService;
     }
 
     public async Task<SonarEnqueueAllIssuesResult> CollectMatchingIssuesAsync(
@@ -26,7 +27,7 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
         const int pageSize = 500;
         var page = 1;
         int? total = null;
-        var allIssues = new List<JsonNode?>();
+        var allIssues = new List<NormalizedIssue>();
 
         while (allIssues.Count < maxScanIssues)
         {
@@ -39,17 +40,21 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
                 status,
                 ruleKeys);
 
-            var data = await _sonarGateway.Fetch("/api/issues/search", query);
-
-            total ??= ParseIntNullable(data?["paging"]?["total"]?.ToString());
-            var issuesRaw = data?["issues"] as JsonArray ?? [];
+            var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
+            total ??= response.Total;
+            var issuesRaw = response.Issues;
 
             foreach (var issue in issuesRaw)
             {
                 if (allIssues.Count >= maxScanIssues)
                     break;
 
-                allIssues.Add(issue);
+                var normalized = SonarIssueNormalizer.NormalizeForQueue(issue, mapping);
+
+                if (normalized is null)
+                    continue;
+
+                allIssues.Add(normalized);
             }
 
             var endReached = issuesRaw.Count < pageSize || (total.HasValue && page * pageSize >= total.Value) || allIssues.Count >= maxScanIssues;
@@ -71,20 +76,5 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
 
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
-    static int? ParseIntNullable(object? value)
-    {
-        if (value is null)
-            return null;
-
-        if (value is int i)
-            return i;
-
-        if (value is long l &&
-            l is >= int.MinValue and <= int.MaxValue)
-            return (int)l;
-
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
     }
 }

@@ -1,4 +1,6 @@
-﻿sealed class TimestampedValue<T>
+﻿namespace TaskViewer.Server;
+
+sealed class TimestampedValue<T>
 {
     public TimestampedValue(DateTimeOffset timestamp, T value)
     {

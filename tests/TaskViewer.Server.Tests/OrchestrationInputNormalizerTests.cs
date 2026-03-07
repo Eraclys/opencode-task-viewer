@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -16,12 +15,12 @@ public sealed class OrchestrationInputNormalizerTests
     }
 
     [Fact]
-    public void NormalizeRuleKeys_HandlesJsonArray()
+    public void NormalizeRuleKeys_HandlesNull()
     {
         var sut = new OrchestrationInputNormalizer();
-        var result = sut.NormalizeRuleKeys(new JsonArray(" a:r1 ", "", "a:r1", "b:r2"));
+        var result = sut.NormalizeRuleKeys(null);
 
-        Assert.Equal(["a:r1", "b:r2"], result);
+        Assert.Empty(result);
     }
 
     [Fact]
@@ -30,7 +29,7 @@ public sealed class OrchestrationInputNormalizerTests
         var sut = new OrchestrationInputNormalizer();
 
         var defaults = sut.ParseIssuePaging(null, null);
-        var clamped = sut.ParseIssuePaging("-1", 9999);
+        var clamped = sut.ParseIssuePaging("-1", "9999");
 
         Assert.Equal(1, defaults.PageIndex);
         Assert.Equal(100, defaults.PageSize);

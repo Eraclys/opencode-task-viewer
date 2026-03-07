@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
@@ -70,8 +69,9 @@ public sealed class SqliteMappingRepository : IMappingRepository
         string directory,
         string? branch,
         bool enabled,
-        string now)
+        DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -94,9 +94,12 @@ public sealed class SqliteMappingRepository : IMappingRepository
 
                 update.Parameters.AddWithValue("$key", sonarProjectKey);
                 update.Parameters.AddWithValue("$dir", directory);
-                update.Parameters.AddWithValue("$branch", (object?)branch ?? DBNull.Value);
+                if (string.IsNullOrWhiteSpace(branch))
+                    update.Parameters.AddWithValue("$branch", DBNull.Value);
+                else
+                    update.Parameters.AddWithValue("$branch", branch);
                 update.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-                update.Parameters.AddWithValue("$updated", now);
+                update.Parameters.AddWithValue("$updated", nowIso);
                 update.Parameters.AddWithValue("$id", id.Value);
 
                 if (update.ExecuteNonQuery() == 0)
@@ -128,10 +131,13 @@ public sealed class SqliteMappingRepository : IMappingRepository
 
             upsert.Parameters.AddWithValue("$key", sonarProjectKey);
             upsert.Parameters.AddWithValue("$dir", directory);
-            upsert.Parameters.AddWithValue("$branch", (object?)branch ?? DBNull.Value);
+            if (string.IsNullOrWhiteSpace(branch))
+                upsert.Parameters.AddWithValue("$branch", DBNull.Value);
+            else
+                upsert.Parameters.AddWithValue("$branch", branch);
             upsert.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-            upsert.Parameters.AddWithValue("$created", now);
-            upsert.Parameters.AddWithValue("$updated", now);
+            upsert.Parameters.AddWithValue("$created", nowIso);
+            upsert.Parameters.AddWithValue("$updated", nowIso);
             upsert.ExecuteNonQuery();
 
             using var select2 = conn.CreateCommand();
@@ -152,7 +158,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    public async Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType)
+    public async Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType)
     {
         await _dbLock.WaitAsync();
 
@@ -168,15 +174,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
             if (!reader.Read())
                 return null;
 
-            return new JsonObject
-            {
-                ["id"] = reader.GetInt32(reader.GetOrdinal("id")),
-                ["mapping_id"] = reader.GetInt32(reader.GetOrdinal("mapping_id")),
-                ["issue_type"] = reader.GetString(reader.GetOrdinal("issue_type")),
-                ["instructions"] = reader.GetString(reader.GetOrdinal("instructions")),
-                ["created_at"] = reader.GetString(reader.GetOrdinal("created_at")),
-                ["updated_at"] = reader.GetString(reader.GetOrdinal("updated_at"))
-            };
+            return MapInstructionProfile(reader);
         }
         finally
         {
@@ -184,12 +182,13 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    public async Task<JsonObject> UpsertInstructionProfile(
+    public async Task<InstructionProfileRecord> UpsertInstructionProfile(
         int mappingId,
         string issueType,
         string instructions,
-        string now)
+        DateTimeOffset now)
     {
+        var nowIso = now.ToString("O");
         await _dbLock.WaitAsync();
 
         try
@@ -207,8 +206,8 @@ public sealed class SqliteMappingRepository : IMappingRepository
             upsert.Parameters.AddWithValue("$mid", mappingId);
             upsert.Parameters.AddWithValue("$type", issueType);
             upsert.Parameters.AddWithValue("$instructions", instructions);
-            upsert.Parameters.AddWithValue("$created", now);
-            upsert.Parameters.AddWithValue("$updated", now);
+            upsert.Parameters.AddWithValue("$created", nowIso);
+            upsert.Parameters.AddWithValue("$updated", nowIso);
             upsert.ExecuteNonQuery();
 
             using var select = conn.CreateCommand();
@@ -220,15 +219,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
             if (!reader.Read())
                 throw new InvalidOperationException("Failed to save instruction profile");
 
-            var result = new JsonObject
-            {
-                ["id"] = reader.GetInt32(reader.GetOrdinal("id")),
-                ["mapping_id"] = reader.GetInt32(reader.GetOrdinal("mapping_id")),
-                ["issue_type"] = reader.GetString(reader.GetOrdinal("issue_type")),
-                ["instructions"] = reader.GetString(reader.GetOrdinal("instructions")),
-                ["created_at"] = reader.GetString(reader.GetOrdinal("created_at")),
-                ["updated_at"] = reader.GetString(reader.GetOrdinal("updated_at"))
-            };
+            var result = MapInstructionProfile(reader);
 
             _onChange();
 
@@ -283,8 +274,28 @@ public sealed class SqliteMappingRepository : IMappingRepository
             Directory = reader.GetString(reader.GetOrdinal("directory")),
             Branch = reader.IsDBNull(reader.GetOrdinal("branch")) ? null : reader.GetString(reader.GetOrdinal("branch")),
             Enabled = reader.GetInt32(reader.GetOrdinal("enabled")) != 0,
-            CreatedAt = reader.GetString(reader.GetOrdinal("created_at")),
-            UpdatedAt = reader.GetString(reader.GetOrdinal("updated_at"))
+            CreatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("created_at"))),
+            UpdatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("updated_at")))
         };
+    }
+
+    static InstructionProfileRecord MapInstructionProfile(SqliteDataReader reader)
+    {
+        return new InstructionProfileRecord
+        {
+            Id = reader.GetInt32(reader.GetOrdinal("id")),
+            MappingId = reader.GetInt32(reader.GetOrdinal("mapping_id")),
+            IssueType = reader.GetString(reader.GetOrdinal("issue_type")),
+            Instructions = reader.GetString(reader.GetOrdinal("instructions")),
+            CreatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("created_at"))),
+            UpdatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("updated_at")))
+        };
+    }
+
+    static DateTimeOffset ParseDateTime(string value)
+    {
+        return DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed
+            : DateTimeOffset.MinValue;
     }
 }

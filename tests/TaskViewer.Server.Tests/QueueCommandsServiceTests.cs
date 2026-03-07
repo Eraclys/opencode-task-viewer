@@ -9,38 +9,40 @@ public sealed class QueueCommandsServiceTests
     public async Task CancelQueueItemAsync_ValidatesIdAndCallsRepository()
     {
         var repo = new FakeQueueRepository();
-        var sut = new QueueCommandsService(repo, () => "now");
+        var now = DateTimeOffset.Parse("2026-01-01T00:00:00+00:00");
+        var sut = new QueueCommandsService(repo, () => now);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CancelQueueItemAsync("bad"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CancelQueueItemAsync(null));
 
-        var result = await sut.CancelQueueItemAsync("12");
+        var result = await sut.CancelQueueItemAsync(12);
 
         Assert.True(result);
         Assert.Equal(12, repo.CancelId);
-        Assert.Equal("now", repo.CancelNow);
+        Assert.Equal(now, repo.CancelNow);
     }
 
     [Fact]
     public async Task RetryAndClear_UseSharedTimestampProvider()
     {
         var repo = new FakeQueueRepository();
-        var sut = new QueueCommandsService(repo, () => "ts");
+        var now = DateTimeOffset.Parse("2026-01-01T00:00:00+00:00");
+        var sut = new QueueCommandsService(repo, () => now);
 
         var retried = await sut.RetryFailedAsync();
         var cleared = await sut.ClearQueuedAsync();
 
         Assert.Equal(4, retried);
         Assert.Equal(3, cleared);
-        Assert.Equal("ts", repo.RetryNow);
-        Assert.Equal("ts", repo.ClearNow);
+        Assert.Equal(now, repo.RetryNow);
+        Assert.Equal(now, repo.ClearNow);
     }
 
     sealed class FakeQueueRepository : IQueueRepository
     {
         public int? CancelId { get; private set; }
-        public string? CancelNow { get; private set; }
-        public string? RetryNow { get; private set; }
-        public string? ClearNow { get; private set; }
+        public DateTimeOffset? CancelNow { get; private set; }
+        public DateTimeOffset? RetryNow { get; private set; }
+        public DateTimeOffset? ClearNow { get; private set; }
 
         public Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
             MappingRecord mapping,
@@ -48,7 +50,7 @@ public sealed class QueueCommandsServiceTests
             string instructionText,
             IReadOnlyList<NormalizedIssue> issues,
             int maxAttempts,
-            string now)
+            DateTimeOffset now)
             => throw new NotSupportedException();
 
         public Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit)
@@ -57,7 +59,7 @@ public sealed class QueueCommandsServiceTests
         public Task<QueueStats> GetQueueStats()
             => throw new NotSupportedException();
 
-        public Task<bool> CancelQueueItem(int id, string now)
+        public Task<bool> CancelQueueItem(int id, DateTimeOffset now)
         {
             CancelId = id;
             CancelNow = now;
@@ -65,28 +67,28 @@ public sealed class QueueCommandsServiceTests
             return Task.FromResult(true);
         }
 
-        public Task<int> RetryFailed(string now)
+        public Task<int> RetryFailed(DateTimeOffset now)
         {
             RetryNow = now;
 
             return Task.FromResult(4);
         }
 
-        public Task<int> ClearQueued(string now)
+        public Task<int> ClearQueued(DateTimeOffset now)
         {
             ClearNow = now;
 
             return Task.FromResult(3);
         }
 
-        public Task<QueueItemRecord?> ClaimNextQueuedItem(string now)
+        public Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now)
             => throw new NotSupportedException();
 
         public Task<bool> MarkSessionCreated(
             int id,
             string sessionId,
             string? openCodeUrl,
-            string timestamp)
+            DateTimeOffset timestamp)
             => throw new NotSupportedException();
 
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts)
@@ -95,9 +97,9 @@ public sealed class QueueCommandsServiceTests
         public Task<bool> MarkDispatchFailure(
             int id,
             string state,
-            string? nextAttemptAt,
+            DateTimeOffset? nextAttemptAt,
             string lastError,
-            string updatedAt)
+            DateTimeOffset updatedAt)
             => throw new NotSupportedException();
     }
 }

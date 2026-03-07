@@ -1,10 +1,11 @@
 # .NET Core Full Replacement Checklist
 
-Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) with an ASP.NET Core app while preserving the existing UI (`public/index.html`) and API behavior.
+Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) with an ASP.NET Core app while preserving the existing UI (`src/TaskViewer.Server/wwwroot/index.html`) and API behavior.
 
 ## 0) Scope and Guardrails
 
-- [x] Keep `public/index.html` unchanged initially; backend parity first.
+- [x] Keep the SPA unchanged initially for backend parity, then relocate it into `src/TaskViewer.Server/wwwroot/index.html` for normal ASP.NET Core static hosting.
+- [x] Move the SPA into `src/TaskViewer.Server/wwwroot/index.html` once parity is established so ASP.NET Core can serve it without custom path probing.
 - [x] Preserve all current `/api/*` response shapes and status codes unless explicitly improved.
 - [x] Preserve environment-variable-driven configuration semantics.
 - [x] Preserve runtime behaviors: cache TTLs, SSE update fanout, OpenCode upstream SSE reconnect/backoff.
@@ -40,8 +41,8 @@ Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) w
 ## 2) Create ASP.NET Core Host Skeleton
 
 - [x] Create new ASP.NET Core web app project in repo (no UI build tooling).
-- [x] Serve static files from `public/` (copy or mount existing assets).
-- [x] Implement root route fallback to `public/index.html`.
+- [x] Serve static files from `wwwroot/`.
+- [x] Implement root route fallback to `src/TaskViewer.Server/wwwroot/index.html`.
 - [x] Add options/config handling for env vars currently used by Node.
   - [x] `PORT`, `HOST`
   - [x] `OPENCODE_URL`, `OPENCODE_USERNAME`, `OPENCODE_PASSWORD`
@@ -131,7 +132,7 @@ Goal: replace the Node/Express runtime (`server.js` + `sonar-orchestrator.js`) w
 ## 10) Done Criteria
 
 - [x] All existing Playwright E2E tests pass against the ASP.NET Core host.
-- [x] API shapes consumed by `public/index.html` are unchanged.
+- [x] API shapes consumed by `src/TaskViewer.Server/wwwroot/index.html` are unchanged.
 - [x] Live update behavior (SSE) matches Node implementation under reconnect/error conditions.
 - [x] Orchestration queue behaviors match expected semantics.
 - [x] Node runtime can be removed without loss of functionality.

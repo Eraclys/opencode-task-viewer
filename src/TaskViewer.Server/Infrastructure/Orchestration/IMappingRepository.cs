@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-
 namespace TaskViewer.Server.Infrastructure.Orchestration;
 
 public interface IMappingRepository
@@ -13,15 +11,15 @@ public interface IMappingRepository
         string directory,
         string? branch,
         bool enabled,
-        string now);
+        DateTimeOffset now);
 
-    Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType);
+    Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType);
 
-    Task<JsonObject> UpsertInstructionProfile(
+    Task<InstructionProfileRecord> UpsertInstructionProfile(
         int mappingId,
         string issueType,
         string instructions,
-        string now);
+        DateTimeOffset now);
 
     Task<List<string>> ListEnabledMappingDirectories();
 }

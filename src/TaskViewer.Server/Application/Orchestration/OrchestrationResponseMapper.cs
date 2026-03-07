@@ -4,57 +4,57 @@ namespace TaskViewer.Server.Application.Orchestration;
 
 static class OrchestrationResponseMapper
 {
-    public static object BuildRulesList(MappingRecord mapping, SonarRulesSummary summary)
+    public static RulesListDto BuildRulesList(MappingRecord mapping, SonarRulesSummary summary)
     {
         var rules = summary
-            .Rules.Select(r => new
+            .Rules.Select(r => new RuleCountDto
             {
-                key = r.Key,
-                name = r.Name,
-                count = r.Count
+                Key = r.Key,
+                Name = r.Name,
+                Count = r.Count
             })
             .ToList();
 
-        return new
+        return new RulesListDto
         {
-            mapping,
-            issueType = summary.IssueType,
-            issueStatus = summary.IssueStatus,
-            scannedIssues = summary.ScannedIssues,
-            truncated = summary.Truncated,
-            rules
+            Mapping = mapping,
+            IssueType = summary.IssueType,
+            IssueStatus = summary.IssueStatus,
+            ScannedIssues = summary.ScannedIssues,
+            Truncated = summary.Truncated,
+            Rules = rules
         };
     }
 
-    public static object BuildIssuesList(MappingRecord mapping, SonarIssuesPage result)
+    public static IssuesListDto BuildIssuesList(MappingRecord mapping, SonarIssuesPage result)
     {
         var issues = result
             .Issues.Select(i =>
-                new
+                new IssueListItemDto
                 {
-                    key = i.Key,
-                    type = i.Type,
-                    severity = i.Severity,
-                    rule = i.Rule,
-                    message = i.Message,
-                    component = i.Component,
-                    line = i.Line,
-                    status = i.Status,
-                    relativePath = i.RelativePath,
-                    absolutePath = i.AbsolutePath
+                    Key = i.Key,
+                    Type = i.Type,
+                    Severity = i.Severity,
+                    Rule = i.Rule,
+                    Message = i.Message,
+                    Component = i.Component,
+                    Line = i.Line,
+                    Status = i.Status,
+                    RelativePath = i.RelativePath,
+                    AbsolutePath = i.AbsolutePath
                 })
             .ToList();
 
-        return new
+        return new IssuesListDto
         {
-            mapping,
-            paging = new
+            Mapping = mapping,
+            Paging = new IssuesPagingDto
             {
-                pageIndex = result.PageIndex,
-                pageSize = result.PageSize,
-                total = result.Total
+                PageIndex = result.PageIndex,
+                PageSize = result.PageSize,
+                Total = result.Total
             },
-            issues
+            Issues = issues
         };
     }
 
@@ -62,8 +62,8 @@ static class OrchestrationResponseMapper
     {
         return new QueueEnqueueSkipView
         {
-            issueKey = null,
-            reason = "invalid-issue"
+            IssueKey = null,
+            Reason = "invalid-issue"
         };
     }
 
@@ -71,74 +71,68 @@ static class OrchestrationResponseMapper
     {
         return new QueueEnqueueSkipView
         {
-            issueKey = skip.IssueKey,
-            reason = skip.Reason
+            IssueKey = skip.IssueKey,
+            Reason = skip.Reason
         };
     }
 
-    public static object BuildEnqueueIssuesResult(IReadOnlyList<QueueItemRecord> createdItems, IReadOnlyList<QueueEnqueueSkipView> skipped)
+    public static EnqueueIssuesResultDto BuildEnqueueIssuesResult(IReadOnlyList<QueueItemRecord> createdItems, IReadOnlyList<QueueEnqueueSkipView> skipped)
     {
-        return new
+        return new EnqueueIssuesResultDto
         {
-            created = createdItems.Count,
-            skipped,
-            items = createdItems
+            Created = createdItems.Count,
+            Skipped = skipped,
+            Items = createdItems
         };
     }
 
-    public static object BuildEnqueueAllResult(
+    public static EnqueueAllResultDto BuildEnqueueAllResult(
         int matched,
         bool truncated,
         IReadOnlyList<QueueItemRecord> createdItems,
         IReadOnlyList<QueueEnqueueSkipView> skipped)
     {
-        return new
+        return new EnqueueAllResultDto
         {
-            matched,
-            created = createdItems.Count,
-            skipped,
-            truncated,
-            items = createdItems
+            Matched = matched,
+            Created = createdItems.Count,
+            Skipped = skipped,
+            Truncated = truncated,
+            Items = createdItems
         };
     }
 
-    public static object BuildQueueStats(QueueStats stats)
+    public static QueueStatsDto BuildQueueStats(QueueStats stats)
     {
-        return new
+        return new QueueStatsDto
         {
-            queued = stats.Queued,
-            dispatching = stats.Dispatching,
-            session_created = stats.SessionCreated,
-            done = stats.Done,
-            failed = stats.Failed,
-            cancelled = stats.Cancelled
+            Queued = stats.Queued,
+            Dispatching = stats.Dispatching,
+            SessionCreated = stats.SessionCreated,
+            Done = stats.Done,
+            Failed = stats.Failed,
+            Cancelled = stats.Cancelled
         };
     }
 
-    public static object BuildWorkerState(
+    public static OrchestrationWorkerStateDto BuildWorkerState(
         int inFlightDispatches,
         int maxActiveDispatches,
         bool pausedByWorking,
         int workingCount,
         int maxWorkingGlobal,
         int workingResumeBelow,
-        string? workingSampleAt)
+        DateTimeOffset? workingSampleAt)
     {
-        return new
+        return new OrchestrationWorkerStateDto
         {
-            inFlightDispatches,
-            maxActiveDispatches,
-            pausedByWorking,
-            workingCount,
-            maxWorkingGlobal,
-            workingResumeBelow,
-            workingSampleAt
+            InFlightDispatches = inFlightDispatches,
+            MaxActiveDispatches = maxActiveDispatches,
+            PausedByWorking = pausedByWorking,
+            WorkingCount = workingCount,
+            MaxWorkingGlobal = maxWorkingGlobal,
+            WorkingResumeBelow = workingResumeBelow,
+            WorkingSampleAt = workingSampleAt
         };
     }
-}
-
-sealed class QueueEnqueueSkipView
-{
-    public string? issueKey { get; init; }
-    public string reason { get; init; } = string.Empty;
 }

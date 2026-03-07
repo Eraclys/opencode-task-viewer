@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -12,7 +11,7 @@ public sealed class QueueQueryServiceTests
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync("queued,FAILED,ignored,queued", 10000);
+        await sut.ListQueueAsync("queued,FAILED,ignored,queued", "10000");
 
         Assert.Equal(
             [
@@ -25,12 +24,12 @@ public sealed class QueueQueryServiceTests
     }
 
     [Fact]
-    public async Task ListQueueAsync_HandlesJsonArrayStateInput()
+    public async Task ListQueueAsync_HandlesCsvStateInput()
     {
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync(new JsonArray("done", "cancelled", "bogus"), -2);
+        await sut.ListQueueAsync("done,cancelled,bogus", "-2");
 
         Assert.Equal(
             [
@@ -83,7 +82,7 @@ public sealed class QueueQueryServiceTests
             string instructionText,
             IReadOnlyList<NormalizedIssue> issues,
             int maxAttempts,
-            string now)
+            DateTimeOffset now)
             => throw new NotSupportedException();
 
         public Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit)
@@ -95,24 +94,24 @@ public sealed class QueueQueryServiceTests
         }
 
         public Task<QueueStats> GetQueueStats() => Task.FromResult(Stats);
-        public Task<bool> CancelQueueItem(int id, string now) => throw new NotSupportedException();
-        public Task<int> RetryFailed(string now) => throw new NotSupportedException();
-        public Task<int> ClearQueued(string now) => throw new NotSupportedException();
-        public Task<QueueItemRecord?> ClaimNextQueuedItem(string now) => throw new NotSupportedException();
+        public Task<bool> CancelQueueItem(int id, DateTimeOffset now) => throw new NotSupportedException();
+        public Task<int> RetryFailed(DateTimeOffset now) => throw new NotSupportedException();
+        public Task<int> ClearQueued(DateTimeOffset now) => throw new NotSupportedException();
+        public Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now) => throw new NotSupportedException();
 
         public Task<bool> MarkSessionCreated(
             int id,
             string sessionId,
             string? openCodeUrl,
-            string timestamp) => throw new NotSupportedException();
+            DateTimeOffset timestamp) => throw new NotSupportedException();
 
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts) => throw new NotSupportedException();
 
         public Task<bool> MarkDispatchFailure(
             int id,
             string state,
-            string? nextAttemptAt,
+            DateTimeOffset? nextAttemptAt,
             string lastError,
-            string updatedAt) => throw new NotSupportedException();
+            DateTimeOffset updatedAt) => throw new NotSupportedException();
     }
 }

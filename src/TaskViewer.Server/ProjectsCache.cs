@@ -1,7 +1,9 @@
-﻿using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
+
+namespace TaskViewer.Server;
 
 sealed class ProjectsCache
 {
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.MinValue;
-    public List<JsonObject> Data { get; set; } = [];
+    public List<OpenCodeProjectTransport> Data { get; set; } = [];
 }

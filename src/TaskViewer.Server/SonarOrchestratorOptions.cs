@@ -1,5 +1,6 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server;
 
@@ -13,13 +14,15 @@ public sealed class SonarOrchestratorOptions
     public required int MaxAttempts { get; init; }
     public required int MaxWorkingGlobal { get; init; }
     public required int WorkingResumeBelow { get; init; }
-    public ISonarGateway? SonarGateway { get; init; }
+    public ISonarQubeService? SonarQubeService { get; init; }
     public ISonarRuleReadService? SonarRuleReadService { get; init; }
     public ISonarRulesReadService? SonarRulesReadService { get; init; }
     public ISonarIssuesReadService? SonarIssuesReadService { get; init; }
     public ISonarEnqueueAllIssuesReadService? SonarEnqueueAllIssuesReadService { get; init; }
     public IWorkingSessionsReadService? WorkingSessionsReadService { get; init; }
+    public IOpenCodeStatusReader? OpenCodeStatusReader { get; init; }
     public IQueueDispatchService? QueueDispatchService { get; init; }
+    public IOpenCodeDispatchClient? OpenCodeDispatchClient { get; init; }
     public IDispatchFailurePolicy? DispatchFailurePolicy { get; init; }
     public IQueueWorkerCoordinator? QueueWorkerCoordinator { get; init; }
     public IOrchestratorRuntime? OrchestratorRuntime { get; init; }
@@ -32,7 +35,6 @@ public sealed class SonarOrchestratorOptions
     internal IQueueCommandsService? QueueCommandsService { get; init; }
     internal IQueueQueryService? QueueQueryService { get; init; }
     internal IQueueDispatchOrchestrationService? QueueDispatchOrchestrationService { get; init; }
-    public required Func<string, OpenCodeRequest, Task<JsonNode?>> OpenCodeFetch { get; init; }
     public required Func<string?, string?> NormalizeDirectory { get; init; }
     public required Func<string, string?, string?> BuildOpenCodeSessionUrl { get; init; }
     public required Action OnChange { get; init; }

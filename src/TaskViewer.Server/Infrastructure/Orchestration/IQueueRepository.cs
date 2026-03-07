@@ -8,37 +8,27 @@ interface IQueueRepository
         string instructionText,
         IReadOnlyList<NormalizedIssue> issues,
         int maxAttempts,
-        string now);
+        DateTimeOffset now);
 
     Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit);
     Task<QueueStats> GetQueueStats();
-    Task<bool> CancelQueueItem(int id, string now);
-    Task<int> RetryFailed(string now);
-    Task<int> ClearQueued(string now);
-    Task<QueueItemRecord?> ClaimNextQueuedItem(string now);
+    Task<bool> CancelQueueItem(int id, DateTimeOffset now);
+    Task<int> RetryFailed(DateTimeOffset now);
+    Task<int> ClearQueued(DateTimeOffset now);
+    Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now);
 
     Task<bool> MarkSessionCreated(
         int id,
         string sessionId,
         string? openCodeUrl,
-        string timestamp);
+        DateTimeOffset timestamp);
 
     Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts);
 
     Task<bool> MarkDispatchFailure(
         int id,
         string state,
-        string? nextAttemptAt,
+        DateTimeOffset? nextAttemptAt,
         string lastError,
-        string updatedAt);
+        DateTimeOffset updatedAt);
 }
-
-sealed record QueueSkip(string IssueKey, string Reason);
-
-sealed record QueueStats(
-    int Queued,
-    int Dispatching,
-    int SessionCreated,
-    int Done,
-    int Failed,
-    int Cancelled);

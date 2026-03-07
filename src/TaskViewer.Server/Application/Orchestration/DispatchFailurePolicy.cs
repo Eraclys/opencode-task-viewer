@@ -9,7 +9,7 @@ public sealed class DispatchFailurePolicy : IDispatchFailurePolicy
         if (exhausted)
             return new DispatchFailureDecision("failed", null);
 
-        var nextAttemptAt = utcNow.AddMilliseconds(MakeBackoffMs(attemptCount)).ToString("O");
+        var nextAttemptAt = utcNow.AddMilliseconds(MakeBackoffMs(attemptCount));
 
         return new DispatchFailureDecision("queued", nextAttemptAt);
     }

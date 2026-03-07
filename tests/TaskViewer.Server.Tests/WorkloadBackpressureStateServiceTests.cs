@@ -54,7 +54,7 @@ public sealed class WorkloadBackpressureStateServiceTests
         var disabled = await sut.EvaluateAsync(false, maxWorkingGlobal: 0, workingResumeBelow: 0, pollMs: 1000, () => { });
 
         Assert.Equal(sampled.SampleAt, disabled.SampleAt);
-        Assert.Equal(sampleAt.ToString("O"), disabled.SampleAt);
+        Assert.Equal(sampleAt, disabled.SampleAt);
     }
 
     private sealed class FakeWorkingSessionsReadService : IWorkingSessionsReadService

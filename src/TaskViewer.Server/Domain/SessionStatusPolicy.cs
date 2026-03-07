@@ -11,7 +11,7 @@ public static class SessionStatusPolicy
 
     public static string DeriveKanbanStatus(
         string runtimeType,
-        string modifiedAt,
+        DateTimeOffset modifiedAt,
         bool? hasAssistantResponse,
         int recentWindowMs)
     {
@@ -24,10 +24,7 @@ public static class SessionStatusPolicy
         if (hasAssistantResponse == false)
             return "pending";
 
-        if (!DateTimeOffset.TryParse(modifiedAt, out var timestamp))
-            return "pending";
-
-        var age = DateTimeOffset.UtcNow - timestamp;
+        var age = DateTimeOffset.UtcNow - modifiedAt;
 
         return age.TotalMilliseconds <= recentWindowMs ? "pending" : "completed";
     }

@@ -5,7 +5,7 @@ namespace TaskViewer.Server.Application.Orchestration;
 sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestrationService
 {
     readonly IDispatchFailurePolicy _dispatchFailurePolicy;
-    readonly Func<string> _nowIso;
+    readonly Func<DateTimeOffset> _nowUtc;
     readonly IQueueDispatchService _queueDispatchService;
     readonly IQueueRepository _queueRepository;
 
@@ -13,12 +13,12 @@ sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestrationServ
         IQueueRepository queueRepository,
         IQueueDispatchService queueDispatchService,
         IDispatchFailurePolicy dispatchFailurePolicy,
-        Func<string>? nowIso = null)
+        Func<DateTimeOffset>? nowUtc = null)
     {
         _queueRepository = queueRepository;
         _queueDispatchService = queueDispatchService;
         _dispatchFailurePolicy = dispatchFailurePolicy;
-        _nowIso = nowIso ?? (() => DateTimeOffset.UtcNow.ToString("O"));
+        _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
     }
 
     public async Task DispatchAndPersistAsync(QueueItemRecord item)
@@ -31,19 +31,20 @@ sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestrationServ
                 item.Id,
                 dispatch.SessionId,
                 dispatch.OpenCodeUrl,
-                _nowIso());
+                _nowUtc());
         }
         catch (Exception ex)
         {
             var (attemptCount, maxAttempts) = await _queueRepository.GetAttemptInfo(item.Id, item.AttemptCount, item.MaxAttempts);
-            var decision = _dispatchFailurePolicy.Decide(attemptCount, maxAttempts, DateTimeOffset.UtcNow);
+            var utcNow = _nowUtc();
+            var decision = _dispatchFailurePolicy.Decide(attemptCount, maxAttempts, utcNow);
 
             await _queueRepository.MarkDispatchFailure(
                 item.Id,
                 decision.State,
                 decision.NextAttemptAt,
                 ex.Message,
-                _nowIso());
+                utcNow);
         }
     }
 }

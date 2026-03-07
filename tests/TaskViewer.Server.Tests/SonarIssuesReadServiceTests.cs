@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -18,8 +18,8 @@ public sealed class SonarIssuesReadServiceTests
             Directory = "C:/Work/Alpha",
             Branch = "main",
             Enabled = true,
-            CreatedAt = "",
-            UpdatedAt = ""
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            UpdatedAt = DateTimeOffset.UnixEpoch
         };
 
         var result = await service.ListIssuesAsync(
@@ -43,33 +43,33 @@ public sealed class SonarIssuesReadServiceTests
         Assert.Equal("C:/Work/Alpha/src/file.js", issue.AbsolutePath);
     }
 
-    sealed class FakeGateway : ISonarGateway
+    sealed class FakeGateway : ISonarQubeService
     {
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
-        {
-            return Task.FromResult<JsonNode?>(
-                new JsonObject
-                {
-                    ["paging"] = new JsonObject
-                    {
-                        ["pageIndex"] = 2,
-                        ["pageSize"] = 100,
-                        ["total"] = 1
-                    },
-                    ["issues"] = new JsonArray
-                    {
-                        new JsonObject
-                        {
-                            ["key"] = "sq-1",
-                            ["type"] = "CODE_SMELL",
-                            ["rule"] = "javascript:S1126",
-                            ["message"] = "Remove this",
-                            ["component"] = "alpha-key:src/file.js",
-                            ["line"] = 11,
-                            ["status"] = "OPEN"
-                        }
-                    }
-                });
-        }
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+            => Task.FromResult(new SonarRuleDetailsResponse(null));
+
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
+            Dictionary<string, string?> query,
+            int fallbackPageIndex,
+            int fallbackPageSize)
+            => Task.FromResult(
+                new SonarIssuesSearchResponse(
+                    2,
+                    100,
+                    1,
+                    [
+                        new SonarIssueTransport(
+                            Key: "sq-1",
+                            IssueKey: null,
+                            Type: "CODE_SMELL",
+                            IssueType: null,
+                            Severity: null,
+                            Rule: "javascript:S1126",
+                            Message: "Remove this",
+                            Component: "alpha-key:src/file.js",
+                            File: null,
+                            Line: "11",
+                            Status: "OPEN")
+                    ]));
     }
 }

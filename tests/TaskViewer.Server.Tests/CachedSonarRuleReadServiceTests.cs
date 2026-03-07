@@ -1,6 +1,5 @@
-using System.Text.Json.Nodes;
-using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -31,27 +30,25 @@ public sealed class CachedSonarRuleReadServiceTests
         Assert.Equal("javascript:S3776", name);
     }
 
-    sealed class FakeSonarGateway : ISonarGateway
+    sealed class FakeSonarGateway : ISonarQubeService
     {
         public int CallCount { get; private set; }
 
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
         {
             CallCount++;
-
-            return Task.FromResult<JsonNode?>(
-                new JsonObject
-                {
-                    ["rule"] = new JsonObject
-                    {
-                        ["name"] = "No collapsible if statements"
-                    }
-                });
+            return Task.FromResult(new SonarRuleDetailsResponse("No collapsible if statements"));
         }
+
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+            => Task.FromResult(new SonarIssuesSearchResponse(fallbackPageIndex, fallbackPageSize, 0, []));
     }
 
-    sealed class ThrowingGateway : ISonarGateway
+    sealed class ThrowingGateway : ISonarQubeService
     {
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query) => throw new InvalidOperationException("boom");
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey) => throw new InvalidOperationException("boom");
+
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+            => throw new InvalidOperationException("boom");
     }
 }

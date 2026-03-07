@@ -1,5 +1,6 @@
-using System.Text.Json.Nodes;
-using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.OpenCode;
+using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -15,80 +16,74 @@ public sealed class SonarOrchestratorSonarGatewayTests
             {
                 SonarUrl = string.Empty,
                 SonarToken = string.Empty,
-                SonarGateway = gateway,
+                SonarQubeService = gateway,
                 DbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-sonar-gateway-{Guid.NewGuid():N}.sqlite"),
                 MaxActive = 1,
                 PollMs = 1000,
                 MaxAttempts = 1,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
-                OpenCodeFetch = (_, _) => Task.FromResult<JsonNode?>(null),
+                OpenCodeStatusReader = new DisabledOpenCodeStatusReader(),
+                OpenCodeDispatchClient = new DisabledOpenCodeDispatchClient(),
                 NormalizeDirectory = value => value,
                 BuildOpenCodeSessionUrl = (_, _) => null,
                 OnChange = () => { }
             });
 
         var mapping = await orchestrator.UpsertMapping(
-            new JsonObject
-            {
-                ["sonarProjectKey"] = "alpha-key",
-                ["directory"] = "C:/Work/Alpha",
-                ["enabled"] = true
-            });
+            new UpsertMappingRequest(
+                Id: null,
+                SonarProjectKey: "alpha-key",
+                Directory: "C:/Work/Alpha",
+                Branch: null,
+                Enabled: true));
 
         var result = await orchestrator.ListIssues(
             mapping.Id,
             "CODE_SMELL",
             null,
             null,
-            1,
-            20,
+            "1",
+            "20",
             null);
 
-        var issues = (IEnumerable<object>?)result.GetType().GetProperty("issues")?.GetValue(result);
-
-        Assert.NotNull(issues);
-        Assert.Single(issues!);
+        Assert.Single(result.Issues);
         Assert.True(gateway.Calls > 0);
     }
 
-    sealed class FakeSonarGateway : ISonarGateway
+    sealed class FakeSonarGateway : ISonarQubeService
     {
         public int Calls { get; private set; }
 
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
+            Dictionary<string, string?> query,
+            int fallbackPageIndex,
+            int fallbackPageSize)
         {
             Calls++;
 
-            if (endpointPath == "/api/issues/search")
-            {
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["paging"] = new JsonObject
-                        {
-                            ["pageIndex"] = 1,
-                            ["pageSize"] = 20,
-                            ["total"] = 1
-                        },
-                        ["issues"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["key"] = "sq-1",
-                                ["type"] = "CODE_SMELL",
-                                ["severity"] = "MAJOR",
-                                ["rule"] = "javascript:S1126",
-                                ["message"] = "Remove redundant code",
-                                ["component"] = "alpha-key:src/file.js",
-                                ["line"] = 5,
-                                ["status"] = "OPEN"
-                            }
-                        }
-                    });
-            }
-
-            return Task.FromResult<JsonNode?>(null);
+            return Task.FromResult(
+                new SonarIssuesSearchResponse(
+                    1,
+                    20,
+                    1,
+                    [
+                        new SonarIssueTransport(
+                            "sq-1",
+                            null,
+                            "CODE_SMELL",
+                            null,
+                            "MAJOR",
+                            "javascript:S1126",
+                            "Remove redundant code",
+                            "alpha-key:src/file.js",
+                            null,
+                            "5",
+                            "OPEN")
+                    ]));
         }
+
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+            => Task.FromResult(new SonarRuleDetailsResponse(ruleKey));
     }
 }

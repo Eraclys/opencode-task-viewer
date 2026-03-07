@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 using System.Threading.Channels;
 
+namespace TaskViewer.Server;
+
 sealed class SseClient
 {
     readonly Action<Guid> _onDone;
@@ -46,7 +48,7 @@ sealed class SseClient
             _token);
     }
 
-    public Task Send(object data)
+    public Task Send<T>(T data)
     {
         var payload = JsonSerializer.Serialize(data);
 

@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Sessions;
 
 namespace TaskViewer.Server.Tests;
@@ -9,12 +9,7 @@ public sealed class SessionTodoViewServiceTests
     public void NormalizeTodo_NormalizesContentStatusAndPriority()
     {
         var sut = new SessionTodoViewService();
-        var raw = new JsonObject
-        {
-            ["text"] = "Ship feature",
-            ["status"] = "inprogress",
-            ["priority"] = "p1"
-        };
+        var raw = new OpenCodeTodoTransport("Ship feature", "in_progress", "high");
 
         var todo = sut.NormalizeTodo(raw);
 

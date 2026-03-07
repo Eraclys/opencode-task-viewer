@@ -1,12 +1,11 @@
-using System.Globalization;
-using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server;
 
-public sealed class SonarOrchestrator : IAsyncDisposable
+public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 {
     const int MaxEnqueueBatch = 1000;
     const int MaxRuleScanIssues = 5000;
@@ -42,32 +41,34 @@ public sealed class SonarOrchestrator : IAsyncDisposable
         _queueRepository = new SqliteQueueRepository(_dbLock, OpenConnection, _options.OnChange);
         _mappingRepository = new SqliteMappingRepository(_dbLock, OpenConnection, _options.OnChange);
         _orchestrationInputNormalizer = _options.OrchestrationInputNormalizer ?? new OrchestrationInputNormalizer();
-        _orchestrationMappingService = _options.OrchestrationMappingService ?? new OrchestrationMappingService(_mappingRepository, _options.NormalizeDirectory, NowIso);
+        _orchestrationMappingService = _options.OrchestrationMappingService ?? new OrchestrationMappingService(_mappingRepository, _options.NormalizeDirectory, NowUtc);
         _orchestrationStatusService = _options.OrchestrationStatusService ?? new OrchestrationStatusService();
         _enqueueContextResolver = new EnqueueContextResolver(_mappingRepository);
 
         _ruleReadService = _options.SonarRuleReadService ??
-                           (_options.SonarGateway is not null
-                               ? new CachedSonarRuleReadService(_options.SonarGateway)
+                           (_options.SonarQubeService is not null
+                               ? new CachedSonarRuleReadService(_options.SonarQubeService)
                                : new FallbackSonarRuleReadService());
 
         _rulesReadService = _options.SonarRulesReadService ??
-                            (_options.SonarGateway is not null
-                                ? new SonarRulesReadService(_options.SonarGateway, _ruleReadService)
+                            (_options.SonarQubeService is not null
+                                ? new SonarRulesReadService(_options.SonarQubeService, _ruleReadService)
                                 : new DisabledSonarRulesReadService());
 
         _issuesReadService = _options.SonarIssuesReadService ??
-                             (_options.SonarGateway is not null
-                                 ? new SonarIssuesReadService(_options.SonarGateway)
+                             (_options.SonarQubeService is not null
+                                 ? new SonarIssuesReadService(_options.SonarQubeService)
                                  : new DisabledSonarIssuesReadService());
 
         _enqueueAllIssuesReadService = _options.SonarEnqueueAllIssuesReadService ??
-                                       (_options.SonarGateway is not null
-                                           ? new SonarEnqueueAllIssuesReadService(_options.SonarGateway)
+                                       (_options.SonarQubeService is not null
+                                           ? new SonarEnqueueAllIssuesReadService(_options.SonarQubeService)
                                            : new DisabledSonarEnqueueAllIssuesReadService());
 
-        var workingSessionsReadService = _options.WorkingSessionsReadService ?? new WorkingSessionsReadService(_mappingRepository, _options.OpenCodeFetch);
-        var queueDispatchService = _options.QueueDispatchService ?? new QueueDispatchService(_options.OpenCodeFetch, _options.BuildOpenCodeSessionUrl);
+        var openCodeStatusReader = _options.OpenCodeStatusReader ?? new DisabledOpenCodeStatusReader();
+        var workingSessionsReadService = _options.WorkingSessionsReadService ?? new WorkingSessionsReadService(_mappingRepository, openCodeStatusReader);
+        var openCodeDispatchClient = _options.OpenCodeDispatchClient ?? new DisabledOpenCodeDispatchClient();
+        var queueDispatchService = _options.QueueDispatchService ?? new QueueDispatchService(openCodeDispatchClient, _options.BuildOpenCodeSessionUrl);
         var dispatchFailurePolicy = _options.DispatchFailurePolicy ?? new DispatchFailurePolicy();
         var workloadBackpressurePolicy = _options.WorkloadBackpressurePolicy ?? new WorkloadBackpressurePolicy();
 
@@ -76,13 +77,13 @@ public sealed class SonarOrchestrator : IAsyncDisposable
             _queueRepository,
             queueDispatchService,
             dispatchFailurePolicy,
-            NowIso);
+            NowUtc);
 
         _queueWorkerCoordinator = _options.QueueWorkerCoordinator ?? new QueueWorkerCoordinator();
         _orchestratorRuntime = _options.OrchestratorRuntime ?? new OrchestratorRuntime();
         _workloadBackpressureStateService = _options.WorkloadBackpressureStateService ?? new WorkloadBackpressureStateService(workingSessionsReadService, workloadBackpressurePolicy);
-        _queueEnqueueService = _options.QueueEnqueueService ?? new QueueEnqueueService(_queueRepository, _options.MaxAttempts, NowIso);
-        _queueCommandsService = _options.QueueCommandsService ?? new QueueCommandsService(_queueRepository, NowIso);
+        _queueEnqueueService = _options.QueueEnqueueService ?? new QueueEnqueueService(_queueRepository, _options.MaxAttempts, NowUtc);
+        _queueCommandsService = _options.QueueCommandsService ?? new QueueCommandsService(_queueRepository, NowUtc);
         _queueQueryService = _options.QueueQueryService ?? new QueueQueryService(_queueRepository);
     }
 
@@ -98,7 +99,7 @@ public sealed class SonarOrchestrator : IAsyncDisposable
         _dbLock.Dispose();
     }
 
-    static string NowIso() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+    static DateTimeOffset NowUtc() => DateTimeOffset.UtcNow;
 
     SqliteConnection OpenConnection()
     {
@@ -182,10 +183,10 @@ public sealed class SonarOrchestrator : IAsyncDisposable
 
     public bool IsConfigured()
     {
-        return _orchestrationStatusService.IsConfigured(_options.SonarGateway, _options.SonarUrl, _options.SonarToken);
+        return _orchestrationStatusService.IsConfigured(_options.SonarQubeService, _options.SonarUrl, _options.SonarToken);
     }
 
-    public object GetPublicConfig()
+    public OrchestrationConfigDto GetPublicConfig()
     {
         return _orchestrationStatusService.BuildPublicConfig(
             IsConfigured(),
@@ -198,15 +199,15 @@ public sealed class SonarOrchestrator : IAsyncDisposable
 
     public async Task<List<MappingRecord>> ListMappings() => await _orchestrationMappingService.ListMappingsAsync();
 
-    public async Task<MappingRecord?> GetMappingById(object? mappingId) => await _orchestrationMappingService.GetMappingByIdAsync(mappingId);
+    public async Task<MappingRecord?> GetMappingById(int? mappingId) => await _orchestrationMappingService.GetMappingByIdAsync(mappingId);
 
-    public async Task<MappingRecord> UpsertMapping(JsonNode? payload) => await _orchestrationMappingService.UpsertMappingAsync(payload);
+    public async Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => await _orchestrationMappingService.UpsertMappingAsync(request);
 
-    public async Task<JsonObject?> GetInstructionProfile(object? mappingId, string? issueType) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType);
+    public async Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType);
 
-    public async Task<JsonObject> UpsertInstructionProfile(object? mappingId, string? issueType, string? instructions) => await _orchestrationMappingService.UpsertInstructionProfileAsync(mappingId, issueType, instructions);
+    public async Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request) => await _orchestrationMappingService.UpsertInstructionProfileAsync(request);
 
-    public async Task<object> ListRules(object? mappingId, string? issueType, string? issueStatus)
+    public async Task<RulesListDto> ListRules(int? mappingId, string? issueType, string? issueStatus)
     {
         var mapping = await GetMappingById(mappingId);
 
@@ -223,14 +224,14 @@ public sealed class SonarOrchestrator : IAsyncDisposable
         return OrchestrationResponseMapper.BuildRulesList(mapping, summary);
     }
 
-    public async Task<object> ListIssues(
-        object? mappingId,
+    public async Task<IssuesListDto> ListIssues(
+        int? mappingId,
         string? issueType,
         string? severity,
         string? issueStatus,
-        object? page,
-        object? pageSize,
-        object? ruleKeys)
+        string? page,
+        string? pageSize,
+        string? ruleKeys)
     {
         var mapping = await GetMappingById(mappingId);
 
@@ -253,52 +254,53 @@ public sealed class SonarOrchestrator : IAsyncDisposable
         return OrchestrationResponseMapper.BuildIssuesList(mapping, result);
     }
 
-    public async Task<object> EnqueueIssues(
-        object? mappingId,
-        string? issueType,
-        string? instructions,
-        JsonArray? issues)
+    public async Task<EnqueueIssuesResultDto> EnqueueIssues(EnqueueIssuesRequest request)
     {
-        var rawIssues = issues?.Take(MaxEnqueueBatch).ToList() ?? [];
+        var context = await _enqueueContextResolver.ResolveAsync(request.MappingId, request.IssueType, request.Instructions);
+        var requestedCount = request.Issues?.Count ?? 0;
+        var normalizedIssues = request.Issues?
+            .Take(MaxEnqueueBatch)
+            .Select(issue => SonarIssueNormalizer.NormalizeForQueue(issue, context.Mapping))
+            .Where(issue => issue is not null)
+            .Cast<NormalizedIssue>()
+            .ToList() ?? [];
+        var invalidCount = Math.Max(0, Math.Min(requestedCount, MaxEnqueueBatch) - normalizedIssues.Count);
 
-        if (rawIssues.Count == 0)
+        if (normalizedIssues.Count == 0)
             throw new InvalidOperationException("No issues provided");
-
-        var context = await _enqueueContextResolver.ResolveAsync(mappingId, issueType, instructions);
 
         var enqueueResult = await _queueEnqueueService.EnqueueRawIssuesAsync(
             context.Mapping,
             context.Type,
             context.InstructionText,
-            rawIssues);
+            normalizedIssues);
 
         if (enqueueResult.CreatedItems.Count > 0)
             _options.OnChange();
 
-        return OrchestrationResponseMapper.BuildEnqueueIssuesResult(enqueueResult.CreatedItems, enqueueResult.Skipped);
+        var skipped = enqueueResult.Skipped.ToList();
+
+        for (var i = 0; i < invalidCount; i++)
+            skipped.Add(OrchestrationResponseMapper.BuildInvalidIssueSkip());
+
+        return OrchestrationResponseMapper.BuildEnqueueIssuesResult(enqueueResult.CreatedItems, skipped);
     }
 
-    public async Task<object> EnqueueAllMatching(
-        object? mappingId,
-        string? issueType,
-        object? ruleKeys,
-        string? issueStatus,
-        string? severity,
-        string? instructions)
+    public async Task<EnqueueAllResultDto> EnqueueAllMatching(EnqueueAllRequest request)
     {
-        var rules = _orchestrationInputNormalizer.NormalizeRuleKeys(ruleKeys);
+        var rules = _orchestrationInputNormalizer.NormalizeRuleKeys(request.RuleKeys);
         var hasSingleSpecificRule = _orchestrationInputNormalizer.HasSingleSpecificRule(rules);
 
         if (!hasSingleSpecificRule)
             throw new InvalidOperationException("A specific rule key is required to queue all matching issues");
 
-        var context = await _enqueueContextResolver.ResolveAsync(mappingId, issueType, instructions);
+        var context = await _enqueueContextResolver.ResolveAsync(request.MappingId, request.IssueType, request.Instructions);
 
         var collected = await _enqueueAllIssuesReadService.CollectMatchingIssuesAsync(
             context.Mapping,
             context.Type,
-            severity,
-            issueStatus,
+            request.Severity,
+            request.IssueStatus,
             rules,
             MaxEnqueueAllScanIssues);
 
@@ -318,23 +320,23 @@ public sealed class SonarOrchestrator : IAsyncDisposable
             enqueueResult.Skipped);
     }
 
-    public async Task<List<QueueItemRecord>> ListQueue(object? states, object? limit) => await _queueQueryService.ListQueueAsync(states, limit);
+    public async Task<List<QueueItemRecord>> ListQueue(string? states, string? limit) => await _queueQueryService.ListQueueAsync(states, limit);
 
-    public async Task<object> GetQueueStats()
+    public async Task<QueueStatsDto> GetQueueStats()
     {
         var stats = await _queueQueryService.GetQueueStatsAsync();
 
         return OrchestrationResponseMapper.BuildQueueStats(stats);
     }
 
-    public async Task<object> GetWorkerState()
+    public async Task<OrchestrationWorkerStateDto> GetWorkerState()
     {
         var backpressure = await EvaluateWorkloadBackpressure(false);
 
         return _orchestrationStatusService.BuildWorkerState(_inFlight.Count, _options.MaxActive, backpressure);
     }
 
-    public async Task<bool> CancelQueueItem(object? queueId) => await _queueCommandsService.CancelQueueItemAsync(queueId);
+    public async Task<bool> CancelQueueItem(int? queueId) => await _queueCommandsService.CancelQueueItemAsync(queueId);
 
     public async Task<int> RetryFailed() => await _queueCommandsService.RetryFailedAsync();
 
@@ -350,7 +352,7 @@ public sealed class SonarOrchestrator : IAsyncDisposable
             _options.OnChange);
     }
 
-    async Task<QueueItemRecord?> ClaimNextQueuedItem() => await _queueRepository.ClaimNextQueuedItem(NowIso());
+    async Task<QueueItemRecord?> ClaimNextQueuedItem() => await _queueRepository.ClaimNextQueuedItem(NowUtc());
 
     async Task DispatchQueueItem(QueueItemRecord item) => await _queueDispatchOrchestrationService.DispatchAndPersistAsync(item);
 

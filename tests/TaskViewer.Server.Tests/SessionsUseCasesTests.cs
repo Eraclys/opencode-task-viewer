@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Sessions;
 
 namespace TaskViewer.Server.Tests;
@@ -30,7 +30,7 @@ public sealed class SessionsUseCasesTests
         var sut = CreateUseCases(
             orchestrator,
             findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
-            getLastAssistantMessage: _ => Task.FromResult<LastAssistantMessage?>(new LastAssistantMessage("done", "2026-01-01T00:00:00.0000000+00:00")));
+            getLastAssistantMessage: _ => Task.FromResult<LastAssistantMessage?>(new LastAssistantMessage("done", DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))));
 
         var result = await sut.GetLastAssistantMessageAsync("sess-1");
 
@@ -52,7 +52,7 @@ public sealed class SessionsUseCasesTests
         var sut = CreateUseCases(
             orchestrator,
             findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
-            archiveSessionOnOpenCode: (_, _) => Task.FromResult<string?>("2026-01-01T00:00:00.0000000+00:00"),
+            archiveSessionOnOpenCode: (_, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00")),
             invalidateAllCaches: () => invalidated++,
             broadcastUpdate: () =>
             {
@@ -79,8 +79,8 @@ public sealed class SessionsUseCasesTests
             "Session One",
             "C:/Work/Alpha",
             "C:/Work/Alpha",
-            "2026-01-01T00:00:00.0000000+00:00",
-            "2026-01-01T00:00:01.0000000+00:00");
+            DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"),
+            DateTimeOffset.Parse("2026-01-01T00:00:01.0000000+00:00"));
 
         var sut = CreateUseCases(
             orchestrator,
@@ -112,15 +112,14 @@ public sealed class SessionsUseCasesTests
         Func<string?, Task<Dictionary<string, SessionRuntimeStatus>>>? getStatusMapForDirectory = null,
         Func<string?, string, Dictionary<string, SessionRuntimeStatus>, string>? normalizeRuntimeStatus = null,
         Func<string, Task<bool?>>? getHasAssistantResponse = null,
-        Func<string, string, bool?, string>? deriveSessionKanbanStatus = null,
+        Func<string, DateTimeOffset, bool?, string>? deriveSessionKanbanStatus = null,
         Func<string, string?, string?>? buildOpenCodeSessionUrl = null,
-        Func<string?, string?>? parseTime = null,
         Func<QueueItemRecord, SessionSummaryDto?>? mapQueueItemToSessionSummary = null,
         Func<string, Task<OpenCodeSessionDto?>>? findSessionInfo = null,
         Func<string, string?, Task<List<SessionTodoDto>>>? getTodosForSession = null,
         Func<List<SessionTodoDto>, List<ViewerTaskDto>>? mapTodosToViewerTasks = null,
         Func<string, Task<LastAssistantMessage?>>? getLastAssistantMessage = null,
-        Func<string, string?, Task<string?>>? archiveSessionOnOpenCode = null,
+        Func<string, string?, Task<DateTimeOffset?>>? archiveSessionOnOpenCode = null,
         Action? invalidateAllCaches = null,
         Func<Task>? broadcastUpdate = null)
     {
@@ -131,7 +130,6 @@ public sealed class SessionsUseCasesTests
             getHasAssistantResponse ?? (_ => Task.FromResult<bool?>(false)),
             deriveSessionKanbanStatus ?? ((_, _, _) => "pending"),
             buildOpenCodeSessionUrl ?? ((sessionId, _) => $"http://localhost:4096/session/{sessionId}"),
-            parseTime ?? (value => value),
             orchestrator,
             mapQueueItemToSessionSummary ?? (_ => null),
             findSessionInfo ??
@@ -139,7 +137,7 @@ public sealed class SessionsUseCasesTests
             getTodosForSession ?? ((_, _) => Task.FromResult(new List<SessionTodoDto>())),
             mapTodosToViewerTasks ?? (_ => new List<ViewerTaskDto>()),
             getLastAssistantMessage ?? (_ => Task.FromResult<LastAssistantMessage?>(null)),
-            archiveSessionOnOpenCode ?? ((_, _) => Task.FromResult<string?>("2026-01-01T00:00:00.0000000+00:00")),
+            archiveSessionOnOpenCode ?? ((_, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))),
             invalidateAllCaches ?? (() => { }),
             broadcastUpdate ?? (() => Task.CompletedTask));
     }
@@ -159,7 +157,8 @@ public sealed class SessionsUseCasesTests
                 MaxAttempts = 1,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
-                OpenCodeFetch = (_, _) => Task.FromResult<JsonNode?>(null),
+                OpenCodeStatusReader = new DisabledOpenCodeStatusReader(),
+                OpenCodeDispatchClient = new DisabledOpenCodeDispatchClient(),
                 NormalizeDirectory = value => value,
                 BuildOpenCodeSessionUrl = (_, _) => null,
                 OnChange = () => { }

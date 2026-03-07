@@ -11,9 +11,9 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
         _mappingRepository = mappingRepository;
     }
 
-    public async Task<EnqueueContext> ResolveAsync(object? mappingId, string? issueType, string? instructions)
+    public async Task<EnqueueContext> ResolveAsync(int? mappingId, string? issueType, string? instructions)
     {
-        var id = ParseIntSafe(mappingId, -1);
+        var id = mappingId.GetValueOrDefault(-1);
 
         if (id <= 0)
             throw new InvalidOperationException("Mapping not found or disabled");
@@ -26,7 +26,7 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
 
         var type = NormalizeIssueType(issueType);
         var profile = type is null ? null : await _mappingRepository.GetInstructionProfile(mapping.Id, type);
-        var defaultInstruction = profile?["instructions"]?.ToString();
+        var defaultInstruction = profile?.Instructions;
         var instructionText = EnqueueContextPolicy.ResolveInstructionText(instructions, defaultInstruction);
 
         if (EnqueueContextPolicy.ShouldPersistInstructionProfile(type, instructionText))
@@ -34,26 +34,9 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
                 mapping.Id,
                 type!,
                 instructionText,
-                NowIso());
+                DateTimeOffset.UtcNow);
 
         return new EnqueueContext(mapping, type, instructionText);
-    }
-
-    static string NowIso() => DateTimeOffset.UtcNow.ToString("O");
-
-    static int ParseIntSafe(object? value, int fallback)
-    {
-        if (value is null)
-            return fallback;
-
-        if (value is int i)
-            return i;
-
-        if (value is long l &&
-            l is >= int.MinValue and <= int.MaxValue)
-            return (int)l;
-
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : fallback;
     }
 
     static string? NormalizeIssueType(string? value)

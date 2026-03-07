@@ -4,7 +4,7 @@ namespace TaskViewer.Server.Domain;
 
 public static class TimeParser
 {
-    public static string? ParseIsoTime(string? value)
+    public static DateTimeOffset? ParseIsoTime(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
@@ -14,7 +14,7 @@ public static class TimeParser
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal,
             out var dateTime)
-            ? dateTime.ToUniversalTime().ToString("O")
+            ? dateTime.ToUniversalTime()
             : null;
     }
 }

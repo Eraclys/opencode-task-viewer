@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using TaskViewer.OpenCode;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -18,7 +18,7 @@ public sealed class SqliteMappingRepositoryTests
             "C:/Work/Alpha",
             null,
             true,
-            DateTimeOffset.UtcNow.ToString("O"));
+            DateTimeOffset.UtcNow);
 
         Assert.True(created.Id > 0);
         Assert.Equal("alpha-key", created.SonarProjectKey);
@@ -29,7 +29,7 @@ public sealed class SqliteMappingRepositoryTests
             "C:/Work/Alpha2",
             "main",
             false,
-            DateTimeOffset.UtcNow.AddSeconds(1).ToString("O"));
+            DateTimeOffset.UtcNow.AddSeconds(1));
 
         Assert.Equal(created.Id, updated.Id);
         Assert.Equal("C:/Work/Alpha2", updated.Directory);
@@ -49,19 +49,19 @@ public sealed class SqliteMappingRepositoryTests
             "C:/Work/Gamma",
             null,
             true,
-            DateTimeOffset.UtcNow.ToString("O"));
+            DateTimeOffset.UtcNow);
 
         var saved = await repository.UpsertInstructionProfile(
             mapping.Id,
             "CODE_SMELL",
             "Fix only this issue",
-            DateTimeOffset.UtcNow.ToString("O"));
+            DateTimeOffset.UtcNow);
 
-        Assert.Equal("CODE_SMELL", saved["issue_type"]?.ToString());
+        Assert.Equal("CODE_SMELL", saved.IssueType);
 
         var loaded = await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL");
         Assert.NotNull(loaded);
-        Assert.Equal("Fix only this issue", loaded!["instructions"]?.ToString());
+        Assert.Equal("Fix only this issue", loaded!.Instructions);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class SqliteMappingRepositoryTests
             "C:/Work/One",
             null,
             true,
-            DateTimeOffset.UtcNow.ToString("O"));
+            DateTimeOffset.UtcNow);
 
         await repository.UpsertMapping(
             null,
@@ -84,7 +84,7 @@ public sealed class SqliteMappingRepositoryTests
             "C:\\Work\\One",
             null,
             true,
-            DateTimeOffset.UtcNow.ToString("O"));
+            DateTimeOffset.UtcNow);
 
         var dirs = await repository.ListEnabledMappingDirectories();
 
@@ -129,7 +129,8 @@ public sealed class SqliteMappingRepositoryTests
                 MaxAttempts = 1,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
-                OpenCodeFetch = (_, _) => Task.FromResult<JsonNode?>(null),
+                OpenCodeStatusReader = new DisabledOpenCodeStatusReader(),
+                OpenCodeDispatchClient = new DisabledOpenCodeDispatchClient(),
                 NormalizeDirectory = value => value,
                 BuildOpenCodeSessionUrl = (_, _) => null,
                 OnChange = () => { }

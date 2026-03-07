@@ -1,15 +1,15 @@
-using System.Text.Json.Nodes;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class SonarRulesReadService : ISonarRulesReadService
 {
     readonly ISonarRuleReadService _ruleReadService;
-    readonly ISonarGateway _sonarGateway;
+    readonly ISonarQubeService _sonarQubeService;
 
-    public SonarRulesReadService(ISonarGateway sonarGateway, ISonarRuleReadService ruleReadService)
+    public SonarRulesReadService(ISonarQubeService sonarQubeService, ISonarRuleReadService ruleReadService)
     {
-        _sonarGateway = sonarGateway;
+        _sonarQubeService = sonarQubeService;
         _ruleReadService = ruleReadService;
     }
 
@@ -39,13 +39,13 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
                 normalizedStatus,
                 null);
 
-            var data = await _sonarGateway.Fetch("/api/issues/search", query);
-            var issues = data?["issues"] as JsonArray ?? [];
-            total ??= ParseIntNullable(data?["paging"]?["total"]?.ToString());
+            var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
+            var issues = response.Issues;
+            total ??= response.Total;
 
             foreach (var issueNode in issues)
             {
-                var key = issueNode?["rule"]?.ToString()?.Trim();
+                var key = SonarResponseParsers.ParseIssueRuleKey(issueNode);
 
                 if (string.IsNullOrWhiteSpace(key))
                     continue;
@@ -90,20 +90,5 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
 
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
-    static int? ParseIntNullable(object? value)
-    {
-        if (value is null)
-            return null;
-
-        if (value is int i)
-            return i;
-
-        if (value is long l &&
-            l is >= int.MinValue and <= int.MaxValue)
-            return (int)l;
-
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
     }
 }

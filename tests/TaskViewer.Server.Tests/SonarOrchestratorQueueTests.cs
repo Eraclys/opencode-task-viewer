@@ -1,4 +1,7 @@
 using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
+using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -7,53 +10,58 @@ public sealed class SonarOrchestratorQueueTests
     [Fact]
     public async Task Tick_CreatesSessionAndMarksItemSessionCreated()
     {
-        await using var orchestrator = CreateOrchestrator(async (path, request) =>
+        await using var orchestrator = CreateOrchestrator((path, request) =>
         {
             if (path == "/session" &&
                 string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase))
-                return new JsonObject
-                {
-                    ["id"] = "sess-created-1"
-                };
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["id"] = "sess-created-1"
+                    });
 
             if (path == "/session/sess-created-1/prompt_async" &&
                 string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase))
-                return new JsonObject
-                {
-                    ["ok"] = true
-                };
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["ok"] = true
+                    });
 
             if (path == "/session/status")
-                return new JsonObject();
+                return Task.FromResult<JsonNode?>(new JsonObject());
 
-            return null;
+            return Task.FromResult<JsonNode?>(null);
         });
 
         var mapping = await orchestrator.UpsertMapping(
-            new JsonObject
-            {
-                ["sonarProjectKey"] = "gamma-key",
-                ["directory"] = "C:/Work/Gamma",
-                ["enabled"] = true
-            });
+            new UpsertMappingRequest(
+                Id: null,
+                SonarProjectKey: "gamma-key",
+                Directory: "C:/Work/Gamma",
+                Branch: null,
+                Enabled: true));
 
         await orchestrator.EnqueueIssues(
-            mapping.Id,
-            "CODE_SMELL",
-            "keep it focused",
-            new JsonArray
-            {
-                new JsonObject
-                {
-                    ["key"] = "sq-gamma-001",
-                    ["type"] = "CODE_SMELL",
-                    ["severity"] = "MAJOR",
-                    ["rule"] = "javascript:S1126",
-                    ["message"] = "Remove this redundant assignment",
-                    ["component"] = "gamma-key:src/worker.js",
-                    ["line"] = 42
-                }
-            });
+            new EnqueueIssuesRequest(
+                MappingId: mapping.Id,
+                IssueType: "CODE_SMELL",
+                Instructions: "keep it focused",
+                Issues:
+                [
+                    new SonarIssueTransport(
+                        "sq-gamma-001",
+                        null,
+                        "CODE_SMELL",
+                        null,
+                        "MAJOR",
+                        "javascript:S1126",
+                        "Remove this redundant assignment",
+                        "gamma-key:src/worker.js",
+                        null,
+                        "42",
+                        null)
+                ]));
 
         await orchestrator.Tick();
 
@@ -77,25 +85,22 @@ public sealed class SonarOrchestratorQueueTests
             1);
 
         var mapping = await orchestrator.UpsertMapping(
-            new JsonObject
-            {
-                ["sonarProjectKey"] = "gamma-key",
-                ["directory"] = "C:/Work/Gamma",
-                ["enabled"] = true
-            });
+            new UpsertMappingRequest(
+                Id: null,
+                SonarProjectKey: "gamma-key",
+                Directory: "C:/Work/Gamma",
+                Branch: null,
+                Enabled: true));
 
         await orchestrator.EnqueueIssues(
-            mapping.Id,
-            "CODE_SMELL",
-            null,
-            new JsonArray
-            {
-                new JsonObject
-                {
-                    ["key"] = "sq-gamma-err",
-                    ["component"] = "gamma-key:src/fail.js"
-                }
-            });
+            new EnqueueIssuesRequest(
+                MappingId: mapping.Id,
+                IssueType: "CODE_SMELL",
+                Instructions: null,
+                Issues:
+                [
+                    new SonarIssueTransport("sq-gamma-err", null, null, null, null, null, null, "gamma-key:src/fail.js", null, null, null)
+                ]));
 
         await orchestrator.Tick();
 
@@ -119,25 +124,22 @@ public sealed class SonarOrchestratorQueueTests
             }));
 
         var mapping = await orchestrator.UpsertMapping(
-            new JsonObject
-            {
-                ["sonarProjectKey"] = "gamma-key",
-                ["directory"] = "C:/Work/Gamma",
-                ["enabled"] = true
-            });
+            new UpsertMappingRequest(
+                Id: null,
+                SonarProjectKey: "gamma-key",
+                Directory: "C:/Work/Gamma",
+                Branch: null,
+                Enabled: true));
 
         await orchestrator.EnqueueIssues(
-            mapping.Id,
-            "CODE_SMELL",
-            null,
-            new JsonArray
-            {
-                new JsonObject
-                {
-                    ["key"] = "sq-gamma-cancel",
-                    ["component"] = "gamma-key:src/cancel.js"
-                }
-            });
+            new EnqueueIssuesRequest(
+                MappingId: mapping.Id,
+                IssueType: "CODE_SMELL",
+                Instructions: null,
+                Issues:
+                [
+                    new SonarIssueTransport("sq-gamma-cancel", null, null, null, null, null, null, "gamma-key:src/cancel.js", null, null, null)
+                ]));
 
         var queued = await WaitForSingleQueueItem(orchestrator, "queued", TimeSpan.FromSeconds(2));
         var cancelled = await orchestrator.CancelQueueItem(queued.Id);
@@ -155,51 +157,44 @@ public sealed class SonarOrchestratorQueueTests
         await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<JsonNode?>(null));
 
         var mapping = await orchestrator.UpsertMapping(
-            new JsonObject
-            {
-                ["sonarProjectKey"] = "gamma-key",
-                ["directory"] = "C:/Work/Gamma",
-                ["enabled"] = true
-            });
+            new UpsertMappingRequest(
+                Id: null,
+                SonarProjectKey: "gamma-key",
+                Directory: "C:/Work/Gamma",
+                Branch: null,
+                Enabled: true));
 
         var first = await orchestrator.EnqueueIssues(
-            mapping.Id,
-            "CODE_SMELL",
-            null,
-            new JsonArray
-            {
-                new JsonObject
-                {
-                    ["key"] = "sq-gamma-dupe",
-                    ["component"] = "gamma-key:src/dupe.js"
-                }
-            });
+            new EnqueueIssuesRequest(
+                MappingId: mapping.Id,
+                IssueType: "CODE_SMELL",
+                Instructions: null,
+                Issues:
+                [
+                    new SonarIssueTransport("sq-gamma-dupe", null, null, null, null, null, null, "gamma-key:src/dupe.js", null, null, null)
+                ]));
 
-        var firstCreated = (int)(first.GetType().GetProperty("created")?.GetValue(first) ?? 0);
+        var firstCreated = first.Created;
         Assert.Equal(1, firstCreated);
 
         var second = await orchestrator.EnqueueIssues(
-            mapping.Id,
-            "CODE_SMELL",
-            null,
-            new JsonArray
-            {
-                new JsonObject(),
-                new JsonObject
-                {
-                    ["key"] = "sq-gamma-dupe",
-                    ["component"] = "gamma-key:src/dupe.js"
-                }
-            });
+            new EnqueueIssuesRequest(
+                MappingId: mapping.Id,
+                IssueType: "CODE_SMELL",
+                Instructions: null,
+                Issues:
+                [
+                    new SonarIssueTransport(null, null, null, null, null, null, null, null, null, null, null),
+                    new SonarIssueTransport("sq-gamma-dupe", null, null, null, null, null, null, "gamma-key:src/dupe.js", null, null, null)
+                ]));
 
-        var created = (int)(second.GetType().GetProperty("created")?.GetValue(second) ?? 0);
-        var skipped = (IEnumerable<object>?)second.GetType().GetProperty("skipped")?.GetValue(second);
+        var created = second.Created;
+        var skipped = second.Skipped;
 
         Assert.Equal(0, created);
-        Assert.NotNull(skipped);
-        Assert.Equal(2, skipped!.Count());
-        Assert.Contains(skipped, item => (item.GetType().GetProperty("reason")?.GetValue(item)?.ToString() ?? string.Empty) == "invalid-issue");
-        Assert.Contains(skipped, item => (item.GetType().GetProperty("reason")?.GetValue(item)?.ToString() ?? string.Empty).StartsWith("already-", StringComparison.Ordinal));
+        Assert.Equal(2, skipped.Count);
+        Assert.Contains(skipped, item => item.Reason == "invalid-issue");
+        Assert.Contains(skipped, item => item.Reason.StartsWith("already-", StringComparison.Ordinal));
     }
 
     static async Task<QueueItemRecord> WaitForSingleQueueItem(SonarOrchestrator orchestrator, string expectedState, TimeSpan timeout)
@@ -208,7 +203,7 @@ public sealed class SonarOrchestratorQueueTests
 
         while (DateTimeOffset.UtcNow < end)
         {
-            var items = await orchestrator.ListQueue(expectedState, 10);
+            var items = await orchestrator.ListQueue(expectedState, "10");
 
             if (items.Count > 0)
                 return items[0];
@@ -236,7 +231,8 @@ public sealed class SonarOrchestratorQueueTests
                 MaxAttempts = maxAttempts,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
-                OpenCodeFetch = openCodeFetch,
+                OpenCodeStatusReader = new DelegateOpenCodeStatusReader(openCodeFetch),
+                OpenCodeDispatchClient = new DelegateOpenCodeDispatchClient(openCodeFetch),
                 NormalizeDirectory = directory => directory,
                 BuildOpenCodeSessionUrl = (sessionId, _) => $"http://opencode.local/session/{sessionId}",
                 OnChange = () => { }

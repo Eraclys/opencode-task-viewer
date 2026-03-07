@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -28,12 +28,12 @@ public sealed class OrchestrationStatusServiceTests
             maxWorkingGlobal: 11,
             workingResumeBelow: 7);
 
-        Assert.Equal("True", result.GetType().GetProperty("configured")?.GetValue(result)?.ToString());
-        Assert.Equal("2", result.GetType().GetProperty("maxActive")?.GetValue(result)?.ToString());
-        Assert.Equal("1000", result.GetType().GetProperty("pollMs")?.GetValue(result)?.ToString());
-        Assert.Equal("3", result.GetType().GetProperty("maxAttempts")?.GetValue(result)?.ToString());
-        Assert.Equal("11", result.GetType().GetProperty("maxWorkingGlobal")?.GetValue(result)?.ToString());
-        Assert.Equal("7", result.GetType().GetProperty("workingResumeBelow")?.GetValue(result)?.ToString());
+        Assert.True(result.Configured);
+        Assert.Equal(2, result.MaxActive);
+        Assert.Equal(1000, result.PollMs);
+        Assert.Equal(3, result.MaxAttempts);
+        Assert.Equal(11, result.MaxWorkingGlobal);
+        Assert.Equal(7, result.WorkingResumeBelow);
     }
 
     [Fact]
@@ -45,22 +45,25 @@ public sealed class OrchestrationStatusServiceTests
             WorkingCount: 4,
             MaxWorkingGlobal: 10,
             WorkingResumeBelow: 5,
-            SampleAt: "2026-01-01T00:00:00.0000000+00:00");
+            SampleAt: DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"));
 
         var result = sut.BuildWorkerState(3, 2, state);
 
-        Assert.Equal("3", result.GetType().GetProperty("inFlightDispatches")?.GetValue(result)?.ToString());
-        Assert.Equal("2", result.GetType().GetProperty("maxActiveDispatches")?.GetValue(result)?.ToString());
-        Assert.Equal("True", result.GetType().GetProperty("pausedByWorking")?.GetValue(result)?.ToString());
-        Assert.Equal("4", result.GetType().GetProperty("workingCount")?.GetValue(result)?.ToString());
-        Assert.Equal("10", result.GetType().GetProperty("maxWorkingGlobal")?.GetValue(result)?.ToString());
-        Assert.Equal("5", result.GetType().GetProperty("workingResumeBelow")?.GetValue(result)?.ToString());
-        Assert.Equal("2026-01-01T00:00:00.0000000+00:00", result.GetType().GetProperty("workingSampleAt")?.GetValue(result)?.ToString());
+        Assert.Equal(3, result.InFlightDispatches);
+        Assert.Equal(2, result.MaxActiveDispatches);
+        Assert.True(result.PausedByWorking);
+        Assert.Equal(4, result.WorkingCount);
+        Assert.Equal(10, result.MaxWorkingGlobal);
+        Assert.Equal(5, result.WorkingResumeBelow);
+        Assert.Equal(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"), result.WorkingSampleAt);
     }
 
-    private sealed class FakeSonarGateway : ISonarGateway
+    private sealed class FakeSonarGateway : ISonarQubeService
     {
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
-            => Task.FromResult<JsonNode?>(null);
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+            => Task.FromResult(new SonarIssuesSearchResponse(fallbackPageIndex, fallbackPageSize, 0, []));
+
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+            => Task.FromResult(new SonarRuleDetailsResponse(null));
     }
 }

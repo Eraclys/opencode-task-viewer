@@ -1,17 +1,17 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class QueueDispatchService : IQueueDispatchService
 {
+    readonly IOpenCodeDispatchClient _openCodeDispatchClient;
     readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
-    readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
 
     public QueueDispatchService(
-        Func<string, OpenCodeRequest, Task<JsonNode?>> openCodeFetch,
+        IOpenCodeDispatchClient openCodeDispatchClient,
         Func<string, string?, string?> buildOpenCodeSessionUrl)
     {
-        _openCodeFetch = openCodeFetch;
+        _openCodeDispatchClient = openCodeDispatchClient;
         _buildOpenCodeSessionUrl = buildOpenCodeSessionUrl;
     }
 
@@ -19,43 +19,11 @@ public sealed class QueueDispatchService : IQueueDispatchService
     {
         var title = $"[{item.IssueType ?? "ISSUE"}] {item.IssueKey}";
 
-        var created = await _openCodeFetch(
-            "/session",
-            new OpenCodeRequest
-            {
-                Method = "POST",
-                Directory = item.Directory,
-                JsonBody = new JsonObject
-                {
-                    ["title"] = title
-                }
-            });
-
-        var sessionId = created?["id"]?.ToString()?.Trim();
-
-        if (string.IsNullOrWhiteSpace(sessionId))
-            throw new InvalidOperationException("OpenCode did not return a session id");
+        var sessionId = await _openCodeDispatchClient.CreateSessionAsync(item.Directory, title);
 
         var prompt = ComposePrompt(item);
 
-        await _openCodeFetch(
-            $"/session/{Uri.EscapeDataString(sessionId)}/prompt_async",
-            new OpenCodeRequest
-            {
-                Method = "POST",
-                Directory = item.Directory,
-                JsonBody = new JsonObject
-                {
-                    ["parts"] = new JsonArray
-                    {
-                        new JsonObject
-                        {
-                            ["type"] = "text",
-                            ["text"] = prompt
-                        }
-                    }
-                }
-            });
+        await _openCodeDispatchClient.SendPromptAsync(item.Directory, sessionId, prompt);
 
         var openCodeUrl = _buildOpenCodeSessionUrl(sessionId, item.Directory);
 

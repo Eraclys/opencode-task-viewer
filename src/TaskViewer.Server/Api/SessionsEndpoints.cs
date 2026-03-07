@@ -23,9 +23,9 @@ public static class SessionsEndpoints
                     Console.Error.WriteLine($"Error listing sessions: {error}");
 
                     return Results.Json(
-                        new
+                        new ErrorResponseDto
                         {
-                            error = "Failed to list sessions from OpenCode"
+                            Error = "Failed to list sessions from OpenCode"
                         },
                         statusCode: 502);
                 }
@@ -41,9 +41,9 @@ public static class SessionsEndpoints
 
                     if (!result.Found)
                         return Results.Json(
-                            new
+                            new ErrorResponseDto
                             {
-                                error = "Session not found"
+                                Error = "Session not found"
                             },
                             statusCode: 404);
 
@@ -54,9 +54,9 @@ public static class SessionsEndpoints
                     Console.Error.WriteLine($"Error getting session todos: {error}");
 
                     return Results.Json(
-                        new
+                        new ErrorResponseDto
                         {
-                            error = "Failed to load session todos from OpenCode"
+                            Error = "Failed to load session todos from OpenCode"
                         },
                         statusCode: 502);
                 }
@@ -72,18 +72,18 @@ public static class SessionsEndpoints
 
                     if (!result.Found)
                         return Results.Json(
-                            new
+                            new ErrorResponseDto
                             {
-                                error = "Session not found"
+                                Error = "Session not found"
                             },
                             statusCode: 404);
 
                     return Results.Json(
-                        new
+                        new LastAssistantMessageResponseDto
                         {
-                            sessionId = result.SessionId,
-                            message = result.Message,
-                            createdAt = result.CreatedAt
+                            SessionId = result.SessionId,
+                            Message = result.Message,
+                            CreatedAt = result.CreatedAt
                         });
                 }
                 catch (Exception error)
@@ -91,9 +91,9 @@ public static class SessionsEndpoints
                     Console.Error.WriteLine($"Error getting last assistant message: {error}");
 
                     return Results.Json(
-                        new
+                        new ErrorResponseDto
                         {
-                            error = "Failed to load session messages from OpenCode"
+                            Error = "Failed to load session messages from OpenCode"
                         },
                         statusCode: 502);
                 }
@@ -109,17 +109,17 @@ public static class SessionsEndpoints
 
                     if (!result.Found)
                         return Results.Json(
-                            new
+                            new ErrorResponseDto
                             {
-                                error = "Session not found"
+                                Error = "Session not found"
                             },
                             statusCode: 404);
 
                     return Results.Json(
-                        new
+                        new ArchiveSessionResponseDto
                         {
-                            ok = true,
-                            archivedAt = result.ArchivedAt
+                            Ok = true,
+                            ArchivedAt = result.ArchivedAt
                         });
                 }
                 catch (Exception error)
@@ -127,9 +127,9 @@ public static class SessionsEndpoints
                     Console.Error.WriteLine($"Error archiving session: {error}");
 
                     return Results.Json(
-                        new
+                        new ErrorResponseDto
                         {
-                            error = "Failed to archive session in OpenCode"
+                            Error = "Failed to archive session in OpenCode"
                         },
                         statusCode: 502);
                 }

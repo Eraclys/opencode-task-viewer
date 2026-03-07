@@ -1,16 +1,16 @@
-using System.Text.Json.Nodes;
+using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public interface IOrchestrationUseCases
 {
-    object GetPublicConfig();
+    OrchestrationConfigDto GetPublicConfig();
     Task<List<MappingRecord>> ListMappingsAsync();
-    Task<MappingRecord> UpsertMappingAsync(JsonNode? payload);
-    Task<object> GetInstructionProfileAsync(string? mappingId, string? issueType);
-    Task<object> UpsertInstructionProfileAsync(JsonNode? payload);
+    Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request);
+    Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType);
+    Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request);
 
-    Task<object> ListIssuesAsync(
+    Task<IssuesListDto> ListIssuesAsync(
         string mappingId,
         string? issueType,
         string? severity,
@@ -19,10 +19,10 @@ public interface IOrchestrationUseCases
         string? pageSize,
         string? ruleKeys);
 
-    Task<object> ListRulesAsync(string mappingId, string? issueType, string? issueStatus);
-    Task<object> EnqueueIssuesAsync(JsonNode? payload);
-    Task<object> EnqueueAllMatchingAsync(JsonNode? payload);
-    Task<object> GetQueueAsync(string? states, string? limit);
+    Task<RulesListDto> ListRulesAsync(string mappingId, string? issueType, string? issueStatus);
+    Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request);
+    Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request);
+    Task<QueueOverviewDto> GetQueueAsync(string? states, string? limit);
     Task<bool> CancelQueueItemAsync(string queueId);
     Task<int> RetryFailedAsync();
     Task<int> ClearQueuedAsync();

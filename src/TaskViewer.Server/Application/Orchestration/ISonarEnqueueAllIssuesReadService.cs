@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-
 namespace TaskViewer.Server.Application.Orchestration;
 
 public interface ISonarEnqueueAllIssuesReadService
@@ -12,8 +10,3 @@ public interface ISonarEnqueueAllIssuesReadService
         IReadOnlyList<string> ruleKeys,
         int maxScanIssues);
 }
-
-public sealed record SonarEnqueueAllIssuesResult(
-    IReadOnlyList<JsonNode?> Issues,
-    int Matched,
-    bool Truncated);

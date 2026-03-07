@@ -1,6 +1,8 @@
 ﻿using System.Collections.Concurrent;
 using System.Text.Json;
 
+namespace TaskViewer.Server;
+
 sealed class SseHub
 {
     readonly ConcurrentDictionary<Guid, SseClient> _clients = new();
@@ -16,7 +18,7 @@ sealed class SseHub
 
     void Remove(Guid id) => _clients.TryRemove(id, out _);
 
-    public async Task Broadcast(object data)
+    public async Task Broadcast<T>(T data)
     {
         var payload = JsonSerializer.Serialize(data);
         var tasks = _clients.Values.Select(c => c.SendRaw($"data: {payload}\n\n"));
