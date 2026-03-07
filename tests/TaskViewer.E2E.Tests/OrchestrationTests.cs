@@ -1,7 +1,6 @@
-using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
-using Xunit;
 using static Microsoft.Playwright.Assertions;
 
 namespace TaskViewer.E2E.Tests;
@@ -9,7 +8,7 @@ namespace TaskViewer.E2E.Tests;
 [Collection(E2eCollection.Name)]
 public sealed class OrchestrationTests
 {
-    private readonly E2eEnvironmentFixture _fixture;
+    readonly E2eEnvironmentFixture _fixture;
 
     public OrchestrationTests(E2eEnvironmentFixture fixture)
     {
@@ -40,7 +39,14 @@ public sealed class OrchestrationTests
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[Queued]");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[CODE_SMELL]");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("sq-gamma-");
-            await Expect(page.GetByTestId("column-pending")).Not.ToContainTextAsync("[Queued]", new LocatorAssertionsToContainTextOptions { Timeout = 15_000 });
+
+            await Expect(page.GetByTestId("column-pending"))
+                .Not.ToContainTextAsync(
+                    "[Queued]",
+                    new LocatorAssertionsToContainTextOptions
+                    {
+                        Timeout = 15_000
+                    });
         });
     }
 
@@ -108,12 +114,14 @@ public sealed class OrchestrationTests
         await _fixture.ResetMocksAsync();
         await WaitForNoActiveQueueAsync();
 
-        await _fixture.PostJsonAsync($"{_fixture.MockUrl}/__test__/setFailures", new
-        {
-            sessionCreateCount = 0,
-            promptAsyncCount = 0,
-            promptDelayMs = 3000
-        });
+        await _fixture.PostJsonAsync(
+            $"{_fixture.MockUrl}/__test__/setFailures",
+            new
+            {
+                sessionCreateCount = 0,
+                promptAsyncCount = 0,
+                promptDelayMs = 3000
+            });
 
         await WithPage(async page =>
         {
@@ -146,11 +154,13 @@ public sealed class OrchestrationTests
         await _fixture.ResetMocksAsync();
         await WaitForNoActiveQueueAsync();
 
-        await _fixture.PostJsonAsync($"{_fixture.MockUrl}/__test__/setFailures", new
-        {
-            sessionCreateCount = 1,
-            promptAsyncCount = 0
-        });
+        await _fixture.PostJsonAsync(
+            $"{_fixture.MockUrl}/__test__/setFailures",
+            new
+            {
+                sessionCreateCount = 1,
+                promptAsyncCount = 0
+            });
 
         await WithPage(async page =>
         {
@@ -179,7 +189,11 @@ public sealed class OrchestrationTests
             var failedItem = await WaitForQueueItemStateByIdAsync(queueId, "failed", TimeSpan.FromSeconds(20));
             Assert.Contains("OpenCode request failed", failedItem["lastError"]?.ToString());
 
-            await _fixture.PostJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue/retry-failed", new { });
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/queue/retry-failed",
+                new
+                {
+                });
 
             var sessionCreated = await WaitForQueueItemStateByIdAsync(queueId, "session_created", TimeSpan.FromSeconds(20));
             Assert.False(string.IsNullOrWhiteSpace(sessionCreated["sessionId"]?.ToString()));
@@ -196,12 +210,14 @@ public sealed class OrchestrationTests
         await _fixture.ResetMocksAsync();
         await WaitForNoActiveQueueAsync();
 
-        await _fixture.PostJsonAsync($"{_fixture.MockUrl}/__test__/setFailures", new
-        {
-            sessionCreateCount = 0,
-            promptAsyncCount = 0,
-            promptDelayMs = 2500
-        });
+        await _fixture.PostJsonAsync(
+            $"{_fixture.MockUrl}/__test__/setFailures",
+            new
+            {
+                sessionCreateCount = 0,
+                promptAsyncCount = 0,
+                promptDelayMs = 2500
+            });
 
         await WithPage(async page =>
         {
@@ -226,7 +242,11 @@ public sealed class OrchestrationTests
             Assert.NotNull(queuedItem);
             var queueId = AsInt(queuedItem!["id"]);
 
-            await _fixture.PostJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue/{queueId}/cancel", new { });
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/queue/{queueId}/cancel",
+                new
+                {
+                });
 
             var cancelled = await WaitForQueueItemStateByIdAsync(queueId, "cancelled", TimeSpan.FromSeconds(20));
             Assert.False(string.IsNullOrWhiteSpace(cancelled["cancelledAt"]?.ToString()));
@@ -243,7 +263,7 @@ public sealed class OrchestrationTests
         });
     }
 
-    private async Task SetupGammaMappingAsync(IPage page)
+    async Task SetupGammaMappingAsync(IPage page)
     {
         await Expect(page.GetByTestId("orch-settings-toggle")).ToBeVisibleAsync();
         await page.GetByTestId("orch-settings-toggle").ClickAsync();
@@ -255,22 +275,20 @@ public sealed class OrchestrationTests
         await Expect(page.GetByTestId("orch-mapping-select")).ToHaveValueAsync(new Regex("\\d+"));
     }
 
-    private static async Task LoadCodeSmellIssuesAsync(IPage page)
+    static async Task LoadCodeSmellIssuesAsync(IPage page)
     {
         await page.GetByTestId("orch-issue-type").SelectOptionAsync("CODE_SMELL");
         await page.GetByTestId("orch-load-issues-btn").ClickAsync();
         await Expect(page.Locator(".orch-issue-row")).ToHaveCountAsync(3);
     }
 
-    private async Task<JsonNode> GetQueueResponseAsync()
-    {
-        return await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
-    }
+    async Task<JsonNode> GetQueueResponseAsync() => await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
 
-    private async Task<JsonNode?> GetLatestQueueItemForIssueAsync(string issueKey)
+    async Task<JsonNode?> GetLatestQueueItemForIssueAsync(string issueKey)
     {
         var data = await GetQueueResponseAsync();
         var items = data["items"] as JsonArray ?? [];
+
         var matches = items
             .Where(item => item?["issueKey"]?.ToString() == issueKey)
             .OrderByDescending(item => AsInt(item?["id"]))
@@ -279,13 +297,15 @@ public sealed class OrchestrationTests
         return matches.FirstOrDefault();
     }
 
-    private async Task<JsonNode> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)
+    async Task<JsonNode> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
+
         while (DateTimeOffset.UtcNow < deadline)
         {
             var data = await GetQueueResponseAsync();
             var queued = AsInt(data["stats"]?["queued"]);
+
             if (queued >= minQueued)
                 return data;
 
@@ -295,15 +315,18 @@ public sealed class OrchestrationTests
         throw new TimeoutException($"Timed out waiting for queued count >= {minQueued}");
     }
 
-    private async Task<JsonNode> WaitForQueueItemStateByIdAsync(int queueId, string expectedState, TimeSpan timeout)
+    async Task<JsonNode> WaitForQueueItemStateByIdAsync(int queueId, string expectedState, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
+
         while (DateTimeOffset.UtcNow < deadline)
         {
             var response = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=200");
             var items = response["items"] as JsonArray ?? [];
             var match = items.FirstOrDefault(item => AsInt(item?["id"]) == queueId);
-            if (match is not null && string.Equals(match["state"]?.ToString(), expectedState, StringComparison.Ordinal))
+
+            if (match is not null &&
+                string.Equals(match["state"]?.ToString(), expectedState, StringComparison.Ordinal))
                 return match;
 
             await Task.Delay(250);
@@ -312,16 +335,24 @@ public sealed class OrchestrationTests
         throw new TimeoutException($"Timed out waiting for queue item {queueId} to reach state {expectedState}");
     }
 
-    private async Task WaitForNoActiveQueueAsync()
+    async Task WaitForNoActiveQueueAsync()
     {
         var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+
         while (DateTimeOffset.UtcNow < deadline)
         {
-            await _fixture.PostJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue/clear", new { });
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/queue/clear",
+                new
+                {
+                });
+
             var data = await GetQueueResponseAsync();
             var queued = AsInt(data["stats"]?["queued"]);
             var dispatching = AsInt(data["stats"]?["dispatching"]);
-            if (queued == 0 && dispatching == 0)
+
+            if (queued == 0 &&
+                dispatching == 0)
                 return;
 
             await Task.Delay(250);
@@ -330,7 +361,7 @@ public sealed class OrchestrationTests
         throw new TimeoutException("Timed out waiting for queue to become idle");
     }
 
-    private static int AsInt(JsonNode? node)
+    static int AsInt(JsonNode? node)
     {
         if (node is null)
             return 0;
@@ -341,10 +372,16 @@ public sealed class OrchestrationTests
         return 0;
     }
 
-    private static async Task WithPage(Func<IPage, Task> test)
+    static async Task WithPage(Func<IPage, Task> test)
     {
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+
+        await using var browser = await playwright.Chromium.LaunchAsync(
+            new BrowserTypeLaunchOptions
+            {
+                Headless = true
+            });
+
         await using var context = await browser.NewContextAsync();
         var page = await context.NewPageAsync();
         await test(page);

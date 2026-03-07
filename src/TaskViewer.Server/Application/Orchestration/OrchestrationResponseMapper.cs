@@ -1,13 +1,19 @@
-using TaskViewer.Server;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal static class OrchestrationResponseMapper
+static class OrchestrationResponseMapper
 {
     public static object BuildRulesList(MappingRecord mapping, SonarRulesSummary summary)
     {
-        var rules = summary.Rules.Select(r => new { key = r.Key, name = r.Name, count = r.Count }).ToList();
+        var rules = summary
+            .Rules.Select(r => new
+            {
+                key = r.Key,
+                name = r.Name,
+                count = r.Count
+            })
+            .ToList();
 
         return new
         {
@@ -22,20 +28,22 @@ internal static class OrchestrationResponseMapper
 
     public static object BuildIssuesList(MappingRecord mapping, SonarIssuesPage result)
     {
-        var issues = result.Issues.Select(i =>
-            new
-            {
-                key = i.Key,
-                type = i.Type,
-                severity = i.Severity,
-                rule = i.Rule,
-                message = i.Message,
-                component = i.Component,
-                line = i.Line,
-                status = i.Status,
-                relativePath = i.RelativePath,
-                absolutePath = i.AbsolutePath
-            }).ToList();
+        var issues = result
+            .Issues.Select(i =>
+                new
+                {
+                    key = i.Key,
+                    type = i.Type,
+                    severity = i.Severity,
+                    rule = i.Rule,
+                    message = i.Message,
+                    component = i.Component,
+                    line = i.Line,
+                    status = i.Status,
+                    relativePath = i.RelativePath,
+                    absolutePath = i.AbsolutePath
+                })
+            .ToList();
 
         return new
         {
@@ -78,7 +86,11 @@ internal static class OrchestrationResponseMapper
         };
     }
 
-    public static object BuildEnqueueAllResult(int matched, bool truncated, IReadOnlyList<QueueItemRecord> createdItems, IReadOnlyList<QueueEnqueueSkipView> skipped)
+    public static object BuildEnqueueAllResult(
+        int matched,
+        bool truncated,
+        IReadOnlyList<QueueItemRecord> createdItems,
+        IReadOnlyList<QueueEnqueueSkipView> skipped)
     {
         return new
         {
@@ -125,7 +137,7 @@ internal static class OrchestrationResponseMapper
     }
 }
 
-internal sealed class QueueEnqueueSkipView
+sealed class QueueEnqueueSkipView
 {
     public string? issueKey { get; init; }
     public string reason { get; init; } = string.Empty;

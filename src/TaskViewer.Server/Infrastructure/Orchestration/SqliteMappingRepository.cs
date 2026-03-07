@@ -1,14 +1,13 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
 
 public sealed class SqliteMappingRepository : IMappingRepository
 {
-    private readonly SemaphoreSlim _dbLock;
-    private readonly Func<SqliteConnection> _openConnection;
-    private readonly Action _onChange;
+    readonly SemaphoreSlim _dbLock;
+    readonly Action _onChange;
+    readonly Func<SqliteConnection> _openConnection;
 
     public SqliteMappingRepository(SemaphoreSlim dbLock, Func<SqliteConnection> openConnection, Action onChange)
     {
@@ -32,6 +31,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
             while (reader.Read())
             {
                 var row = MapMapping(reader);
+
                 if (row is not null)
                     list.Add(row);
             }
@@ -64,7 +64,13 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    public async Task<MappingRecord> UpsertMapping(int? id, string sonarProjectKey, string directory, string? branch, bool enabled, string now)
+    public async Task<MappingRecord> UpsertMapping(
+        int? id,
+        string sonarProjectKey,
+        string directory,
+        string? branch,
+        bool enabled,
+        string now)
     {
         await _dbLock.WaitAsync();
 
@@ -72,9 +78,11 @@ public sealed class SqliteMappingRepository : IMappingRepository
         {
             using var conn = _openConnection();
 
-            if (id.HasValue && id.Value > 0)
+            if (id.HasValue &&
+                id.Value > 0)
             {
                 using var update = conn.CreateCommand();
+
                 update.CommandText = @"
           UPDATE project_mappings
           SET sonar_project_key = $key,
@@ -98,14 +106,17 @@ public sealed class SqliteMappingRepository : IMappingRepository
                 select.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings WHERE id = $id LIMIT 1";
                 select.Parameters.AddWithValue("$id", id.Value);
                 using var reader = select.ExecuteReader();
+
                 if (!reader.Read())
                     throw new InvalidOperationException("Mapping not found");
 
                 _onChange();
+
                 return MapMapping(reader)!;
             }
 
             using var upsert = conn.CreateCommand();
+
             upsert.CommandText = @"
         INSERT INTO project_mappings (sonar_project_key, directory, branch, enabled, created_at, updated_at)
         VALUES ($key, $dir, $branch, $enabled, $created, $updated)
@@ -127,10 +138,12 @@ public sealed class SqliteMappingRepository : IMappingRepository
             select2.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings WHERE sonar_project_key = $key LIMIT 1";
             select2.Parameters.AddWithValue("$key", sonarProjectKey);
             using var reader2 = select2.ExecuteReader();
+
             if (!reader2.Read())
                 throw new InvalidOperationException("Failed to save mapping");
 
             _onChange();
+
             return MapMapping(reader2)!;
         }
         finally
@@ -171,7 +184,11 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    public async Task<JsonObject> UpsertInstructionProfile(int mappingId, string issueType, string instructions, string now)
+    public async Task<JsonObject> UpsertInstructionProfile(
+        int mappingId,
+        string issueType,
+        string instructions,
+        string now)
     {
         await _dbLock.WaitAsync();
 
@@ -179,6 +196,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
         {
             using var conn = _openConnection();
             using var upsert = conn.CreateCommand();
+
             upsert.CommandText = @"
         INSERT INTO instruction_profiles (mapping_id, issue_type, instructions, created_at, updated_at)
         VALUES ($mid, $type, $instructions, $created, $updated)
@@ -213,6 +231,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
             };
 
             _onChange();
+
             return result;
         }
         finally
@@ -237,10 +256,12 @@ public sealed class SqliteMappingRepository : IMappingRepository
             while (reader.Read())
             {
                 var d = reader.IsDBNull(0) ? string.Empty : reader.GetString(0).Trim();
+
                 if (string.IsNullOrWhiteSpace(d))
                     continue;
 
                 var key = d.Replace('\\', '/');
+
                 if (seen.Add(key))
                     dirs.Add(d);
             }
@@ -253,7 +274,7 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    private static MappingRecord? MapMapping(SqliteDataReader reader)
+    static MappingRecord? MapMapping(SqliteDataReader reader)
     {
         return new MappingRecord
         {

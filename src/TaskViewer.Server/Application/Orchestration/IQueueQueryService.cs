@@ -1,18 +1,17 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal interface IQueueQueryService
+interface IQueueQueryService
 {
     Task<List<QueueItemRecord>> ListQueueAsync(object? states, object? limit);
     Task<QueueStats> GetQueueStatsAsync();
 }
 
-internal sealed class QueueQueryService : IQueueQueryService
+sealed class QueueQueryService : IQueueQueryService
 {
-    private readonly IQueueRepository _queueRepository;
+    readonly IQueueRepository _queueRepository;
 
     public QueueQueryService(IQueueRepository queueRepository)
     {
@@ -23,15 +22,13 @@ internal sealed class QueueQueryService : IQueueQueryService
     {
         var selectedStates = NormalizeQueueStateList(states);
         var n = Math.Clamp(ParseIntSafe(limit, 250), 1, 5000);
+
         return await _queueRepository.ListQueue(selectedStates, n);
     }
 
-    public Task<QueueStats> GetQueueStatsAsync()
-    {
-        return _queueRepository.GetQueueStats();
-    }
+    public Task<QueueStats> GetQueueStatsAsync() => _queueRepository.GetQueueStats();
 
-    private static int ParseIntSafe(object? value, int fallback)
+    static int ParseIntSafe(object? value, int fallback)
     {
         if (value is null)
             return fallback;
@@ -39,13 +36,14 @@ internal sealed class QueueQueryService : IQueueQueryService
         if (value is int i)
             return i;
 
-        if (value is long l && l is >= int.MinValue and <= int.MaxValue)
+        if (value is long l &&
+            l is >= int.MinValue and <= int.MaxValue)
             return (int)l;
 
         return int.TryParse(value.ToString(), out var parsed) ? parsed : fallback;
     }
 
-    private static List<string> NormalizeQueueStateList(object? states)
+    static List<string> NormalizeQueueStateList(object? states)
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -65,7 +63,8 @@ internal sealed class QueueQueryService : IQueueQueryService
             {
                 var v = n?.ToString()?.Trim().ToLowerInvariant();
 
-                if (!string.IsNullOrWhiteSpace(v) && allowed.Contains(v))
+                if (!string.IsNullOrWhiteSpace(v) &&
+                    allowed.Contains(v))
                     result.Add(v);
             }
 

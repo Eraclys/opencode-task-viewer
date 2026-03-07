@@ -5,9 +5,9 @@ namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
 {
-    private readonly IMappingRepository _mappingRepository;
-    private readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
-    private (DateTimeOffset Ts, int Count) _cachedSample = (DateTimeOffset.MinValue, 0);
+    readonly IMappingRepository _mappingRepository;
+    readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
+    (DateTimeOffset Ts, int Count) _cachedSample = (DateTimeOffset.MinValue, 0);
 
     public WorkingSessionsReadService(
         IMappingRepository mappingRepository,
@@ -22,7 +22,8 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         var now = DateTimeOffset.UtcNow;
         var cacheTtlMs = Math.Clamp(pollMs, 500, 5000);
 
-        if (!forceRefresh && (now - _cachedSample.Ts).TotalMilliseconds < cacheTtlMs)
+        if (!forceRefresh &&
+            (now - _cachedSample.Ts).TotalMilliseconds < cacheTtlMs)
             return new WorkingSessionsSample(_cachedSample.Ts, _cachedSample.Count);
 
         var dirs = await _mappingRepository.ListEnabledMappingDirectories();
@@ -35,10 +36,11 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         }
 
         _cachedSample = (now, totalRunning);
+
         return new WorkingSessionsSample(now, totalRunning);
     }
 
-    private async Task<Dictionary<string, string>> FetchStatusMapForDirectory(string directory)
+    async Task<Dictionary<string, string>> FetchStatusMapForDirectory(string directory)
     {
         var variants = GetDirectoryVariants(directory);
 
@@ -87,17 +89,22 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         return fallback;
     }
 
-    private static List<string> GetDirectoryVariants(string? directory)
+    static List<string> GetDirectoryVariants(string? directory)
     {
         var dir = (directory ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(dir))
             return [];
 
-        if (dir.Length > 1 && (dir.EndsWith('/') || dir.EndsWith('\\')))
+        if (dir.Length > 1 &&
+            (dir.EndsWith('/') || dir.EndsWith('\\')))
             dir = dir.TrimEnd('/', '\\');
 
-        var variants = new List<string> { dir };
+        var variants = new List<string>
+        {
+            dir
+        };
+
         var forward = dir.Replace('\\', '/');
         var backward = dir.Replace('/', '\\');
 
@@ -110,9 +117,10 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         return variants;
     }
 
-    private static bool IsRunningStatusType(string? value)
+    static bool IsRunningStatusType(string? value)
     {
         var t = (value ?? string.Empty).Trim().ToLowerInvariant();
+
         return t is "busy" or "retry" or "running";
     }
 }

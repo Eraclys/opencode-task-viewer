@@ -1,8 +1,6 @@
-using TaskViewer.Server;
-
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal interface IQueueDispatchOrchestrationService
+interface IQueueDispatchOrchestrationService
 {
     Task DispatchAndPersistAsync(QueueItemRecord item);
 }

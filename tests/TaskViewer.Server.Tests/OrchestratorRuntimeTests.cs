@@ -18,9 +18,11 @@ public sealed class OrchestratorRuntimeTests
         });
 
         await Task.Delay(20);
+
         await runtime.RunOnceAsync(() =>
         {
             Interlocked.Increment(ref entered);
+
             return Task.CompletedTask;
         });
 
@@ -38,11 +40,12 @@ public sealed class OrchestratorRuntimeTests
         var tickCount = 0;
 
         runtime.Start(
-            pollMs: 25,
+            25,
             cts.Token,
             () =>
             {
                 Interlocked.Increment(ref tickCount);
+
                 return Task.CompletedTask;
             });
 

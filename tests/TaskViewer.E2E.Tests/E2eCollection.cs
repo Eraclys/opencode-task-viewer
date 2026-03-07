@@ -1,5 +1,3 @@
-using Xunit;
-
 namespace TaskViewer.E2E.Tests;
 
 [CollectionDefinition(Name)]

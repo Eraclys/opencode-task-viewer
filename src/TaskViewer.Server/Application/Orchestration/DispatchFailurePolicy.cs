@@ -14,7 +14,7 @@ public sealed class DispatchFailurePolicy : IDispatchFailurePolicy
         return new DispatchFailureDecision("queued", nextAttemptAt);
     }
 
-    private static int MakeBackoffMs(int attempt)
+    static int MakeBackoffMs(int attempt)
     {
         var n = Math.Max(1, attempt);
         var backoff = 2500 * Math.Pow(2, n - 1);

@@ -1,7 +1,5 @@
 using System.Net;
-using System.Net.Http;
 using System.Text;
-using System.Text.Json.Nodes;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -16,6 +14,7 @@ public sealed class HttpSonarGatewayTests
         using var handler = new StubHandler(request =>
         {
             capturedRequest = request;
+
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"ok\":true}", Encoding.UTF8, "application/json")
@@ -54,18 +53,15 @@ public sealed class HttpSonarGatewayTests
         Assert.Contains("SonarQube request failed", error.Message);
     }
 
-    private sealed class StubHandler : HttpMessageHandler
+    sealed class StubHandler : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
+        readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
 
         public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
         {
             _handler = handler;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_handler(request));
-        }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(_handler(request));
     }
 }

@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
-using TaskViewer.Server;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -14,23 +13,23 @@ public sealed class SqliteMappingRepositoryTests
         var repository = CreateRepository(dbPath);
 
         var created = await repository.UpsertMapping(
-            id: null,
-            sonarProjectKey: "alpha-key",
-            directory: "C:/Work/Alpha",
-            branch: null,
-            enabled: true,
-            now: DateTimeOffset.UtcNow.ToString("O"));
+            null,
+            "alpha-key",
+            "C:/Work/Alpha",
+            null,
+            true,
+            DateTimeOffset.UtcNow.ToString("O"));
 
         Assert.True(created.Id > 0);
         Assert.Equal("alpha-key", created.SonarProjectKey);
 
         var updated = await repository.UpsertMapping(
-            id: created.Id,
-            sonarProjectKey: "alpha-key",
-            directory: "C:/Work/Alpha2",
-            branch: "main",
-            enabled: false,
-            now: DateTimeOffset.UtcNow.AddSeconds(1).ToString("O"));
+            created.Id,
+            "alpha-key",
+            "C:/Work/Alpha2",
+            "main",
+            false,
+            DateTimeOffset.UtcNow.AddSeconds(1).ToString("O"));
 
         Assert.Equal(created.Id, updated.Id);
         Assert.Equal("C:/Work/Alpha2", updated.Directory);
@@ -45,12 +44,12 @@ public sealed class SqliteMappingRepositoryTests
         var repository = CreateRepository(dbPath);
 
         var mapping = await repository.UpsertMapping(
-            id: null,
-            sonarProjectKey: "gamma-key",
-            directory: "C:/Work/Gamma",
-            branch: null,
-            enabled: true,
-            now: DateTimeOffset.UtcNow.ToString("O"));
+            null,
+            "gamma-key",
+            "C:/Work/Gamma",
+            null,
+            true,
+            DateTimeOffset.UtcNow.ToString("O"));
 
         var saved = await repository.UpsertInstructionProfile(
             mapping.Id,
@@ -71,15 +70,28 @@ public sealed class SqliteMappingRepositoryTests
         var dbPath = await InitializeSchemaAsync();
         var repository = CreateRepository(dbPath);
 
-        await repository.UpsertMapping(null, "p1", "C:/Work/One", null, true, DateTimeOffset.UtcNow.ToString("O"));
-        await repository.UpsertMapping(null, "p2", "C:\\Work\\One", null, true, DateTimeOffset.UtcNow.ToString("O"));
+        await repository.UpsertMapping(
+            null,
+            "p1",
+            "C:/Work/One",
+            null,
+            true,
+            DateTimeOffset.UtcNow.ToString("O"));
+
+        await repository.UpsertMapping(
+            null,
+            "p2",
+            "C:\\Work\\One",
+            null,
+            true,
+            DateTimeOffset.UtcNow.ToString("O"));
 
         var dirs = await repository.ListEnabledMappingDirectories();
 
         Assert.Single(dirs);
     }
 
-    private static SqliteMappingRepository CreateRepository(string dbPath)
+    static SqliteMappingRepository CreateRepository(string dbPath)
     {
         var dbLock = new SemaphoreSlim(1, 1);
         var onChange = () => { };
@@ -87,7 +99,7 @@ public sealed class SqliteMappingRepositoryTests
         return new SqliteMappingRepository(dbLock, () => OpenConnection(dbPath), onChange);
     }
 
-    private static SqliteConnection OpenConnection(string dbPath)
+    static SqliteConnection OpenConnection(string dbPath)
     {
         var builder = new SqliteConnectionStringBuilder
         {
@@ -98,10 +110,11 @@ public sealed class SqliteMappingRepositoryTests
 
         var connection = new SqliteConnection(builder.ConnectionString);
         connection.Open();
+
         return connection;
     }
 
-    private static async Task<string> InitializeSchemaAsync()
+    static async Task<string> InitializeSchemaAsync()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-mapping-repo-{Guid.NewGuid():N}.sqlite");
 

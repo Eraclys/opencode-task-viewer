@@ -1,12 +1,11 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
 
 public sealed class OrchestrationGatewayAdapter : IOrchestrationGateway
 {
-    private readonly SonarOrchestrator _orchestrator;
+    readonly SonarOrchestrator _orchestrator;
 
     public OrchestrationGatewayAdapter(SonarOrchestrator orchestrator)
     {
@@ -23,16 +22,50 @@ public sealed class OrchestrationGatewayAdapter : IOrchestrationGateway
 
     public Task<JsonObject> UpsertInstructionProfile(object? mappingId, string? issueType, string? instructions) => _orchestrator.UpsertInstructionProfile(mappingId, issueType, instructions);
 
-    public Task<object> ListIssues(object? mappingId, string? issueType, string? severity, string? issueStatus, object? page, object? pageSize, object? ruleKeys)
-        => _orchestrator.ListIssues(mappingId, issueType, severity, issueStatus, page, pageSize, ruleKeys);
+    public Task<object> ListIssues(
+        object? mappingId,
+        string? issueType,
+        string? severity,
+        string? issueStatus,
+        object? page,
+        object? pageSize,
+        object? ruleKeys)
+        => _orchestrator.ListIssues(
+            mappingId,
+            issueType,
+            severity,
+            issueStatus,
+            page,
+            pageSize,
+            ruleKeys);
 
     public Task<object> ListRules(object? mappingId, string? issueType, string? issueStatus) => _orchestrator.ListRules(mappingId, issueType, issueStatus);
 
-    public Task<object> EnqueueIssues(object? mappingId, string? issueType, string? instructions, JsonArray? issues)
-        => _orchestrator.EnqueueIssues(mappingId, issueType, instructions, issues);
+    public Task<object> EnqueueIssues(
+        object? mappingId,
+        string? issueType,
+        string? instructions,
+        JsonArray? issues)
+        => _orchestrator.EnqueueIssues(
+            mappingId,
+            issueType,
+            instructions,
+            issues);
 
-    public Task<object> EnqueueAllMatching(object? mappingId, string? issueType, object? ruleKeys, string? issueStatus, string? severity, string? instructions)
-        => _orchestrator.EnqueueAllMatching(mappingId, issueType, ruleKeys, issueStatus, severity, instructions);
+    public Task<object> EnqueueAllMatching(
+        object? mappingId,
+        string? issueType,
+        object? ruleKeys,
+        string? issueStatus,
+        string? severity,
+        string? instructions)
+        => _orchestrator.EnqueueAllMatching(
+            mappingId,
+            issueType,
+            ruleKeys,
+            issueStatus,
+            severity,
+            instructions);
 
     public Task<List<QueueItemRecord>> ListQueue(object? states, object? limit) => _orchestrator.ListQueue(states, limit);
 

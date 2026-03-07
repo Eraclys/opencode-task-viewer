@@ -1,11 +1,10 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class OrchestrationUseCases : IOrchestrationUseCases
 {
-    private readonly IOrchestrationGateway _gateway;
+    readonly IOrchestrationGateway _gateway;
 
     public OrchestrationUseCases(IOrchestrationGateway gateway)
     {
@@ -46,15 +45,23 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         };
     }
 
-    public Task<object> ListIssuesAsync(string mappingId, string? issueType, string? severity, string? issueStatus, string? page, string? pageSize, string? ruleKeys)
-    {
-        return _gateway.ListIssues(mappingId, issueType, severity, issueStatus, page, pageSize, ruleKeys);
-    }
+    public Task<object> ListIssuesAsync(
+        string mappingId,
+        string? issueType,
+        string? severity,
+        string? issueStatus,
+        string? page,
+        string? pageSize,
+        string? ruleKeys) => _gateway.ListIssues(
+        mappingId,
+        issueType,
+        severity,
+        issueStatus,
+        page,
+        pageSize,
+        ruleKeys);
 
-    public Task<object> ListRulesAsync(string mappingId, string? issueType, string? issueStatus)
-    {
-        return _gateway.ListRules(mappingId, issueType, issueStatus);
-    }
+    public Task<object> ListRulesAsync(string mappingId, string? issueType, string? issueStatus) => _gateway.ListRules(mappingId, issueType, issueStatus);
 
     public Task<object> EnqueueIssuesAsync(JsonNode? payload)
     {

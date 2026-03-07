@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -24,7 +23,11 @@ public sealed class SonarRulesReadServiceTests
             UpdatedAt = ""
         };
 
-        var summary = await service.SummarizeRulesAsync(mapping, "code_smell", "open", maxScanIssues: 5000);
+        var summary = await service.SummarizeRulesAsync(
+            mapping,
+            "code_smell",
+            "open",
+            5000);
 
         Assert.Equal("CODE_SMELL", summary.IssueType);
         Assert.Equal("OPEN", summary.IssueStatus);
@@ -35,31 +38,38 @@ public sealed class SonarRulesReadServiceTests
         Assert.Equal(2, summary.Rules[0].Count);
     }
 
-    private sealed class FakeGateway : ISonarGateway
+    sealed class FakeGateway : ISonarGateway
     {
         public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
         {
-            return Task.FromResult<JsonNode?>(new JsonObject
-            {
-                ["paging"] = new JsonObject
+            return Task.FromResult<JsonNode?>(
+                new JsonObject
                 {
-                    ["total"] = 3
-                },
-                ["issues"] = new JsonArray
-                {
-                    new JsonObject { ["rule"] = "javascript:S1126" },
-                    new JsonObject { ["rule"] = "javascript:S1126" },
-                    new JsonObject { ["rule"] = "javascript:S3776" }
-                }
-            });
+                    ["paging"] = new JsonObject
+                    {
+                        ["total"] = 3
+                    },
+                    ["issues"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["rule"] = "javascript:S1126"
+                        },
+                        new JsonObject
+                        {
+                            ["rule"] = "javascript:S1126"
+                        },
+                        new JsonObject
+                        {
+                            ["rule"] = "javascript:S3776"
+                        }
+                    }
+                });
         }
     }
 
-    private sealed class FakeRuleReadService : ISonarRuleReadService
+    sealed class FakeRuleReadService : ISonarRuleReadService
     {
-        public Task<string> GetRuleDisplayName(string ruleKey)
-        {
-            return Task.FromResult($"Name for {ruleKey}");
-        }
+        public Task<string> GetRuleDisplayName(string ruleKey) => Task.FromResult($"Name for {ruleKey}");
     }
 }

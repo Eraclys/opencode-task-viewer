@@ -1,4 +1,3 @@
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -10,29 +9,65 @@ public sealed class QueueWorkerCoordinatorTests
     {
         var sut = new QueueWorkerCoordinator();
         var inFlight = new HashSet<string>(StringComparer.Ordinal);
+
         var claims = new Queue<QueueItemRecord?>(
         [
-            new QueueItemRecord { Id = 1, IssueKey = "sq-1", MappingId = 1, SonarProjectKey = "k", Directory = "C:/Work", CreatedAt = "", UpdatedAt = "" },
-            new QueueItemRecord { Id = 2, IssueKey = "sq-2", MappingId = 1, SonarProjectKey = "k", Directory = "C:/Work", CreatedAt = "", UpdatedAt = "" },
-            new QueueItemRecord { Id = 3, IssueKey = "sq-3", MappingId = 1, SonarProjectKey = "k", Directory = "C:/Work", CreatedAt = "", UpdatedAt = "" }
+            new QueueItemRecord
+            {
+                Id = 1,
+                IssueKey = "sq-1",
+                MappingId = 1,
+                SonarProjectKey = "k",
+                Directory = "C:/Work",
+                CreatedAt = "",
+                UpdatedAt = ""
+            },
+            new QueueItemRecord
+            {
+                Id = 2,
+                IssueKey = "sq-2",
+                MappingId = 1,
+                SonarProjectKey = "k",
+                Directory = "C:/Work",
+                CreatedAt = "",
+                UpdatedAt = ""
+            },
+            new QueueItemRecord
+            {
+                Id = 3,
+                IssueKey = "sq-3",
+                MappingId = 1,
+                SonarProjectKey = "k",
+                Directory = "C:/Work",
+                CreatedAt = "",
+                UpdatedAt = ""
+            }
         ]);
+
         var heldTasks = new List<TaskCompletionSource<bool>>();
         var dispatched = new List<int>();
 
         await sut.ScheduleAsync(
             inFlight,
-            maxActive: 2,
-            claimNext: () => Task.FromResult(claims.Count > 0 ? claims.Dequeue() : null),
-            dispatch: item =>
+            2,
+            () => Task.FromResult(claims.Count > 0 ? claims.Dequeue() : null),
+            item =>
             {
                 dispatched.Add(item.Id);
                 var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 heldTasks.Add(tcs);
+
                 return tcs.Task;
             },
-            onChange: () => { });
+            () => { });
 
-        Assert.Equal([1, 2], dispatched);
+        Assert.Equal(
+            [
+                1,
+                2
+            ],
+            dispatched);
+
         Assert.Equal(2, inFlight.Count);
     }
 
@@ -42,6 +77,7 @@ public sealed class QueueWorkerCoordinatorTests
         var sut = new QueueWorkerCoordinator();
         var inFlight = new HashSet<string>(StringComparer.Ordinal);
         var onChangeSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         var claims = new Queue<QueueItemRecord?>(
         [
             new QueueItemRecord
@@ -59,10 +95,10 @@ public sealed class QueueWorkerCoordinatorTests
 
         await sut.ScheduleAsync(
             inFlight,
-            maxActive: 1,
-            claimNext: () => Task.FromResult(claims.Count > 0 ? claims.Dequeue() : null),
-            dispatch: _ => Task.CompletedTask,
-            onChange: () => onChangeSignal.TrySetResult(true));
+            1,
+            () => Task.FromResult(claims.Count > 0 ? claims.Dequeue() : null),
+            _ => Task.CompletedTask,
+            () => onChangeSignal.TrySetResult(true));
 
         await onChangeSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Empty(inFlight);

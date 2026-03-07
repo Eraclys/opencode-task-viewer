@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -29,14 +28,23 @@ public sealed class SonarOrchestratorSonarGatewayTests
                 OnChange = () => { }
             });
 
-        var mapping = await orchestrator.UpsertMapping(new JsonObject
-        {
-            ["sonarProjectKey"] = "alpha-key",
-            ["directory"] = "C:/Work/Alpha",
-            ["enabled"] = true
-        });
+        var mapping = await orchestrator.UpsertMapping(
+            new JsonObject
+            {
+                ["sonarProjectKey"] = "alpha-key",
+                ["directory"] = "C:/Work/Alpha",
+                ["enabled"] = true
+            });
 
-        var result = await orchestrator.ListIssues(mapping.Id, "CODE_SMELL", null, null, 1, 20, null);
+        var result = await orchestrator.ListIssues(
+            mapping.Id,
+            "CODE_SMELL",
+            null,
+            null,
+            1,
+            20,
+            null);
+
         var issues = (IEnumerable<object>?)result.GetType().GetProperty("issues")?.GetValue(result);
 
         Assert.NotNull(issues);
@@ -44,7 +52,7 @@ public sealed class SonarOrchestratorSonarGatewayTests
         Assert.True(gateway.Calls > 0);
     }
 
-    private sealed class FakeSonarGateway : ISonarGateway
+    sealed class FakeSonarGateway : ISonarGateway
     {
         public int Calls { get; private set; }
 
@@ -54,29 +62,30 @@ public sealed class SonarOrchestratorSonarGatewayTests
 
             if (endpointPath == "/api/issues/search")
             {
-                return Task.FromResult<JsonNode?>(new JsonObject
-                {
-                    ["paging"] = new JsonObject
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
                     {
-                        ["pageIndex"] = 1,
-                        ["pageSize"] = 20,
-                        ["total"] = 1
-                    },
-                    ["issues"] = new JsonArray
-                    {
-                        new JsonObject
+                        ["paging"] = new JsonObject
                         {
-                            ["key"] = "sq-1",
-                            ["type"] = "CODE_SMELL",
-                            ["severity"] = "MAJOR",
-                            ["rule"] = "javascript:S1126",
-                            ["message"] = "Remove redundant code",
-                            ["component"] = "alpha-key:src/file.js",
-                            ["line"] = 5,
-                            ["status"] = "OPEN"
+                            ["pageIndex"] = 1,
+                            ["pageSize"] = 20,
+                            ["total"] = 1
+                        },
+                        ["issues"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["key"] = "sq-1",
+                                ["type"] = "CODE_SMELL",
+                                ["severity"] = "MAJOR",
+                                ["rule"] = "javascript:S1126",
+                                ["message"] = "Remove redundant code",
+                                ["component"] = "alpha-key:src/file.js",
+                                ["line"] = 5,
+                                ["status"] = "OPEN"
+                            }
                         }
-                    }
-                });
+                    });
             }
 
             return Task.FromResult<JsonNode?>(null);

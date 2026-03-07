@@ -8,9 +8,9 @@ namespace TaskViewer.Server.Infrastructure.Orchestration;
 
 public sealed class HttpSonarGateway : ISonarGateway
 {
-    private readonly string _sonarUrl;
-    private readonly string _sonarToken;
-    private readonly HttpClient _httpClient;
+    readonly HttpClient _httpClient;
+    readonly string _sonarToken;
+    readonly string _sonarUrl;
 
     public HttpSonarGateway(string sonarUrl, string sonarToken, HttpClient? httpClient = null)
     {
@@ -21,7 +21,8 @@ public sealed class HttpSonarGateway : ISonarGateway
 
     public async Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
     {
-        if (string.IsNullOrWhiteSpace(_sonarUrl) || string.IsNullOrWhiteSpace(_sonarToken))
+        if (string.IsNullOrWhiteSpace(_sonarUrl) ||
+            string.IsNullOrWhiteSpace(_sonarToken))
             throw new InvalidOperationException("SonarQube is not configured");
 
         var url = new Uri(new Uri(_sonarUrl), endpointPath);

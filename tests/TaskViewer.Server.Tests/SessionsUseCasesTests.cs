@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Sessions;
 
 namespace TaskViewer.Server.Tests;
@@ -10,9 +9,10 @@ public sealed class SessionsUseCasesTests
     public async Task GetSessionTasksAsync_ReturnsNotFound_WhenSessionDoesNotExist()
     {
         await using var orchestrator = CreateOrchestrator();
+
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<JsonObject?>(null));
+            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(null));
 
         var result = await sut.GetSessionTasksAsync("missing-session");
 
@@ -24,11 +24,12 @@ public sealed class SessionsUseCasesTests
     public async Task GetLastAssistantMessageAsync_ReturnsMessage_WhenFound()
     {
         await using var orchestrator = CreateOrchestrator();
-        var session = new JsonObject { ["id"] = "sess-1", ["directory"] = "C:/Work/Alpha" };
+
+        var session = new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null);
 
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<JsonObject?>(session),
+            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
             getLastAssistantMessage: _ => Task.FromResult<LastAssistantMessage?>(new LastAssistantMessage("done", "2026-01-01T00:00:00.0000000+00:00")));
 
         var result = await sut.GetLastAssistantMessageAsync("sess-1");
@@ -42,18 +43,21 @@ public sealed class SessionsUseCasesTests
     public async Task ArchiveSessionAsync_InvalidatesCachesAndBroadcasts_WhenFound()
     {
         await using var orchestrator = CreateOrchestrator();
-        var session = new JsonObject { ["id"] = "sess-1", ["directory"] = "C:/Work/Alpha" };
+
+        var session = new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null);
+
         var invalidated = 0;
         var broadcasted = 0;
 
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<JsonObject?>(session),
+            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
             archiveSessionOnOpenCode: (_, _) => Task.FromResult<string?>("2026-01-01T00:00:00.0000000+00:00"),
             invalidateAllCaches: () => invalidated++,
             broadcastUpdate: () =>
             {
                 broadcasted++;
+
                 return Task.CompletedTask;
             });
 
@@ -70,76 +74,77 @@ public sealed class SessionsUseCasesTests
         await using var orchestrator = CreateOrchestrator();
         string? capturedLimit = null;
 
-        var session = new JsonObject
-        {
-            ["id"] = "sess-1",
-            ["title"] = "Session One",
-            ["directory"] = "C:/Work/Alpha",
-            ["project"] = new JsonObject { ["worktree"] = "C:/Work/Alpha" },
-            ["time"] = new JsonObject
-            {
-                ["created"] = "2026-01-01T00:00:00.0000000+00:00",
-                ["updated"] = "2026-01-01T00:00:01.0000000+00:00"
-            }
-        };
+        var session = new OpenCodeSessionDto(
+            "sess-1",
+            "Session One",
+            "C:/Work/Alpha",
+            "C:/Work/Alpha",
+            "2026-01-01T00:00:00.0000000+00:00",
+            "2026-01-01T00:00:01.0000000+00:00");
 
         var sut = CreateUseCases(
             orchestrator,
-            listGlobalSessions: limit =>
+            limit =>
             {
                 capturedLimit = limit;
-                return Task.FromResult(new List<JsonObject> { session });
+
+                return Task.FromResult(
+                    new List<OpenCodeSessionDto>
+                    {
+                        session
+                    });
             },
             getHasAssistantResponse: _ => Task.FromResult<bool?>(false));
 
         var result = await sut.ListSessionsAsync(null);
 
         Assert.Equal("20", capturedLimit);
-        Assert.Single(result);
+        var item = Assert.Single(result);
+        Assert.Equal("sess-1", item.Id);
+        Assert.Equal("Session One", item.Name);
+        Assert.Equal("idle", item.RuntimeStatus.Type);
+        Assert.Equal("pending", item.Status);
     }
 
-    private static SessionsUseCases CreateUseCases(
+    static SessionsUseCases CreateUseCases(
         SonarOrchestrator orchestrator,
-        Func<string, Task<List<JsonObject>>>? listGlobalSessions = null,
-        Func<string?, Task<Dictionary<string, JsonObject>>>? getStatusMapForDirectory = null,
-        Func<JsonObject?, string?>? getSessionDirectory = null,
-        Func<JsonObject?, string?>? getProjectDisplayPath = null,
-        Func<string?, string, Dictionary<string, JsonObject>, string>? normalizeRuntimeStatus = null,
+        Func<string, Task<List<OpenCodeSessionDto>>>? listGlobalSessions = null,
+        Func<string?, Task<Dictionary<string, SessionRuntimeStatus>>>? getStatusMapForDirectory = null,
+        Func<string?, string, Dictionary<string, SessionRuntimeStatus>, string>? normalizeRuntimeStatus = null,
         Func<string, Task<bool?>>? getHasAssistantResponse = null,
         Func<string, string, bool?, string>? deriveSessionKanbanStatus = null,
         Func<string, string?, string?>? buildOpenCodeSessionUrl = null,
         Func<string?, string?>? parseTime = null,
-        Func<QueueItemRecord, object?>? mapQueueItemToSessionSummary = null,
-        Func<string, Task<JsonObject?>>? findSessionInfo = null,
-        Func<string, string?, Task<List<JsonObject>>>? getTodosForSession = null,
-        Func<List<JsonObject>, List<object>>? mapTodosToViewerTasks = null,
+        Func<QueueItemRecord, SessionSummaryDto?>? mapQueueItemToSessionSummary = null,
+        Func<string, Task<OpenCodeSessionDto?>>? findSessionInfo = null,
+        Func<string, string?, Task<List<SessionTodoDto>>>? getTodosForSession = null,
+        Func<List<SessionTodoDto>, List<ViewerTaskDto>>? mapTodosToViewerTasks = null,
         Func<string, Task<LastAssistantMessage?>>? getLastAssistantMessage = null,
         Func<string, string?, Task<string?>>? archiveSessionOnOpenCode = null,
         Action? invalidateAllCaches = null,
         Func<Task>? broadcastUpdate = null)
     {
         return new SessionsUseCases(
-            listGlobalSessions: listGlobalSessions ?? (_ => Task.FromResult(new List<JsonObject>())),
-            getStatusMapForDirectory: getStatusMapForDirectory ?? (_ => Task.FromResult(new Dictionary<string, JsonObject>(StringComparer.Ordinal))),
-            getSessionDirectory: getSessionDirectory ?? (session => session?["directory"]?.ToString()),
-            getProjectDisplayPath: getProjectDisplayPath ?? (session => session?["project"]?["worktree"]?.ToString()),
-            normalizeRuntimeStatus: normalizeRuntimeStatus ?? ((_, _, _) => "idle"),
-            getHasAssistantResponse: getHasAssistantResponse ?? (_ => Task.FromResult<bool?>(false)),
-            deriveSessionKanbanStatus: deriveSessionKanbanStatus ?? ((_, _, _) => "pending"),
-            buildOpenCodeSessionUrl: buildOpenCodeSessionUrl ?? ((sessionId, _) => $"http://localhost:4096/session/{sessionId}"),
-            parseTime: parseTime ?? (value => value),
-            orchestrator: orchestrator,
-            mapQueueItemToSessionSummary: mapQueueItemToSessionSummary ?? (_ => null),
-            findSessionInfo: findSessionInfo ?? (_ => Task.FromResult<JsonObject?>(new JsonObject { ["directory"] = "C:/Work/Alpha" })),
-            getTodosForSession: getTodosForSession ?? ((_, _) => Task.FromResult(new List<JsonObject>())),
-            mapTodosToViewerTasks: mapTodosToViewerTasks ?? (_ => new List<object>()),
-            getLastAssistantMessage: getLastAssistantMessage ?? (_ => Task.FromResult<LastAssistantMessage?>(null)),
-            archiveSessionOnOpenCode: archiveSessionOnOpenCode ?? ((_, _) => Task.FromResult<string?>("2026-01-01T00:00:00.0000000+00:00")),
-            invalidateAllCaches: invalidateAllCaches ?? (() => { }),
-            broadcastUpdate: broadcastUpdate ?? (() => Task.CompletedTask));
+            listGlobalSessions ?? (_ => Task.FromResult(new List<OpenCodeSessionDto>())),
+            getStatusMapForDirectory ?? (_ => Task.FromResult(new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal))),
+            normalizeRuntimeStatus ?? ((_, _, _) => "idle"),
+            getHasAssistantResponse ?? (_ => Task.FromResult<bool?>(false)),
+            deriveSessionKanbanStatus ?? ((_, _, _) => "pending"),
+            buildOpenCodeSessionUrl ?? ((sessionId, _) => $"http://localhost:4096/session/{sessionId}"),
+            parseTime ?? (value => value),
+            orchestrator,
+            mapQueueItemToSessionSummary ?? (_ => null),
+            findSessionInfo ??
+            (_ => Task.FromResult<OpenCodeSessionDto?>(new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null))),
+            getTodosForSession ?? ((_, _) => Task.FromResult(new List<SessionTodoDto>())),
+            mapTodosToViewerTasks ?? (_ => new List<ViewerTaskDto>()),
+            getLastAssistantMessage ?? (_ => Task.FromResult<LastAssistantMessage?>(null)),
+            archiveSessionOnOpenCode ?? ((_, _) => Task.FromResult<string?>("2026-01-01T00:00:00.0000000+00:00")),
+            invalidateAllCaches ?? (() => { }),
+            broadcastUpdate ?? (() => Task.CompletedTask));
     }
 
-    private static SonarOrchestrator CreateOrchestrator()
+    static SonarOrchestrator CreateOrchestrator()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-usecases-{Guid.NewGuid():N}.sqlite");
 

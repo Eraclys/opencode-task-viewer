@@ -1,12 +1,11 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class SonarRulesReadService : ISonarRulesReadService
 {
-    private readonly ISonarGateway _sonarGateway;
-    private readonly ISonarRuleReadService _ruleReadService;
+    readonly ISonarRuleReadService _ruleReadService;
+    readonly ISonarGateway _sonarGateway;
 
     public SonarRulesReadService(ISonarGateway sonarGateway, ISonarRuleReadService ruleReadService)
     {
@@ -14,7 +13,11 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         _ruleReadService = ruleReadService;
     }
 
-    public async Task<SonarRulesSummary> SummarizeRulesAsync(MappingRecord mapping, string? issueType, string? issueStatus, int maxScanIssues)
+    public async Task<SonarRulesSummary> SummarizeRulesAsync(
+        MappingRecord mapping,
+        string? issueType,
+        string? issueStatus,
+        int maxScanIssues)
     {
         var normalizedType = NormalizeUpper(issueType);
         var normalizedStatus = NormalizeUpper(issueStatus) ?? string.Empty;
@@ -32,9 +35,9 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
                 page,
                 pageSize,
                 normalizedType,
-                severity: null,
-                issueStatus: normalizedStatus,
-                ruleKeys: null);
+                null,
+                normalizedStatus,
+                null);
 
             var data = await _sonarGateway.Fetch("/api/issues/search", query);
             var issues = data?["issues"] as JsonArray ?? [];
@@ -43,6 +46,7 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
             foreach (var issueNode in issues)
             {
                 var key = issueNode?["rule"]?.ToString()?.Trim();
+
                 if (string.IsNullOrWhiteSpace(key))
                     continue;
 
@@ -51,9 +55,7 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
                 scanned += 1;
             }
 
-            var endReached = issues.Count < pageSize
-                             || (total.HasValue && page * pageSize >= total.Value)
-                             || scanned >= maxScanIssues;
+            var endReached = issues.Count < pageSize || (total.HasValue && page * pageSize >= total.Value) || scanned >= maxScanIssues;
 
             if (endReached)
                 break;
@@ -62,6 +64,7 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         }
 
         var rules = new List<SonarRuleSummaryItem>(counts.Count);
+
         foreach (var key in counts.Keys)
         {
             var name = await _ruleReadService.GetRuleDisplayName(key);
@@ -75,20 +78,21 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
             .ToList();
 
         return new SonarRulesSummary(
-            IssueType: normalizedType,
-            IssueStatus: string.IsNullOrWhiteSpace(normalizedStatus) ? null : normalizedStatus,
-            ScannedIssues: scanned,
-            Truncated: scanned >= maxScanIssues,
-            Rules: rules);
+            normalizedType,
+            string.IsNullOrWhiteSpace(normalizedStatus) ? null : normalizedStatus,
+            scanned,
+            scanned >= maxScanIssues,
+            rules);
     }
 
-    private static string? NormalizeUpper(string? value)
+    static string? NormalizeUpper(string? value)
     {
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
-    private static int? ParseIntNullable(object? value)
+    static int? ParseIntNullable(object? value)
     {
         if (value is null)
             return null;
@@ -96,7 +100,8 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         if (value is int i)
             return i;
 
-        if (value is long l && l is >= int.MinValue and <= int.MaxValue)
+        if (value is long l &&
+            l is >= int.MinValue and <= int.MaxValue)
             return (int)l;
 
         return int.TryParse(value.ToString(), out var parsed) ? parsed : null;

@@ -14,16 +14,10 @@ public sealed class DirectoryPathTests
     [InlineData("C:\\", "C:\\")]
     [InlineData(" C:/Work/Alpha/ ", "C:/Work/Alpha")]
     [InlineData("C:\\Work\\Alpha\\", "C:\\Work\\Alpha")]
-    public void Normalize_HandlesExpectedCases(string? input, string? expected)
-    {
-        Assert.Equal(expected, DirectoryPath.Normalize(input));
-    }
+    public void Normalize_HandlesExpectedCases(string? input, string? expected) => Assert.Equal(expected, DirectoryPath.Normalize(input));
 
     [Fact]
-    public void GetCacheKey_UsesForwardSlash()
-    {
-        Assert.Equal("C:/Work/Alpha", DirectoryPath.GetCacheKey("C:\\Work\\Alpha\\"));
-    }
+    public void GetCacheKey_UsesForwardSlash() => Assert.Equal("C:/Work/Alpha", DirectoryPath.GetCacheKey("C:\\Work\\Alpha\\"));
 
     [Fact]
     public void GetVariants_ReturnsOriginalForwardAndBackwardForms()

@@ -1,8 +1,8 @@
-﻿using System.Text.Json.Nodes;
+﻿using TaskViewer.Server.Application.Sessions;
 
 sealed class SessionCache
 {
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.MinValue;
-    public List<JsonObject> Data { get; set; } = [];
-    public Dictionary<string, JsonObject> ById { get; set; } = new(StringComparer.Ordinal);
+    public List<OpenCodeSessionDto> Data { get; set; } = [];
+    public Dictionary<string, OpenCodeSessionDto> ById { get; set; } = new(StringComparer.Ordinal);
 }

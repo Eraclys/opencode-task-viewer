@@ -27,6 +27,7 @@ public static class TodoNormalization
             return null;
 
         var normalized = raw.Trim().ToLowerInvariant();
+
         return normalized switch
         {
             "p0" or "0" or "urgent" or "p1" or "1" => "high",

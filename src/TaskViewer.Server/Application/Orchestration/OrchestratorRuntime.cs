@@ -2,10 +2,10 @@ namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class OrchestratorRuntime : IOrchestratorRuntime
 {
-    private Task? _loopTask;
-    private volatile bool _tickRunning;
-    private PeriodicTimer? _timer;
-    private volatile bool _disposed;
+    volatile bool _disposed;
+    Task? _loopTask;
+    volatile bool _tickRunning;
+    PeriodicTimer? _timer;
 
     public async Task RunOnceAsync(Func<Task> tickBody)
     {
@@ -39,7 +39,8 @@ public sealed class OrchestratorRuntime : IOrchestratorRuntime
             {
                 await tick();
 
-                while (!stoppingToken.IsCancellationRequested && _timer is not null)
+                while (!stoppingToken.IsCancellationRequested &&
+                       _timer is not null)
                 {
                     try
                     {

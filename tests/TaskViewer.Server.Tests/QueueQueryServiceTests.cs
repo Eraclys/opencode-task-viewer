@@ -1,4 +1,4 @@
-using TaskViewer.Server;
+using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -14,7 +14,13 @@ public sealed class QueueQueryServiceTests
 
         await sut.ListQueueAsync("queued,FAILED,ignored,queued", 10000);
 
-        Assert.Equal(["queued", "failed"], repo.LastStates);
+        Assert.Equal(
+            [
+                "queued",
+                "failed"
+            ],
+            repo.LastStates);
+
         Assert.Equal(5000, repo.LastLimit);
     }
 
@@ -24,9 +30,15 @@ public sealed class QueueQueryServiceTests
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync(new System.Text.Json.Nodes.JsonArray("done", "cancelled", "bogus"), -2);
+        await sut.ListQueueAsync(new JsonArray("done", "cancelled", "bogus"), -2);
 
-        Assert.Equal(["done", "cancelled"], repo.LastStates);
+        Assert.Equal(
+            [
+                "done",
+                "cancelled"
+            ],
+            repo.LastStates);
+
         Assert.Equal(1, repo.LastLimit);
     }
 
@@ -35,8 +47,15 @@ public sealed class QueueQueryServiceTests
     {
         var repo = new FakeQueueRepository
         {
-            Stats = new QueueStats(1, 2, 3, 4, 5, 6)
+            Stats = new QueueStats(
+                1,
+                2,
+                3,
+                4,
+                5,
+                6)
         };
+
         var sut = new QueueQueryService(repo);
 
         var stats = await sut.GetQueueStatsAsync();
@@ -45,27 +64,55 @@ public sealed class QueueQueryServiceTests
         Assert.Equal(6, stats.Cancelled);
     }
 
-    private sealed class FakeQueueRepository : IQueueRepository
+    sealed class FakeQueueRepository : IQueueRepository
     {
         public List<string> LastStates { get; private set; } = new();
         public int LastLimit { get; private set; }
-        public QueueStats Stats { get; set; } = new(0, 0, 0, 0, 0, 0);
 
-        public Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(MappingRecord mapping, string? type, string instructionText, IReadOnlyList<NormalizedIssue> issues, int maxAttempts, string now)
+        public QueueStats Stats { get; set; } = new(
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
+
+        public Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
+            MappingRecord mapping,
+            string? type,
+            string instructionText,
+            IReadOnlyList<NormalizedIssue> issues,
+            int maxAttempts,
+            string now)
             => throw new NotSupportedException();
+
         public Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit)
         {
             LastStates = states.ToList();
             LastLimit = limit;
+
             return Task.FromResult(new List<QueueItemRecord>());
         }
+
         public Task<QueueStats> GetQueueStats() => Task.FromResult(Stats);
         public Task<bool> CancelQueueItem(int id, string now) => throw new NotSupportedException();
         public Task<int> RetryFailed(string now) => throw new NotSupportedException();
         public Task<int> ClearQueued(string now) => throw new NotSupportedException();
         public Task<QueueItemRecord?> ClaimNextQueuedItem(string now) => throw new NotSupportedException();
-        public Task<bool> MarkSessionCreated(int id, string sessionId, string? openCodeUrl, string timestamp) => throw new NotSupportedException();
+
+        public Task<bool> MarkSessionCreated(
+            int id,
+            string sessionId,
+            string? openCodeUrl,
+            string timestamp) => throw new NotSupportedException();
+
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts) => throw new NotSupportedException();
-        public Task<bool> MarkDispatchFailure(int id, string state, string? nextAttemptAt, string lastError, string updatedAt) => throw new NotSupportedException();
+
+        public Task<bool> MarkDispatchFailure(
+            int id,
+            string state,
+            string? nextAttemptAt,
+            string lastError,
+            string updatedAt) => throw new NotSupportedException();
     }
 }

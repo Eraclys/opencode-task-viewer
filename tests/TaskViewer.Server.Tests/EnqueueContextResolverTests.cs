@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -86,7 +85,7 @@ public sealed class EnqueueContextResolverTests
         Assert.Null(repo.UpsertMappingId);
     }
 
-    private sealed class FakeMappingRepository : IMappingRepository
+    sealed class FakeMappingRepository : IMappingRepository
     {
         public MappingRecord? Mapping { get; set; }
         public JsonObject? Profile { get; set; }
@@ -96,39 +95,38 @@ public sealed class EnqueueContextResolverTests
 
         public Task<List<MappingRecord>> ListMappings() => Task.FromResult(new List<MappingRecord>());
 
-        public Task<MappingRecord?> GetMappingById(int id)
-        {
-            return Task.FromResult(Mapping is not null && Mapping.Id == id ? Mapping : null);
-        }
+        public Task<MappingRecord?> GetMappingById(int id) => Task.FromResult(Mapping is not null && Mapping.Id == id ? Mapping : null);
 
-        public Task<MappingRecord> UpsertMapping(int? id, string sonarProjectKey, string directory, string? branch, bool enabled, string now)
-        {
-            throw new NotSupportedException();
-        }
+        public Task<MappingRecord> UpsertMapping(
+            int? id,
+            string sonarProjectKey,
+            string directory,
+            string? branch,
+            bool enabled,
+            string now) => throw new NotSupportedException();
 
-        public Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType)
-        {
-            return Task.FromResult(Profile);
-        }
+        public Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType) => Task.FromResult(Profile);
 
-        public Task<JsonObject> UpsertInstructionProfile(int mappingId, string issueType, string instructions, string now)
+        public Task<JsonObject> UpsertInstructionProfile(
+            int mappingId,
+            string issueType,
+            string instructions,
+            string now)
         {
             UpsertMappingId = mappingId;
             UpsertIssueType = issueType;
             UpsertInstructions = instructions;
 
-            return Task.FromResult(new JsonObject
-            {
-                ["mapping_id"] = mappingId,
-                ["issue_type"] = issueType,
-                ["instructions"] = instructions,
-                ["updated_at"] = now
-            });
+            return Task.FromResult(
+                new JsonObject
+                {
+                    ["mapping_id"] = mappingId,
+                    ["issue_type"] = issueType,
+                    ["instructions"] = instructions,
+                    ["updated_at"] = now
+                });
         }
 
-        public Task<List<string>> ListEnabledMappingDirectories()
-        {
-            throw new NotSupportedException();
-        }
+        public Task<List<string>> ListEnabledMappingDirectories() => throw new NotSupportedException();
     }
 }

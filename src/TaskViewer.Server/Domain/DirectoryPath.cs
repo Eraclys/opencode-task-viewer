@@ -23,6 +23,7 @@ public static class DirectoryPath
     public static string? ToForwardSlash(string? value)
     {
         var normalized = Normalize(value);
+
         return normalized?.Replace('\\', '/');
     }
 
@@ -31,10 +32,15 @@ public static class DirectoryPath
     public static List<string> GetVariants(string? value)
     {
         var normalized = Normalize(value);
+
         if (string.IsNullOrWhiteSpace(normalized))
             return [];
 
-        var variants = new List<string> { normalized };
+        var variants = new List<string>
+        {
+            normalized
+        };
+
         var forward = normalized.Replace('\\', '/');
         var backward = normalized.Replace('/', '\\');
 

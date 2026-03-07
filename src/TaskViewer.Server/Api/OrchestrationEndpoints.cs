@@ -20,7 +20,13 @@ public static class OrchestrationEndpoints
                 catch (Exception error)
                 {
                     Console.Error.WriteLine($"Error listing orchestrator mappings: {error}");
-                    return Results.Json(new { error = "Failed to list orchestration mappings" }, statusCode: 502);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = "Failed to list orchestration mappings"
+                        },
+                        statusCode: 502);
                 }
             });
 
@@ -32,6 +38,7 @@ public static class OrchestrationEndpoints
                 {
                     var body = await JsonNode.ParseAsync(ctx.Request.Body);
                     var mapping = await useCases.UpsertMappingAsync(body);
+
                     return Results.Json(mapping);
                 }
                 catch (Exception error)
@@ -39,7 +46,13 @@ public static class OrchestrationEndpoints
                     var message = error.Message;
                     var status = message.Contains("Missing", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error saving orchestrator mapping: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -58,7 +71,13 @@ public static class OrchestrationEndpoints
                 catch (Exception error)
                 {
                     Console.Error.WriteLine($"Error loading instruction profile: {error}");
-                    return Results.Json(new { error = "Failed to load instruction profile" }, statusCode: 502);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = "Failed to load instruction profile"
+                        },
+                        statusCode: 502);
                 }
             });
 
@@ -69,6 +88,7 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var body = await JsonNode.ParseAsync(ctx.Request.Body);
+
                     return Results.Json(await useCases.UpsertInstructionProfileAsync(body));
                 }
                 catch (Exception error)
@@ -76,7 +96,13 @@ public static class OrchestrationEndpoints
                     var message = error.Message;
                     var status = message.Contains("Missing", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error saving instruction profile: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -89,8 +115,14 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var mappingId = ctx.Request.Query["mappingId"].ToString();
+
                     if (string.IsNullOrWhiteSpace(mappingId))
-                        return Results.Json(new { error = "Missing mappingId" }, statusCode: 400);
+                        return Results.Json(
+                            new
+                            {
+                                error = "Missing mappingId"
+                            },
+                            statusCode: 400);
 
                     var ruleKeys = ctx.Request.Query["ruleKeys"].ToString() is { Length: > 0 } rk
                         ? rk
@@ -114,7 +146,13 @@ public static class OrchestrationEndpoints
                     var message = error.Message;
                     var status = message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error loading SonarQube issues: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -127,8 +165,14 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var mappingId = ctx.Request.Query["mappingId"].ToString();
+
                     if (string.IsNullOrWhiteSpace(mappingId))
-                        return Results.Json(new { error = "Missing mappingId" }, statusCode: 400);
+                        return Results.Json(
+                            new
+                            {
+                                error = "Missing mappingId"
+                            },
+                            statusCode: 400);
 
                     var result = await useCases.ListRulesAsync(
                         mappingId,
@@ -142,7 +186,13 @@ public static class OrchestrationEndpoints
                     var message = error.Message;
                     var status = message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error loading SonarQube rules: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -154,19 +204,25 @@ public static class OrchestrationEndpoints
                 {
                     var body = await JsonNode.ParseAsync(ctx.Request.Body);
                     var result = await useCases.EnqueueIssuesAsync(body);
+
                     return Results.Json(result);
                 }
                 catch (Exception error)
                 {
                     var message = error.Message;
-                    var status = message.Contains("Missing", StringComparison.OrdinalIgnoreCase)
-                                 || message.Contains("No issues", StringComparison.OrdinalIgnoreCase)
-                                 || message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
+
+                    var status = message.Contains("Missing", StringComparison.OrdinalIgnoreCase) || message.Contains("No issues", StringComparison.OrdinalIgnoreCase) || message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
                         ? 400
                         : 502;
 
                     Console.Error.WriteLine($"Error enqueueing SonarQube issues: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -178,19 +234,25 @@ public static class OrchestrationEndpoints
                 {
                     var body = await JsonNode.ParseAsync(ctx.Request.Body);
                     var result = await useCases.EnqueueAllMatchingAsync(body);
+
                     return Results.Json(result);
                 }
                 catch (Exception error)
                 {
                     var message = error.Message;
-                    var status = message.Contains("required", StringComparison.OrdinalIgnoreCase)
-                                 || message.Contains("Missing", StringComparison.OrdinalIgnoreCase)
-                                 || message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
+
+                    var status = message.Contains("required", StringComparison.OrdinalIgnoreCase) || message.Contains("Missing", StringComparison.OrdinalIgnoreCase) || message.Contains("Mapping not found", StringComparison.OrdinalIgnoreCase)
                         ? 400
                         : 502;
 
                     Console.Error.WriteLine($"Error enqueueing all matching SonarQube issues: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -211,7 +273,13 @@ public static class OrchestrationEndpoints
                 catch (Exception error)
                 {
                     Console.Error.WriteLine($"Error loading queue items: {error}");
-                    return Results.Json(new { error = "Failed to load orchestration queue" }, statusCode: 502);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = "Failed to load orchestration queue"
+                        },
+                        statusCode: 502);
                 }
             });
 
@@ -222,17 +290,33 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var ok = await useCases.CancelQueueItemAsync(queueId);
-                    if (!ok)
-                        return Results.Json(new { error = "Queue item not found or already terminal" }, statusCode: 404);
 
-                    return Results.Json(new { ok = true });
+                    if (!ok)
+                        return Results.Json(
+                            new
+                            {
+                                error = "Queue item not found or already terminal"
+                            },
+                            statusCode: 404);
+
+                    return Results.Json(
+                        new
+                        {
+                            ok = true
+                        });
                 }
                 catch (Exception error)
                 {
                     var message = error.Message;
                     var status = message.Contains("Invalid queue id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error cancelling queue item: {error}");
-                    return Results.Json(new { error = message }, statusCode: status);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = message
+                        },
+                        statusCode: status);
                 }
             });
 
@@ -243,12 +327,23 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var retried = await useCases.RetryFailedAsync();
-                    return Results.Json(new { retried });
+
+                    return Results.Json(
+                        new
+                        {
+                            retried
+                        });
                 }
                 catch (Exception error)
                 {
                     Console.Error.WriteLine($"Error retrying failed queue items: {error}");
-                    return Results.Json(new { error = "Failed to retry failed queue items" }, statusCode: 502);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = "Failed to retry failed queue items"
+                        },
+                        statusCode: 502);
                 }
             });
 
@@ -259,19 +354,30 @@ public static class OrchestrationEndpoints
                 try
                 {
                     var cleared = await useCases.ClearQueuedAsync();
-                    return Results.Json(new { cleared });
+
+                    return Results.Json(
+                        new
+                        {
+                            cleared
+                        });
                 }
                 catch (Exception error)
                 {
                     Console.Error.WriteLine($"Error clearing queued items: {error}");
-                    return Results.Json(new { error = "Failed to clear queued items" }, statusCode: 502);
+
+                    return Results.Json(
+                        new
+                        {
+                            error = "Failed to clear queued items"
+                        },
+                        statusCode: 502);
                 }
             });
 
         return app;
     }
 
-    private static void SetNoStore(HttpResponse response)
+    static void SetNoStore(HttpResponse response)
     {
         response.Headers.CacheControl = "no-store, no-cache, must-revalidate, private";
         response.Headers.Pragma = "no-cache";

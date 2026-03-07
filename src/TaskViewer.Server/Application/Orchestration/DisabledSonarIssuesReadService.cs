@@ -1,5 +1,3 @@
-using TaskViewer.Server;
-
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class DisabledSonarIssuesReadService : ISonarIssuesReadService
@@ -11,8 +9,6 @@ public sealed class DisabledSonarIssuesReadService : ISonarIssuesReadService
         string? issueStatus,
         int page,
         int pageSize,
-        IReadOnlyList<string> ruleKeys)
-    {
+        IReadOnlyList<string> ruleKeys) =>
         throw new InvalidOperationException("SonarQube is not configured");
-    }
 }

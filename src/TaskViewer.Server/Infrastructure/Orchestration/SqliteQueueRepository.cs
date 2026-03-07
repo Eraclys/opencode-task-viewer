@@ -1,13 +1,12 @@
 using Microsoft.Data.Sqlite;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
 
-internal sealed class SqliteQueueRepository : IQueueRepository
+sealed class SqliteQueueRepository : IQueueRepository
 {
-    private readonly SemaphoreSlim _dbLock;
-    private readonly Func<SqliteConnection> _openConnection;
-    private readonly Action _onChange;
+    readonly SemaphoreSlim _dbLock;
+    readonly Action _onChange;
+    readonly Func<SqliteConnection> _openConnection;
 
     public SqliteQueueRepository(SemaphoreSlim dbLock, Func<SqliteConnection> openConnection, Action onChange)
     {
@@ -48,7 +47,9 @@ internal sealed class SqliteQueueRepository : IQueueRepository
             var items = new List<QueueItemRecord>();
 
             while (reader.Read())
+            {
                 items.Add(MapQueue(reader));
+            }
 
             return items;
         }
@@ -87,10 +88,12 @@ internal sealed class SqliteQueueRepository : IQueueRepository
                 {
                     var state = existingReader.GetString(existingReader.GetOrdinal("state"));
                     skipped.Add(new QueueSkip(issue.Key, $"already-{state}"));
+
                     continue;
                 }
 
                 using var insert = conn.CreateCommand();
+
                 insert.CommandText = @"
           INSERT INTO queue_items (
             issue_key, mapping_id, sonar_project_key, directory, branch,
@@ -132,6 +135,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
                 using var readInserted = conn.CreateCommand();
                 readInserted.CommandText = "SELECT * FROM queue_items WHERE id = last_insert_rowid()";
                 using var insertedReader = readInserted.ExecuteReader();
+
                 if (insertedReader.Read())
                     createdItems.Add(MapQueue(insertedReader));
             }
@@ -168,6 +172,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
             while (reader.Read())
             {
                 var state = reader.GetString(reader.GetOrdinal("state"));
+
                 if (!stats.ContainsKey(state))
                     continue;
 
@@ -196,10 +201,12 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var cmd = conn.CreateCommand();
+
             cmd.CommandText = @"
         UPDATE queue_items
         SET state = 'cancelled', cancelled_at = $now, updated_at = $now
         WHERE id = $id AND state IN ('queued', 'dispatching')";
+
             cmd.Parameters.AddWithValue("$now", now);
             cmd.Parameters.AddWithValue("$id", id);
             var changed = cmd.ExecuteNonQuery();
@@ -223,10 +230,12 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var cmd = conn.CreateCommand();
+
             cmd.CommandText = @"
         UPDATE queue_items
         SET state = 'queued', next_attempt_at = $now, updated_at = $now, last_error = NULL
         WHERE state = 'failed'";
+
             cmd.Parameters.AddWithValue("$now", now);
             var changed = cmd.ExecuteNonQuery();
 
@@ -249,10 +258,12 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var cmd = conn.CreateCommand();
+
             cmd.CommandText = @"
         UPDATE queue_items
         SET state = 'cancelled', cancelled_at = $now, updated_at = $now
         WHERE state = 'queued'";
+
             cmd.Parameters.AddWithValue("$now", now);
             var changed = cmd.ExecuteNonQuery();
 
@@ -275,6 +286,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var select = conn.CreateCommand();
+
             select.CommandText = @"
         SELECT *
         FROM queue_items
@@ -282,14 +294,17 @@ internal sealed class SqliteQueueRepository : IQueueRepository
           AND (next_attempt_at IS NULL OR next_attempt_at <= $now)
         ORDER BY datetime(created_at) ASC, id ASC
         LIMIT 1";
+
             select.Parameters.AddWithValue("$now", now);
 
             using var reader = select.ExecuteReader();
+
             if (!reader.Read())
                 return null;
 
             var id = reader.GetInt32(reader.GetOrdinal("id"));
             using var claim = conn.CreateCommand();
+
             claim.CommandText = @"
         UPDATE queue_items
         SET state = 'dispatching',
@@ -298,6 +313,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
             dispatched_at = COALESCE(dispatched_at, $now),
             last_error = NULL
         WHERE id = $id AND state = 'queued'";
+
             claim.Parameters.AddWithValue("$now", now);
             claim.Parameters.AddWithValue("$id", id);
 
@@ -317,7 +333,11 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    public async Task<bool> MarkSessionCreated(int id, string sessionId, string? openCodeUrl, string timestamp)
+    public async Task<bool> MarkSessionCreated(
+        int id,
+        string sessionId,
+        string? openCodeUrl,
+        string timestamp)
     {
         await _dbLock.WaitAsync();
 
@@ -325,6 +345,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var cmd = conn.CreateCommand();
+
             cmd.CommandText = @"
           UPDATE queue_items
           SET state = 'session_created',
@@ -335,12 +356,14 @@ internal sealed class SqliteQueueRepository : IQueueRepository
               next_attempt_at = NULL,
               last_error = NULL
           WHERE id = $id AND state = 'dispatching'";
+
             cmd.Parameters.AddWithValue("$sid", sessionId);
             cmd.Parameters.AddWithValue("$url", (object?)openCodeUrl ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$ts", timestamp);
             cmd.Parameters.AddWithValue("$id", id);
 
             var changed = cmd.ExecuteNonQuery();
+
             if (changed > 0)
                 _onChange();
 
@@ -369,6 +392,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
 
             var attemptCount = ParseIntSafe(reader["attempt_count"], fallbackAttemptCount);
             var maxAttempts = ParseIntSafe(reader["max_attempts"], fallbackMaxAttempts);
+
             return (attemptCount, maxAttempts);
         }
         finally
@@ -377,7 +401,12 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    public async Task<bool> MarkDispatchFailure(int id, string state, string? nextAttemptAt, string lastError, string updatedAt)
+    public async Task<bool> MarkDispatchFailure(
+        int id,
+        string state,
+        string? nextAttemptAt,
+        string lastError,
+        string updatedAt)
     {
         await _dbLock.WaitAsync();
 
@@ -385,6 +414,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         {
             using var conn = _openConnection();
             using var update = conn.CreateCommand();
+
             update.CommandText = @"
           UPDATE queue_items
           SET state = $state,
@@ -392,6 +422,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
               last_error = $error,
               updated_at = $updated
           WHERE id = $id AND state = 'dispatching'";
+
             update.Parameters.AddWithValue("$state", state);
             update.Parameters.AddWithValue("$next", (object?)nextAttemptAt ?? DBNull.Value);
             update.Parameters.AddWithValue("$error", lastError);
@@ -399,6 +430,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
             update.Parameters.AddWithValue("$id", id);
 
             var changed = update.ExecuteNonQuery();
+
             if (changed > 0)
                 _onChange();
 
@@ -410,7 +442,7 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    private static int ParseIntSafe(object? value, int fallback)
+    static int ParseIntSafe(object? value, int fallback)
     {
         if (value is null)
             return fallback;
@@ -424,17 +456,19 @@ internal sealed class SqliteQueueRepository : IQueueRepository
         return fallback;
     }
 
-    private static QueueItemRecord MapQueue(SqliteDataReader reader)
+    static QueueItemRecord MapQueue(SqliteDataReader reader)
     {
         string? Str(string name)
         {
             var ord = reader.GetOrdinal(name);
+
             return reader.IsDBNull(ord) ? null : reader.GetString(ord);
         }
 
         int? IntNullable(string name)
         {
             var ord = reader.GetOrdinal(name);
+
             return reader.IsDBNull(ord) ? null : reader.GetInt32(ord);
         }
 

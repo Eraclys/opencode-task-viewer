@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
@@ -18,14 +17,19 @@ public sealed class WorkingSessionsReadServiceTests
             (_, _) =>
             {
                 requestCount += 1;
-                return Task.FromResult<JsonNode?>(new JsonObject
-                {
-                    ["s1"] = new JsonObject { ["type"] = "busy" }
-                });
+
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["s1"] = new JsonObject
+                        {
+                            ["type"] = "busy"
+                        }
+                    });
             });
 
-        var first = await service.GetWorkingSessionsCountAsync(forceRefresh: false, pollMs: 1000);
-        var second = await service.GetWorkingSessionsCountAsync(forceRefresh: false, pollMs: 1000);
+        var first = await service.GetWorkingSessionsCountAsync(false, 1000);
+        var second = await service.GetWorkingSessionsCountAsync(false, 1000);
 
         Assert.Equal(1, first.Count);
         Assert.Equal(1, second.Count);
@@ -48,15 +52,25 @@ public sealed class WorkingSessionsReadServiceTests
                 if (string.Equals(dir, "C:/Work/Alpha", StringComparison.Ordinal))
                     throw new InvalidOperationException("first variant fails");
 
-                return Task.FromResult<JsonNode?>(new JsonObject
-                {
-                    ["s1"] = new JsonObject { ["type"] = "running" },
-                    ["s2"] = new JsonObject { ["type"] = "retry" },
-                    ["s3"] = new JsonObject { ["type"] = "done" }
-                });
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["s1"] = new JsonObject
+                        {
+                            ["type"] = "running"
+                        },
+                        ["s2"] = new JsonObject
+                        {
+                            ["type"] = "retry"
+                        },
+                        ["s3"] = new JsonObject
+                        {
+                            ["type"] = "done"
+                        }
+                    });
             });
 
-        var result = await service.GetWorkingSessionsCountAsync(forceRefresh: true, pollMs: 1000);
+        var result = await service.GetWorkingSessionsCountAsync(true, 1000);
 
         Assert.Equal(2, result.Count);
         Assert.True(seenDirectories.Count >= 2);
@@ -64,24 +78,34 @@ public sealed class WorkingSessionsReadServiceTests
         Assert.Equal("C:\\Work\\Alpha", seenDirectories[1]);
     }
 
-    private sealed class FakeMappingRepository : IMappingRepository
+    sealed class FakeMappingRepository : IMappingRepository
     {
-        private readonly List<string> _directories;
+        readonly List<string> _directories;
 
         public FakeMappingRepository(List<string> directories)
         {
             _directories = directories;
         }
 
-        public Task<List<string>> ListEnabledMappingDirectories()
-        {
-            return Task.FromResult(_directories);
-        }
+        public Task<List<string>> ListEnabledMappingDirectories() => Task.FromResult(_directories);
 
         public Task<List<MappingRecord>> ListMappings() => throw new NotSupportedException();
         public Task<MappingRecord?> GetMappingById(int id) => throw new NotSupportedException();
-        public Task<MappingRecord> UpsertMapping(int? id, string sonarProjectKey, string directory, string? branch, bool enabled, string now) => throw new NotSupportedException();
+
+        public Task<MappingRecord> UpsertMapping(
+            int? id,
+            string sonarProjectKey,
+            string directory,
+            string? branch,
+            bool enabled,
+            string now) => throw new NotSupportedException();
+
         public Task<JsonObject?> GetInstructionProfile(int mappingId, string issueType) => throw new NotSupportedException();
-        public Task<JsonObject> UpsertInstructionProfile(int mappingId, string issueType, string instructions, string now) => throw new NotSupportedException();
+
+        public Task<JsonObject> UpsertInstructionProfile(
+            int mappingId,
+            string issueType,
+            string instructions,
+            string now) => throw new NotSupportedException();
     }
 }

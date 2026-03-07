@@ -1,15 +1,14 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal sealed class OrchestrationMappingService : IOrchestrationMappingService
+sealed class OrchestrationMappingService : IOrchestrationMappingService
 {
-    private readonly IMappingRepository _mappingRepository;
-    private readonly Func<string?, string?> _normalizeDirectory;
-    private readonly Func<string> _nowIso;
+    readonly IMappingRepository _mappingRepository;
+    readonly Func<string?, string?> _normalizeDirectory;
+    readonly Func<string> _nowIso;
 
     public OrchestrationMappingService(
         IMappingRepository mappingRepository,
@@ -21,10 +20,7 @@ internal sealed class OrchestrationMappingService : IOrchestrationMappingService
         _nowIso = nowIso ?? (() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
     }
 
-    public Task<List<MappingRecord>> ListMappingsAsync()
-    {
-        return _mappingRepository.ListMappings();
-    }
+    public Task<List<MappingRecord>> ListMappingsAsync() => _mappingRepository.ListMappings();
 
     public async Task<MappingRecord?> GetMappingByIdAsync(object? mappingId)
     {
@@ -38,9 +34,7 @@ internal sealed class OrchestrationMappingService : IOrchestrationMappingService
 
     public async Task<MappingRecord> UpsertMappingAsync(JsonNode? payload)
     {
-        var sonarProjectKey = payload?["sonarProjectKey"]?.ToString()?.Trim()
-                              ?? payload?["sonar_project_key"]?.ToString()?.Trim()
-                              ?? string.Empty;
+        var sonarProjectKey = payload?["sonarProjectKey"]?.ToString()?.Trim() ?? payload?["sonar_project_key"]?.ToString()?.Trim() ?? string.Empty;
         var directory = payload?["directory"]?.ToString()?.Trim() ?? string.Empty;
         var branch = payload?["branch"]?.ToString()?.Trim();
 
@@ -99,10 +93,14 @@ internal sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException("Missing instructions");
 
-        return await _mappingRepository.UpsertInstructionProfile(mapping.Id, type, text, _nowIso());
+        return await _mappingRepository.UpsertInstructionProfile(
+            mapping.Id,
+            type,
+            text,
+            _nowIso());
     }
 
-    private static int ParseIntSafe(object? value, int fallback)
+    static int ParseIntSafe(object? value, int fallback)
     {
         if (value is null)
             return fallback;
@@ -110,7 +108,8 @@ internal sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (value is int i)
             return i;
 
-        if (value is long l && l is >= int.MinValue and <= int.MaxValue)
+        if (value is long l &&
+            l is >= int.MinValue and <= int.MaxValue)
             return (int)l;
 
         var s = Convert.ToString(value, CultureInfo.InvariantCulture);
@@ -124,9 +123,10 @@ internal sealed class OrchestrationMappingService : IOrchestrationMappingService
             : fallback;
     }
 
-    private static string? NormalizeIssueType(string? value)
+    static string? NormalizeIssueType(string? value)
     {
         var v = (value ?? string.Empty).Trim().ToUpperInvariant();
+
         return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 }

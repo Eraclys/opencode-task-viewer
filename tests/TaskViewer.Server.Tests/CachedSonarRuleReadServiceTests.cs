@@ -31,7 +31,7 @@ public sealed class CachedSonarRuleReadServiceTests
         Assert.Equal("javascript:S3776", name);
     }
 
-    private sealed class FakeSonarGateway : ISonarGateway
+    sealed class FakeSonarGateway : ISonarGateway
     {
         public int CallCount { get; private set; }
 
@@ -39,21 +39,19 @@ public sealed class CachedSonarRuleReadServiceTests
         {
             CallCount++;
 
-            return Task.FromResult<JsonNode?>(new JsonObject
-            {
-                ["rule"] = new JsonObject
+            return Task.FromResult<JsonNode?>(
+                new JsonObject
                 {
-                    ["name"] = "No collapsible if statements"
-                }
-            });
+                    ["rule"] = new JsonObject
+                    {
+                        ["name"] = "No collapsible if statements"
+                    }
+                });
         }
     }
 
-    private sealed class ThrowingGateway : ISonarGateway
+    sealed class ThrowingGateway : ISonarGateway
     {
-        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query)
-        {
-            throw new InvalidOperationException("boom");
-        }
+        public Task<JsonNode?> Fetch(string endpointPath, Dictionary<string, string?> query) => throw new InvalidOperationException("boom");
     }
 }

@@ -10,7 +10,10 @@ public sealed class AssistantMessageParserTests
     {
         var message = new JsonObject
         {
-            ["info"] = new JsonObject { ["role"] = "Assistant" }
+            ["info"] = new JsonObject
+            {
+                ["role"] = "Assistant"
+            }
         };
 
         Assert.Equal("assistant", AssistantMessageParser.GetMessageRole(message));
@@ -23,8 +26,16 @@ public sealed class AssistantMessageParserTests
         {
             ["parts"] = new JsonArray
             {
-                new JsonObject { ["type"] = "text", ["text"] = "Line one" },
-                new JsonObject { ["type"] = "text", ["text"] = "Line two" }
+                new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = "Line one"
+                },
+                new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = "Line two"
+                }
             }
         };
 

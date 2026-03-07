@@ -24,7 +24,11 @@ public sealed class SonarOrchestratorOptions
     public IQueueWorkerCoordinator? QueueWorkerCoordinator { get; init; }
     public IOrchestratorRuntime? OrchestratorRuntime { get; init; }
     public IWorkloadBackpressurePolicy? WorkloadBackpressurePolicy { get; init; }
+    internal IOrchestrationStatusService? OrchestrationStatusService { get; init; }
+    internal IWorkloadBackpressureStateService? WorkloadBackpressureStateService { get; init; }
+    internal IOrchestrationInputNormalizer? OrchestrationInputNormalizer { get; init; }
     internal IOrchestrationMappingService? OrchestrationMappingService { get; init; }
+    internal IQueueEnqueueService? QueueEnqueueService { get; init; }
     internal IQueueCommandsService? QueueCommandsService { get; init; }
     internal IQueueQueryService? QueueQueryService { get; init; }
     internal IQueueDispatchOrchestrationService? QueueDispatchOrchestrationService { get; init; }

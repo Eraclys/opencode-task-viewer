@@ -7,13 +7,13 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.FileProviders;
+using TaskViewer.Server;
 using TaskViewer.Server.Api;
-using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Application;
+using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Application.Sessions;
 using TaskViewer.Server.Domain;
 using TaskViewer.Server.Infrastructure.Orchestration;
-using TaskViewer.Server;
 
 var defaultPort = 3456;
 var defaultHost = "127.0.0.1";
@@ -28,13 +28,13 @@ var sonarUrl = Environment.GetEnvironmentVariable("SONARQUBE_URL") ?? string.Emp
 var sonarToken = Environment.GetEnvironmentVariable("SONARQUBE_TOKEN") ?? string.Empty;
 
 var orchestratorDbPath = Environment.GetEnvironmentVariable("ORCHESTRATOR_DB_PATH") ??
-Path.Combine(
-    AppContext.BaseDirectory,
-    "..",
-    "..",
-    "..",
-    "data",
-    "orchestrator.sqlite");
+                         Path.Combine(
+                             AppContext.BaseDirectory,
+                             "..",
+                             "..",
+                             "..",
+                             "data",
+                             "orchestrator.sqlite");
 
 var orchMaxActive = ParseIntSafe(Environment.GetEnvironmentVariable("ORCH_MAX_ACTIVE"), 3, 1);
 var orchPollMs = ParseIntSafe(Environment.GetEnvironmentVariable("ORCH_POLL_MS"), 3000, 1000);
@@ -79,10 +79,10 @@ var todoCacheLock = new object();
 
 SessionCache sessionsCache = new();
 ProjectsCache projectsCache = new();
-var sessionsCacheByDirectory = new ConcurrentDictionary<string, TimestampedValue<List<JsonObject>>>(StringComparer.OrdinalIgnoreCase);
-var statusCacheByDirectory = new ConcurrentDictionary<string, TimestampedValue<Dictionary<string, JsonObject>>>(StringComparer.OrdinalIgnoreCase);
-var todoCache = new ConcurrentDictionary<string, TimestampedValue<List<JsonObject>>>(StringComparer.OrdinalIgnoreCase);
-TimestampedValue<List<object>> tasksAllCache = new(DateTimeOffset.MinValue, []);
+var sessionsCacheByDirectory = new ConcurrentDictionary<string, TimestampedValue<List<OpenCodeSessionDto>>>(StringComparer.OrdinalIgnoreCase);
+var statusCacheByDirectory = new ConcurrentDictionary<string, TimestampedValue<Dictionary<string, SessionRuntimeStatus>>>(StringComparer.OrdinalIgnoreCase);
+var todoCache = new ConcurrentDictionary<string, TimestampedValue<List<SessionTodoDto>>>(StringComparer.OrdinalIgnoreCase);
+TimestampedValue<List<GlobalViewerTaskDto>> tasksAllCache = new(DateTimeOffset.MinValue, []);
 
 var assistantPresenceCache = new ConcurrentDictionary<string, TimestampedValue<bool>>(StringComparer.Ordinal);
 var assistantPresenceInFlight = new ConcurrentDictionary<string, Task<bool?>>(StringComparer.Ordinal);
@@ -104,13 +104,13 @@ void InvalidateAllCaches()
     statusOverride.Clear();
 
     lock (todoCacheLock)
-        tasksAllCache = new TimestampedValue<List<object>>(DateTimeOffset.MinValue, []);
+        tasksAllCache = new TimestampedValue<List<GlobalViewerTaskDto>>(DateTimeOffset.MinValue, []);
 }
 
 void InvalidateTodos(string? directory, string sessionId)
 {
     lock (todoCacheLock)
-        tasksAllCache = new TimestampedValue<List<object>>(DateTimeOffset.MinValue, []);
+        tasksAllCache = new TimestampedValue<List<GlobalViewerTaskDto>>(DateTimeOffset.MinValue, []);
 
     var key = $"{GetDirectoryCacheKey(directory)}::{sessionId}";
     todoCache.TryRemove(key, out _);
@@ -191,6 +191,7 @@ var sonarGateway = new HttpSonarGateway(sonarUrl, sonarToken);
 var sonarRuleReadService = new CachedSonarRuleReadService(sonarGateway);
 var sonarRulesReadService = new SonarRulesReadService(sonarGateway, sonarRuleReadService);
 var sonarIssuesReadService = new SonarIssuesReadService(sonarGateway);
+var sessionTodoViewService = new SessionTodoViewService();
 
 var orchestrator = new SonarOrchestrator(
     new SonarOrchestratorOptions
@@ -258,24 +259,26 @@ if (Directory.Exists(publicDir))
 }
 
 var sessionsUseCases = new SessionsUseCases(
-    listGlobalSessions: ListGlobalSessions,
-    getStatusMapForDirectory: GetStatusMapForDirectory,
-    getSessionDirectory: GetSessionDirectory,
-    getProjectDisplayPath: GetProjectDisplayPath,
-    normalizeRuntimeStatus: NormalizeRuntimeStatus,
-    getHasAssistantResponse: GetHasAssistantResponse,
-    deriveSessionKanbanStatus: DeriveSessionKanbanStatus,
-    buildOpenCodeSessionUrl: BuildOpenCodeSessionUrl,
-    parseTime: ParseTime,
-    orchestrator: orchestrator,
-    mapQueueItemToSessionSummary: MapQueueItemToSessionSummary,
-    findSessionInfo: FindSessionInfo,
-    getTodosForSession: GetTodosForSession,
-    mapTodosToViewerTasks: MapTodosToViewerTasks,
-    getLastAssistantMessage: GetLastAssistantMessage,
-    archiveSessionOnOpenCode: ArchiveSessionOnOpenCode,
-    invalidateAllCaches: InvalidateAllCaches,
-    broadcastUpdate: () => sseHub.Broadcast(new { type = "update" }));
+    ListGlobalSessions,
+    GetStatusMapForDirectory,
+    NormalizeRuntimeStatus,
+    GetHasAssistantResponse,
+    DeriveSessionKanbanStatus,
+    BuildOpenCodeSessionUrl,
+    ParseTime,
+    orchestrator,
+    MapQueueItemToSessionSummary,
+    FindSessionInfo,
+    GetTodosForSession,
+    sessionTodoViewService.MapTodosToViewerTasks,
+    GetLastAssistantMessage,
+    ArchiveSessionOnOpenCode,
+    InvalidateAllCaches,
+    () => sseHub.Broadcast(
+        new
+        {
+            type = "update"
+        }));
 
 app.MapSessionsEndpoints(sessionsUseCases);
 
@@ -309,7 +312,7 @@ app.MapGet(
                     return Results.Json(tasksAllCache.Value);
             }
 
-            List<JsonObject> sessions;
+            List<OpenCodeSessionDto> sessions;
 
             lock (sessionsCacheLock)
             {
@@ -325,7 +328,7 @@ app.MapGet(
 
             foreach (var session in sessions)
             {
-                var dir = GetSessionDirectory(session);
+                var dir = session.Directory;
                 var key = GetDirectoryCacheKey(dir);
 
                 if (string.IsNullOrWhiteSpace(key))
@@ -335,27 +338,24 @@ app.MapGet(
                     directoriesByKey[key] = dir!;
             }
 
-            var statusByDir = new Dictionary<string, Dictionary<string, JsonObject>>(StringComparer.OrdinalIgnoreCase);
+            var statusByDir = new Dictionary<string, Dictionary<string, SessionRuntimeStatus>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var dir in directoriesByKey.Values)
             {
                 statusByDir[GetDirectoryCacheKey(dir)] = await GetStatusMapForDirectory(dir);
             }
 
-            var allTasks = new List<object>();
+            var allTasks = new List<GlobalViewerTaskDto>();
 
             foreach (var session in sessions)
             {
-                var sessionId = session["id"]?.ToString();
+                var sessionId = session.Id;
 
-                if (string.IsNullOrWhiteSpace(sessionId))
-                    continue;
-
-                var directory = GetSessionDirectory(session);
-                var statusMap = statusByDir.GetValueOrDefault(GetDirectoryCacheKey(directory)) ?? new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+                var directory = session.Directory;
+                var statusMap = statusByDir.GetValueOrDefault(GetDirectoryCacheKey(directory)) ?? new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
                 var runtimeStatus = NormalizeRuntimeStatus(directory, sessionId, statusMap);
 
-                List<JsonObject> todos;
+                List<SessionTodoDto> todos;
 
                 try
                 {
@@ -366,28 +366,13 @@ app.MapGet(
                     todos = [];
                 }
 
-                var inferred = InferInProgressTodoFromRuntime(todos, runtimeStatus);
+                var inferred = sessionTodoViewService.InferInProgressTodoFromRuntime(todos, runtimeStatus);
 
-                for (var i = 0; i < inferred.Count; i++)
-                {
-                    var todo = inferred[i];
-
-                    allTasks.Add(
-                        new
-                        {
-                            id = (i + 1).ToString(CultureInfo.InvariantCulture),
-                            subject = todo["content"]?.ToString() ?? string.Empty,
-                            status = todo["status"]?.ToString() ?? "pending",
-                            priority = todo["priority"]?.ToString(),
-                            sessionId,
-                            sessionName = session["title"]?.ToString() ?? session["name"]?.ToString(),
-                            project = GetProjectDisplayPath(session)
-                        });
-                }
+                allTasks.AddRange(sessionTodoViewService.MapTodosToGlobalViewerTasks(inferred, sessionId, session.Name, session.Project));
             }
 
             lock (todoCacheLock)
-                tasksAllCache = new TimestampedValue<List<object>>(now, allTasks);
+                tasksAllCache = new TimestampedValue<List<GlobalViewerTaskDto>>(now, allTasks);
 
             return Results.Json(allTasks);
         }
@@ -531,37 +516,15 @@ string FindWorkspaceRoot()
     return Directory.GetCurrentDirectory();
 }
 
-string? ParseTime(string? value)
-{
-    return TimeParser.ParseIsoTime(value);
-}
+string? ParseTime(string? value) => TimeParser.ParseIsoTime(value);
 
-string? NormalizeDirectory(string? value)
-{
-    return DirectoryPath.Normalize(value);
-}
+string? NormalizeDirectory(string? value) => DirectoryPath.Normalize(value);
 
 string GetDirectoryCacheKey(string? value) => DirectoryPath.GetCacheKey(value);
 
-List<string> GetDirectoryVariants(string? value)
-{
-    return DirectoryPath.GetVariants(value);
-}
+List<string> GetDirectoryVariants(string? value) => DirectoryPath.GetVariants(value);
 
-string? GetSessionDirectory(JsonObject? session)
-{
-    return session?["directory"]?.ToString() ?? session?["project"]?["worktree"]?.ToString();
-}
-
-string? GetProjectDisplayPath(JsonObject? session)
-{
-    return session?["project"]?["worktree"]?.ToString() ?? session?["projectWorktree"]?.ToString() ?? session?["directory"]?.ToString();
-}
-
-string? BuildOpenCodeSessionUrl(string sessionId, string? directory)
-{
-    return OpenCodeSessionUrlBuilder.Build(opencodeUrl, sessionId, directory);
-}
+string? BuildOpenCodeSessionUrl(string sessionId, string? directory) => OpenCodeSessionUrlBuilder.Build(opencodeUrl, sessionId, directory);
 
 List<JsonObject> ToArrayResponse(JsonNode? value)
 {
@@ -677,7 +640,27 @@ async Task<List<JsonObject>> ListProjects()
     return projects;
 }
 
-async Task<List<JsonObject>> ListSessionsForDirectory(string directory, string? projectWorktree, int limit)
+OpenCodeSessionDto? ParseOpenCodeSession(JsonObject? session, string candidateDir, string? projectWorktree)
+{
+    var sessionId = session?["id"]?.ToString();
+
+    if (string.IsNullOrWhiteSpace(sessionId) ||
+        session?["time"]?["archived"] is not null)
+        return null;
+
+    var normalizedDirectory = NormalizeDirectory(session?["directory"]?.ToString()) ?? candidateDir;
+    var project = NormalizeDirectory(session?["project"]?["worktree"]?.ToString()) ?? NormalizeDirectory(projectWorktree) ?? normalizedDirectory;
+
+    return new OpenCodeSessionDto(
+        sessionId,
+        session?["title"]?.ToString() ?? session?["name"]?.ToString(),
+        normalizedDirectory,
+        project,
+        session?["time"]?["created"]?.ToString(),
+        session?["time"]?["updated"]?.ToString());
+}
+
+async Task<List<OpenCodeSessionDto>> ListSessionsForDirectory(string directory, string? projectWorktree, int limit)
 {
     var dir = NormalizeDirectory(directory);
 
@@ -694,7 +677,7 @@ async Task<List<JsonObject>> ListSessionsForDirectory(string directory, string? 
         return [.. cached.Value];
 
     var perRequestLimit = Math.Clamp(limit, 1, MaxSessionsPerProject);
-    var mergedById = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+    var mergedById = new Dictionary<string, OpenCodeSessionDto>(StringComparer.Ordinal);
     var hadSuccess = false;
     Exception? lastError = null;
 
@@ -717,36 +700,15 @@ async Task<List<JsonObject>> ListSessionsForDirectory(string directory, string? 
             hadSuccess = true;
 
             var list = ToArrayResponse(data)
-                .Where(s => s["id"] is not null)
-                .Where(s => s["time"]?["archived"] is null)
-                .Select(s =>
-                {
-                    var obj = (JsonObject)s.DeepClone();
-                    obj["directory"] = NormalizeDirectory(s["directory"]?.ToString()) ?? candidateDir;
-
-                    if (!string.IsNullOrWhiteSpace(projectWorktree))
-                    {
-                        obj["projectWorktree"] = projectWorktree;
-
-                        obj["project"] = new JsonObject
-                        {
-                            ["worktree"] = projectWorktree
-                        };
-                    }
-
-                    return obj;
-                })
+                .Select(s => ParseOpenCodeSession(s, candidateDir, projectWorktree))
+                .Where(s => s is not null)
+                .Cast<OpenCodeSessionDto>()
                 .ToList();
 
             foreach (var session in list)
             {
-                var sid = session["id"]?.ToString();
-
-                if (string.IsNullOrWhiteSpace(sid))
-                    continue;
-
-                if (!mergedById.ContainsKey(sid))
-                    mergedById[sid] = session;
+                if (!mergedById.ContainsKey(session.Id))
+                    mergedById[session.Id] = session;
             }
         }
         catch (Exception error)
@@ -760,12 +722,12 @@ async Task<List<JsonObject>> ListSessionsForDirectory(string directory, string? 
         throw lastError;
 
     var sessions = mergedById.Values.ToList();
-    sessionsCacheByDirectory[dirKey] = new TimestampedValue<List<JsonObject>>(DateTimeOffset.UtcNow, sessions);
+    sessionsCacheByDirectory[dirKey] = new TimestampedValue<List<OpenCodeSessionDto>>(DateTimeOffset.UtcNow, sessions);
 
     return sessions;
 }
 
-async Task<List<JsonObject>> ListGlobalSessions(string limitParam)
+async Task<List<OpenCodeSessionDto>> ListGlobalSessions(string limitParam)
 {
     var now = DateTimeOffset.UtcNow;
 
@@ -804,7 +766,7 @@ async Task<List<JsonObject>> ListGlobalSessions(string limitParam)
         ? MaxSessionsPerProject
         : Math.Clamp(limit * 8, 120, MaxSessionsPerProject);
 
-    var sessions = new List<JsonObject>();
+    var sessions = new List<OpenCodeSessionDto>();
 
     foreach (var entry in projectSearchEntries)
     {
@@ -813,7 +775,7 @@ async Task<List<JsonObject>> ListGlobalSessions(string limitParam)
     }
 
     sessions = sessions
-        .OrderByDescending(s => DateTimeOffset.TryParse(s["time"]?["updated"]?.ToString() ?? s["time"]?["created"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue)
+        .OrderByDescending(s => DateTimeOffset.TryParse(s.UpdatedAt ?? s.CreatedAt, out var dt) ? dt : DateTimeOffset.MinValue)
         .ToList();
 
     if (!string.Equals(limitParam, "all", StringComparison.OrdinalIgnoreCase))
@@ -825,30 +787,30 @@ async Task<List<JsonObject>> ListGlobalSessions(string limitParam)
         {
             Timestamp = now,
             Data = sessions,
-            ById = sessions.Where(s => s["id"] is not null).ToDictionary(s => s["id"]!.ToString(), s => s, StringComparer.Ordinal)
+            ById = sessions.ToDictionary(s => s.Id, s => s, StringComparer.Ordinal)
         };
     }
 
     return sessions;
 }
 
-async Task<Dictionary<string, JsonObject>> GetStatusMapForDirectory(string? directory)
+async Task<Dictionary<string, SessionRuntimeStatus>> GetStatusMapForDirectory(string? directory)
 {
     var dir = NormalizeDirectory(directory);
 
     if (string.IsNullOrWhiteSpace(dir))
-        return new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
     var dirKey = GetDirectoryCacheKey(dir);
 
     if (string.IsNullOrWhiteSpace(dirKey))
-        return new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
     if (statusCacheByDirectory.TryGetValue(dirKey, out var cached) &&
         (DateTimeOffset.UtcNow - cached.Timestamp).TotalMilliseconds < StatusCacheTtlMs)
-        return new Dictionary<string, JsonObject>(cached.Value, StringComparer.Ordinal);
+        return new Dictionary<string, SessionRuntimeStatus>(cached.Value, StringComparer.Ordinal);
 
-    Dictionary<string, JsonObject> statusMap = new(StringComparer.Ordinal);
+    Dictionary<string, SessionRuntimeStatus> statusMap = new(StringComparer.Ordinal);
 
     foreach (var candidateDir in GetDirectoryVariants(dir))
     {
@@ -861,19 +823,18 @@ async Task<Dictionary<string, JsonObject>> GetStatusMapForDirectory(string? dire
                     Directory = candidateDir
                 });
 
-            var normalized = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+            var normalized = new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
             if (result is JsonObject obj)
             {
                 foreach (var kv in obj)
                 {
                     if (kv.Value is JsonObject sObj)
-                        normalized[kv.Key] = sObj;
+                        normalized[kv.Key] = new SessionRuntimeStatus(sObj["type"]?.ToString() ?? "idle");
                     else
-                        normalized[kv.Key] = new JsonObject
-                        {
-                            ["type"] = kv.Value?.ToString()
-                        };
+                    {
+                        normalized[kv.Key] = new SessionRuntimeStatus(kv.Value?.ToString() ?? "idle");
+                    }
                 }
             }
 
@@ -892,17 +853,12 @@ async Task<Dictionary<string, JsonObject>> GetStatusMapForDirectory(string? dire
         }
     }
 
-    statusCacheByDirectory[dirKey] = new TimestampedValue<Dictionary<string, JsonObject>>(DateTimeOffset.UtcNow, statusMap);
+    statusCacheByDirectory[dirKey] = new TimestampedValue<Dictionary<string, SessionRuntimeStatus>>(DateTimeOffset.UtcNow, statusMap);
 
     return statusMap;
 }
 
-JsonObject NormalizeTodo(JsonObject? todo)
-{
-    return TodoNormalization.NormalizeTodo(todo);
-}
-
-async Task<List<JsonObject>> GetTodosForSession(string sessionId, string? directory)
+async Task<List<SessionTodoDto>> GetTodosForSession(string sessionId, string? directory)
 {
     var cacheKey = $"{GetDirectoryCacheKey(directory)}::{sessionId}";
 
@@ -925,13 +881,13 @@ async Task<List<JsonObject>> GetTodosForSession(string sessionId, string? direct
         _ => []
     };
 
-    var normalized = rawTodos.Select(NormalizeTodo).ToList();
-    todoCache[cacheKey] = new TimestampedValue<List<JsonObject>>(DateTimeOffset.UtcNow, normalized);
+    var normalized = rawTodos.Select(sessionTodoViewService.NormalizeTodo).ToList();
+    todoCache[cacheKey] = new TimestampedValue<List<SessionTodoDto>>(DateTimeOffset.UtcNow, normalized);
 
     return normalized;
 }
 
-string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<string, JsonObject> statusMap)
+string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<string, SessionRuntimeStatus> statusMap)
 {
     var key = $"{GetDirectoryCacheKey(directory)}::{sessionId}";
 
@@ -941,7 +897,7 @@ string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<st
 
     if (statusMap.TryGetValue(sessionId, out var s))
     {
-        var type = s["type"]?.ToString();
+        var type = s.Type;
 
         if (!string.IsNullOrWhiteSpace(type))
             return type;
@@ -950,29 +906,29 @@ string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<st
     return "idle";
 }
 
-bool IsRuntimeRunning(string? type)
-{
-    return SessionStatusPolicy.IsRuntimeRunning(type);
-}
+string DeriveSessionKanbanStatus(string runtimeType, string modifiedAt, bool? hasAssistantResponse) => SessionStatusPolicy.DeriveKanbanStatus(
+    runtimeType,
+    modifiedAt,
+    hasAssistantResponse,
+    SessionRecentWindowMs);
 
-string DeriveSessionKanbanStatus(string runtimeType, string modifiedAt, bool? hasAssistantResponse)
-{
-    return SessionStatusPolicy.DeriveKanbanStatus(runtimeType, modifiedAt, hasAssistantResponse, SessionRecentWindowMs);
-}
-
-async Task<JsonObject?> FindSessionInfo(string sessionId)
+async Task<OpenCodeSessionDto?> FindSessionInfo(string sessionId)
 {
     lock (sessionsCacheLock)
+    {
         if (sessionsCache.ById.TryGetValue(sessionId, out var info))
             return info;
+    }
 
     try
     {
         await ListGlobalSessions("200");
 
         lock (sessionsCacheLock)
+        {
             if (sessionsCache.ById.TryGetValue(sessionId, out var info))
                 return info;
+        }
     }
     catch
     {
@@ -1053,20 +1009,11 @@ async Task<string?> ArchiveSessionOnOpenCode(string sessionId, string? directory
     throw lastError ?? new InvalidOperationException("Failed to archive session");
 }
 
-string GetMessageRole(JsonObject? message)
-{
-    return AssistantMessageParser.GetMessageRole(message);
-}
+string GetMessageRole(JsonObject? message) => AssistantMessageParser.GetMessageRole(message);
 
-string ExtractAssistantMessageText(JsonObject? message)
-{
-    return AssistantMessageParser.ExtractAssistantMessageText(message);
-}
+string ExtractAssistantMessageText(JsonObject? message) => AssistantMessageParser.ExtractAssistantMessageText(message);
 
-string? ExtractMessageCreatedAt(JsonObject? message)
-{
-    return AssistantMessageParser.ExtractMessageCreatedAt(message);
-}
+string? ExtractMessageCreatedAt(JsonObject? message) => AssistantMessageParser.ExtractMessageCreatedAt(message);
 
 LastAssistantMessage? FindLastAssistantMessage(List<JsonObject> messages)
 {
@@ -1160,47 +1107,7 @@ async Task<bool?> GetHasAssistantResponse(string sessionId)
     return result;
 }
 
-List<JsonObject> InferInProgressTodoFromRuntime(List<JsonObject> todos, string runtimeType)
-{
-    if (!IsRuntimeRunning(runtimeType))
-        return todos;
-
-    if (todos.Any(t => string.Equals(t["status"]?.ToString(), "in_progress", StringComparison.Ordinal)))
-        return todos;
-
-    var idx = todos.FindIndex(t => string.Equals(t["status"]?.ToString(), "pending", StringComparison.Ordinal));
-
-    if (idx < 0)
-        return todos;
-
-    var copy = todos.Select(t => (JsonObject)t.DeepClone()).ToList();
-    copy[idx]["status"] = "in_progress";
-
-    return copy;
-}
-
-List<object> MapTodosToViewerTasks(List<JsonObject> todos)
-{
-    var tasks = new List<object>();
-
-    for (var i = 0; i < todos.Count; i++)
-    {
-        var todo = todos[i];
-
-        tasks.Add(
-            new
-            {
-                id = (i + 1).ToString(CultureInfo.InvariantCulture),
-                subject = todo["content"]?.ToString() ?? string.Empty,
-                status = todo["status"]?.ToString() ?? "pending",
-                priority = todo["priority"]?.ToString()
-            });
-    }
-
-    return tasks;
-}
-
-object? MapQueueItemToSessionSummary(QueueItemRecord item)
+SessionSummaryDto? MapQueueItemToSessionSummary(QueueItemRecord item)
 {
     var queueState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -1224,32 +1131,29 @@ object? MapQueueItemToSessionSummary(QueueItemRecord item)
     var createdAt = ParseTime(item.CreatedAt) ?? DateTimeOffset.UtcNow.ToString("O");
     var modifiedAt = ParseTime(item.UpdatedAt) ?? createdAt;
 
-    return new
+    return new SessionSummaryDto
     {
-        id = $"queue-{item.Id}",
-        name,
-        project = item.Directory,
-        description = item.Message,
-        gitBranch = (string?)null,
-        createdAt,
-        modifiedAt,
-        runtimeStatus = new
-        {
-            type = runtimeType
-        },
-        status = "pending",
-        hasAssistantResponse = false,
-        openCodeUrl = (string?)null,
-        isQueueItem = true,
-        queueItemId = item.Id,
-        queueState,
-        issueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
-        issueType = item.IssueType,
-        issueSeverity = item.Severity,
-        issueRule = item.Rule,
-        issuePath = item.RelativePath ?? item.AbsolutePath,
-        issueLine = item.Line,
-        lastError = item.LastError
+        Id = $"queue-{item.Id}",
+        Name = name,
+        Project = item.Directory,
+        Description = item.Message,
+        GitBranch = null,
+        CreatedAt = createdAt,
+        ModifiedAt = modifiedAt,
+        RuntimeStatus = new SessionRuntimeStatus(runtimeType),
+        Status = "pending",
+        HasAssistantResponse = false,
+        OpenCodeUrl = null,
+        IsQueueItem = true,
+        QueueItemId = item.Id,
+        QueueState = queueState,
+        IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
+        IssueType = item.IssueType,
+        IssueSeverity = item.Severity,
+        IssueRule = item.Rule,
+        IssuePath = item.RelativePath ?? item.AbsolutePath,
+        IssueLine = item.Line,
+        LastError = item.LastError
     };
 }
 
@@ -1397,7 +1301,7 @@ async Task HandleUpstreamEvent(JsonNode evt)
                 sessionsCache.Timestamp = DateTimeOffset.MinValue;
 
             lock (todoCacheLock)
-                tasksAllCache = new TimestampedValue<List<object>>(DateTimeOffset.MinValue, []);
+                tasksAllCache = new TimestampedValue<List<GlobalViewerTaskDto>>(DateTimeOffset.MinValue, []);
 
             await sseHub.Broadcast(
                 new
@@ -1407,11 +1311,13 @@ async Task HandleUpstreamEvent(JsonNode evt)
                 });
         }
         else
+        {
             await sseHub.Broadcast(
                 new
                 {
                     type = "update"
                 });
+        }
 
         return;
     }

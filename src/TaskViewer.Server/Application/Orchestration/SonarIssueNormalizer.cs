@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
@@ -11,6 +10,7 @@ public static class SonarIssueNormalizer
             return null;
 
         var key = raw["key"]?.ToString()?.Trim() ?? raw["issueKey"]?.ToString()?.Trim() ?? string.Empty;
+
         if (string.IsNullOrWhiteSpace(key))
             return null;
 
@@ -27,10 +27,9 @@ public static class SonarIssueNormalizer
 
         if (!string.IsNullOrWhiteSpace(component))
         {
-            if (!string.IsNullOrWhiteSpace(projectKey) && component.StartsWith(projectKey + ":", StringComparison.Ordinal))
-            {
+            if (!string.IsNullOrWhiteSpace(projectKey) &&
+                component.StartsWith(projectKey + ":", StringComparison.Ordinal))
                 relativePath = component[(projectKey.Length + 1)..];
-            }
             else
             {
                 var idx = component.IndexOf(':');
@@ -39,6 +38,7 @@ public static class SonarIssueNormalizer
         }
 
         relativePath = relativePath?.Replace('\\', '/').TrimStart('/');
+
         var absolutePath = !string.IsNullOrWhiteSpace(relativePath)
             ? $"{mapping.Directory.TrimEnd('/')}/{relativePath}"
             : null;
@@ -58,13 +58,14 @@ public static class SonarIssueNormalizer
         };
     }
 
-    private static string? NormalizeIssueType(string? value)
+    static string? NormalizeIssueType(string? value)
     {
         var v = (value ?? string.Empty).Trim().ToUpperInvariant();
+
         return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 
-    private static int? ParseIntNullable(object? value)
+    static int? ParseIntNullable(object? value)
     {
         if (value is null)
             return null;
@@ -72,7 +73,8 @@ public static class SonarIssueNormalizer
         if (value is int i)
             return i;
 
-        if (value is long l && l is >= int.MinValue and <= int.MaxValue)
+        if (value is long l &&
+            l is >= int.MinValue and <= int.MaxValue)
             return (int)l;
 
         return int.TryParse(value.ToString(), out var parsed) ? parsed : null;

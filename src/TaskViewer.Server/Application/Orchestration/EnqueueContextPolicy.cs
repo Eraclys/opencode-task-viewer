@@ -12,7 +12,6 @@ public static class EnqueueContextPolicy
 
     public static bool ShouldPersistInstructionProfile(string? normalizedIssueType, string instructionText)
     {
-        return !string.IsNullOrWhiteSpace(normalizedIssueType)
-               && !string.IsNullOrWhiteSpace(instructionText);
+        return !string.IsNullOrWhiteSpace(normalizedIssueType) && !string.IsNullOrWhiteSpace(instructionText);
     }
 }

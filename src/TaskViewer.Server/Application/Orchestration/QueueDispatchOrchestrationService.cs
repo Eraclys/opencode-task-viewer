@@ -1,14 +1,13 @@
-using TaskViewer.Server;
 using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestrationService
+sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestrationService
 {
-    private readonly IQueueRepository _queueRepository;
-    private readonly IQueueDispatchService _queueDispatchService;
-    private readonly IDispatchFailurePolicy _dispatchFailurePolicy;
-    private readonly Func<string> _nowIso;
+    readonly IDispatchFailurePolicy _dispatchFailurePolicy;
+    readonly Func<string> _nowIso;
+    readonly IQueueDispatchService _queueDispatchService;
+    readonly IQueueRepository _queueRepository;
 
     public QueueDispatchOrchestrationService(
         IQueueRepository queueRepository,
@@ -27,13 +26,24 @@ internal sealed class QueueDispatchOrchestrationService : IQueueDispatchOrchestr
         try
         {
             var dispatch = await _queueDispatchService.DispatchAsync(item);
-            await _queueRepository.MarkSessionCreated(item.Id, dispatch.SessionId, dispatch.OpenCodeUrl, _nowIso());
+
+            await _queueRepository.MarkSessionCreated(
+                item.Id,
+                dispatch.SessionId,
+                dispatch.OpenCodeUrl,
+                _nowIso());
         }
         catch (Exception ex)
         {
             var (attemptCount, maxAttempts) = await _queueRepository.GetAttemptInfo(item.Id, item.AttemptCount, item.MaxAttempts);
             var decision = _dispatchFailurePolicy.Decide(attemptCount, maxAttempts, DateTimeOffset.UtcNow);
-            await _queueRepository.MarkDispatchFailure(item.Id, decision.State, decision.NextAttemptAt, ex.Message, _nowIso());
+
+            await _queueRepository.MarkDispatchFailure(
+                item.Id,
+                decision.State,
+                decision.NextAttemptAt,
+                ex.Message,
+                _nowIso());
         }
     }
 }

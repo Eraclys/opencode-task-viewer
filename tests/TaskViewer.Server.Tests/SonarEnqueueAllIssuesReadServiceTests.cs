@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -9,7 +8,7 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
     [Fact]
     public async Task CollectMatchingIssuesAsync_StopsAtScanLimitAndReportsMatchedFromPaging()
     {
-        var gateway = new PagingGateway(firstTotal: 5);
+        var gateway = new PagingGateway(5);
         var service = new SonarEnqueueAllIssuesReadService(gateway);
         var mapping = CreateMapping();
 
@@ -19,7 +18,7 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
             "major",
             "open",
             ["javascript:S1126"],
-            maxScanIssues: 2);
+            2);
 
         Assert.Equal(5, result.Matched);
         Assert.True(result.Truncated);
@@ -32,16 +31,16 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
     [Fact]
     public async Task CollectMatchingIssuesAsync_FetchesUntilEndWhenWithinLimit()
     {
-        var gateway = new PagingGateway(firstTotal: 501, firstPageIssueCount: 500);
+        var gateway = new PagingGateway(501, 500);
         var service = new SonarEnqueueAllIssuesReadService(gateway);
 
         var result = await service.CollectMatchingIssuesAsync(
             CreateMapping(),
-            issueType: null,
-            severity: null,
-            issueStatus: null,
+            null,
+            null,
+            null,
             ["javascript:S1126"],
-            maxScanIssues: 1000);
+            1000);
 
         Assert.Equal(2, gateway.RequestCount);
         Assert.Equal(501, result.Matched);
@@ -49,7 +48,7 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
         Assert.Equal(501, result.Issues.Count);
     }
 
-    private static MappingRecord CreateMapping()
+    static MappingRecord CreateMapping()
     {
         return new MappingRecord
         {
@@ -63,10 +62,10 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
         };
     }
 
-    private sealed class PagingGateway : ISonarGateway
+    sealed class PagingGateway : ISonarGateway
     {
-        private readonly int _firstTotal;
-        private readonly int _firstPageIssueCount;
+        readonly int _firstPageIssueCount;
+        readonly int _firstTotal;
 
         public PagingGateway(int firstTotal, int firstPageIssueCount = 2)
         {
@@ -89,34 +88,46 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
             if (RequestCount == 1)
             {
                 var issues = new JsonArray();
-                for (var i = 1; i <= _firstPageIssueCount; i += 1)
-                    issues.Add(new JsonObject { ["key"] = $"sq-{i}" });
 
-                return Task.FromResult<JsonNode?>(new JsonObject
+                for (var i = 1; i <= _firstPageIssueCount; i += 1)
+                {
+                    issues.Add(
+                        new JsonObject
+                        {
+                            ["key"] = $"sq-{i}"
+                        });
+                }
+
+                return Task.FromResult<JsonNode?>(
+                    new JsonObject
+                    {
+                        ["paging"] = new JsonObject
+                        {
+                            ["pageIndex"] = 1,
+                            ["pageSize"] = 500,
+                            ["total"] = _firstTotal
+                        },
+                        ["issues"] = issues
+                    });
+            }
+
+            return Task.FromResult<JsonNode?>(
+                new JsonObject
                 {
                     ["paging"] = new JsonObject
                     {
-                        ["pageIndex"] = 1,
+                        ["pageIndex"] = 2,
                         ["pageSize"] = 500,
-                        ["total"] = _firstTotal
+                        ["total"] = 3
                     },
-                    ["issues"] = issues
+                    ["issues"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["key"] = "sq-3"
+                        }
+                    }
                 });
-            }
-
-            return Task.FromResult<JsonNode?>(new JsonObject
-            {
-                ["paging"] = new JsonObject
-                {
-                    ["pageIndex"] = 2,
-                    ["pageSize"] = 500,
-                    ["total"] = 3
-                },
-                ["issues"] = new JsonArray
-                {
-                    new JsonObject { ["key"] = "sq-3" }
-                }
-            });
         }
     }
 }

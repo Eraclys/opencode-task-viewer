@@ -11,10 +11,7 @@ public sealed class TodoNormalizationTests
     [InlineData("IN_PROGRESS", "in_progress")]
     [InlineData("done", "completed")]
     [InlineData("cancelled", "cancelled")]
-    public void NormalizeStatus_MapsKnownValues(string? input, string expected)
-    {
-        Assert.Equal(expected, TodoNormalization.NormalizeStatus(input));
-    }
+    public void NormalizeStatus_MapsKnownValues(string? input, string expected) => Assert.Equal(expected, TodoNormalization.NormalizeStatus(input));
 
     [Theory]
     [InlineData("p0", "high")]
@@ -23,10 +20,7 @@ public sealed class TodoNormalizationTests
     [InlineData("p3", "low")]
     [InlineData("medium", "medium")]
     [InlineData(null, null)]
-    public void NormalizePriority_MapsKnownValues(string? input, string? expected)
-    {
-        Assert.Equal(expected, TodoNormalization.NormalizePriority(input));
-    }
+    public void NormalizePriority_MapsKnownValues(string? input, string? expected) => Assert.Equal(expected, TodoNormalization.NormalizePriority(input));
 
     [Fact]
     public void NormalizeTodo_MapsContentStatusAndPriority()

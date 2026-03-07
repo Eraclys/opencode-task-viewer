@@ -1,12 +1,11 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class QueueDispatchService : IQueueDispatchService
 {
-    private readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
-    private readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
+    readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
+    readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
 
     public QueueDispatchService(
         Func<string, OpenCodeRequest, Task<JsonNode?>> openCodeFetch,
@@ -19,6 +18,7 @@ public sealed class QueueDispatchService : IQueueDispatchService
     public async Task<QueueDispatchResult> DispatchAsync(QueueItemRecord item)
     {
         var title = $"[{item.IssueType ?? "ISSUE"}] {item.IssueKey}";
+
         var created = await _openCodeFetch(
             "/session",
             new OpenCodeRequest
@@ -62,7 +62,7 @@ public sealed class QueueDispatchService : IQueueDispatchService
         return new QueueDispatchResult(sessionId, openCodeUrl);
     }
 
-    private static string ComposePrompt(QueueItemRecord item)
+    static string ComposePrompt(QueueItemRecord item)
     {
         var lines = new List<string>
         {

@@ -1,4 +1,3 @@
-using TaskViewer.Server;
 using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -21,12 +20,12 @@ public sealed class SonarIssuesQueryBuilderTests
 
         var query = SonarIssuesQueryBuilder.Build(
             mapping,
-            page: 2,
-            pageSize: 100,
-            issueType: "CODE_SMELL",
-            severity: "MAJOR",
-            issueStatus: "OPEN",
-            ruleKeys: ["javascript:S1126"]);
+            2,
+            100,
+            "CODE_SMELL",
+            "MAJOR",
+            "OPEN",
+            ["javascript:S1126"]);
 
         Assert.Equal("alpha-key", query["componentKeys"]);
         Assert.Equal("2", query["p"]);
@@ -52,7 +51,14 @@ public sealed class SonarIssuesQueryBuilderTests
             UpdatedAt = ""
         };
 
-        var query = SonarIssuesQueryBuilder.Build(mapping, 1, 50, null, "", "", []);
+        var query = SonarIssuesQueryBuilder.Build(
+            mapping,
+            1,
+            50,
+            null,
+            "",
+            "",
+            []);
 
         Assert.False(query.ContainsKey("types"));
         Assert.False(query.ContainsKey("severities"));

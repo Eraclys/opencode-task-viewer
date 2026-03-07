@@ -22,8 +22,5 @@ public sealed class EnqueueContextPolicyTests
     [InlineData("CODE_SMELL", "text", true)]
     [InlineData(null, "text", false)]
     [InlineData("CODE_SMELL", "", false)]
-    public void ShouldPersistInstructionProfile_RequiresTypeAndText(string? type, string text, bool expected)
-    {
-        Assert.Equal(expected, EnqueueContextPolicy.ShouldPersistInstructionProfile(type, text));
-    }
+    public void ShouldPersistInstructionProfile_RequiresTypeAndText(string? type, string text, bool expected) => Assert.Equal(expected, EnqueueContextPolicy.ShouldPersistInstructionProfile(type, text));
 }

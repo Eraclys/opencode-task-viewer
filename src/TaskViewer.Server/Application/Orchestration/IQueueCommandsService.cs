@@ -2,17 +2,17 @@ using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Application.Orchestration;
 
-internal interface IQueueCommandsService
+interface IQueueCommandsService
 {
     Task<bool> CancelQueueItemAsync(object? queueId);
     Task<int> RetryFailedAsync();
     Task<int> ClearQueuedAsync();
 }
 
-internal sealed class QueueCommandsService : IQueueCommandsService
+sealed class QueueCommandsService : IQueueCommandsService
 {
-    private readonly IQueueRepository _queueRepository;
-    private readonly Func<string> _nowIso;
+    readonly Func<string> _nowIso;
+    readonly IQueueRepository _queueRepository;
 
     public QueueCommandsService(IQueueRepository queueRepository, Func<string>? nowIso = null)
     {
@@ -30,17 +30,11 @@ internal sealed class QueueCommandsService : IQueueCommandsService
         return await _queueRepository.CancelQueueItem(id, _nowIso());
     }
 
-    public Task<int> RetryFailedAsync()
-    {
-        return _queueRepository.RetryFailed(_nowIso());
-    }
+    public Task<int> RetryFailedAsync() => _queueRepository.RetryFailed(_nowIso());
 
-    public Task<int> ClearQueuedAsync()
-    {
-        return _queueRepository.ClearQueued(_nowIso());
-    }
+    public Task<int> ClearQueuedAsync() => _queueRepository.ClearQueued(_nowIso());
 
-    private static int ParseIntSafe(object? value, int fallback)
+    static int ParseIntSafe(object? value, int fallback)
     {
         if (value is null)
             return fallback;
@@ -48,7 +42,8 @@ internal sealed class QueueCommandsService : IQueueCommandsService
         if (value is int i)
             return i;
 
-        if (value is long l && l is >= int.MinValue and <= int.MaxValue)
+        if (value is long l &&
+            l is >= int.MinValue and <= int.MaxValue)
             return (int)l;
 
         return int.TryParse(value.ToString(), out var parsed) ? parsed : fallback;

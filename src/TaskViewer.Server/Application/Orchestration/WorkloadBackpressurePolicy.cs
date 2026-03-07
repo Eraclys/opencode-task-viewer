@@ -2,11 +2,16 @@ namespace TaskViewer.Server.Application.Orchestration;
 
 public sealed class WorkloadBackpressurePolicy : IWorkloadBackpressurePolicy
 {
-    public BackpressureTransition Evaluate(bool currentlyPaused, int workingCount, int maxWorkingGlobal, int workingResumeBelow)
+    public BackpressureTransition Evaluate(
+        bool currentlyPaused,
+        int workingCount,
+        int maxWorkingGlobal,
+        int workingResumeBelow)
     {
         var nextPaused = currentlyPaused;
 
-        if (!nextPaused && workingCount >= maxWorkingGlobal)
+        if (!nextPaused &&
+            workingCount >= maxWorkingGlobal)
             nextPaused = true;
         else if (nextPaused && workingCount < workingResumeBelow)
             nextPaused = false;
