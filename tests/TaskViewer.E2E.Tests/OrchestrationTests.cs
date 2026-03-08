@@ -330,7 +330,7 @@ public sealed class OrchestrationTests
             await Task.Delay(250);
         }
 
-        throw new TimeoutException($"Timed out waiting for queue item {queueId} to reach state {expectedState}");
+        throw new TimeoutException($"Timed out waiting for task {queueId} to reach state {expectedState}");
     }
 
     async Task WaitForNoActiveQueueAsync()

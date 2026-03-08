@@ -17,6 +17,11 @@ public sealed class SessionSummaryDto
     public bool? IsQueueItem { get; init; }
     public long? QueueItemId { get; init; }
     public string? QueueState { get; init; }
+    public long? TaskId { get; init; }
+    public string? TaskState { get; init; }
+    public string? TaskKey { get; init; }
+    public string? TaskUnit { get; init; }
+    public int? TaskIssueCount { get; init; }
     public string? IssueKey { get; init; }
     public string? IssueType { get; init; }
     public string? IssueSeverity { get; init; }

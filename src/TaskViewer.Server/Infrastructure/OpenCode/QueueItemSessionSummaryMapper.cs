@@ -6,9 +6,9 @@ sealed class QueueItemSessionSummaryMapper
 {
     public SessionSummaryDto? Map(QueueItemRecord item)
     {
-        var queueState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
+        var taskState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
 
-        if (queueState is not ("queued" or "dispatching" or "leased" or "running"))
+        if (taskState is not ("queued" or "dispatching" or "leased" or "running"))
             return null;
 
         var titleParts = new List<string>();
@@ -22,16 +22,16 @@ sealed class QueueItemSessionSummaryMapper
         if (!string.IsNullOrWhiteSpace(item.Message))
             titleParts.Add(item.Message);
 
-        var queueLabel = queueState switch
+        var taskLabel = taskState switch
         {
             "leased" => "Leased",
             "running" => "Running",
-            _ => "Queued"
+            _ => "Task"
         };
 
         var name = titleParts.Count > 0
-            ? $"[{queueLabel}] {string.Join(" - ", titleParts)}"
-            : $"[{queueLabel}] Item #{item.Id}";
+            ? $"[{taskLabel}] {string.Join(" - ", titleParts)}"
+            : $"[{taskLabel}] Item #{item.Id}";
 
         return new SessionSummaryDto
         {
@@ -42,13 +42,18 @@ sealed class QueueItemSessionSummaryMapper
             GitBranch = null,
             CreatedAt = item.CreatedAt,
             ModifiedAt = item.UpdatedAt,
-            RuntimeStatus = new SessionRuntimeStatus(queueState is "dispatching" or "leased" or "running" ? "busy" : "queued"),
+            RuntimeStatus = new SessionRuntimeStatus(taskState is "dispatching" or "leased" or "running" ? "busy" : "queued"),
             Status = "pending",
             HasAssistantResponse = false,
             OpenCodeUrl = null,
             IsQueueItem = true,
             QueueItemId = item.Id,
-            QueueState = queueState,
+            QueueState = taskState,
+            TaskId = item.Id,
+            TaskState = taskState,
+            TaskKey = item.TaskKey,
+            TaskUnit = item.TaskUnit,
+            TaskIssueCount = item.IssueCount,
             IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
             IssueType = item.IssueType,
             IssueSeverity = item.Severity,

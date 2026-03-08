@@ -273,12 +273,12 @@ public static class OrchestrationEndpoints
                 }
                 catch (Exception error)
                 {
-                    Console.Error.WriteLine($"Error loading queue items: {error}");
+                    Console.Error.WriteLine($"Error loading orchestration tasks: {error}");
 
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to load orchestration queue"
+                            Error = "Failed to load orchestration tasks"
                         },
                         statusCode: 502);
                 }
@@ -296,7 +296,7 @@ public static class OrchestrationEndpoints
                         return Results.Json(
                             new ErrorResponseDto
                             {
-                                Error = "Queue item not found or already terminal"
+                                Error = "Task not found or already terminal"
                             },
                             statusCode: 404);
 
@@ -310,7 +310,7 @@ public static class OrchestrationEndpoints
                 {
                     var message = error.Message;
                     var status = message.Contains("Invalid queue id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
-                    Console.Error.WriteLine($"Error cancelling queue item: {error}");
+                    Console.Error.WriteLine($"Error cancelling task: {error}");
 
                     return Results.Json(
                         new ErrorResponseDto
@@ -337,12 +337,12 @@ public static class OrchestrationEndpoints
                 }
                 catch (Exception error)
                 {
-                    Console.Error.WriteLine($"Error retrying failed queue items: {error}");
+                    Console.Error.WriteLine($"Error retrying failed tasks: {error}");
 
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to retry failed queue items"
+                            Error = "Failed to retry failed tasks"
                         },
                         statusCode: 502);
                 }
@@ -364,12 +364,12 @@ public static class OrchestrationEndpoints
                 }
                 catch (Exception error)
                 {
-                    Console.Error.WriteLine($"Error clearing queued items: {error}");
+                    Console.Error.WriteLine($"Error clearing pending tasks: {error}");
 
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to clear queued items"
+                            Error = "Failed to clear pending tasks"
                         },
                         statusCode: 502);
                 }

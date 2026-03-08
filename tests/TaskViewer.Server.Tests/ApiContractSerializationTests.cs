@@ -108,7 +108,7 @@ public sealed class ApiContractSerializationTests
         Assert.Equal(StatusCodes.Status404NotFound, (int)response.StatusCode);
 
         using var json = JsonDocument.Parse(body);
-        Assert.Equal("Queue item not found or already terminal", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("Task not found or already terminal", json.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]
@@ -484,7 +484,7 @@ public sealed class ApiContractSerializationTests
         Assert.Equal(StatusCodes.Status502BadGateway, (int)response.StatusCode);
 
         using var json = JsonDocument.Parse(body);
-        Assert.Equal("Failed to load orchestration queue", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("Failed to load orchestration tasks", json.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]

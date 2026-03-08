@@ -1553,10 +1553,10 @@
               id="orch-instructions"
               class="orch-textarea"
               data-testid="orch-instructions"
-              placeholder="Instructions applied to each queued issue for this issue type"></textarea>
-            <button id="orch-enqueue-btn" class="orch-btn" data-testid="orch-enqueue-btn" type="button" disabled>Queue selected (0)</button>
-            <button id="orch-enqueue-all-btn" class="orch-btn" data-testid="orch-enqueue-all-btn" type="button" disabled>Queue all matching</button>
-            <button id="orch-clear-queue-btn" class="orch-btn" data-testid="orch-clear-queue-btn" type="button" disabled>Clear queue</button>
+              placeholder="Instructions applied to each generated task for this issue type"></textarea>
+            <button id="orch-enqueue-btn" class="orch-btn" data-testid="orch-enqueue-btn" type="button" disabled>Create selected tasks (0)</button>
+            <button id="orch-enqueue-all-btn" class="orch-btn" data-testid="orch-enqueue-all-btn" type="button" disabled>Create all matching tasks</button>
+            <button id="orch-clear-queue-btn" class="orch-btn" data-testid="orch-clear-queue-btn" type="button" disabled>Clear pending tasks</button>
           </div>
 
           <div id="orch-issues" class="orch-issues" data-testid="orch-issues"></div>
@@ -2369,9 +2369,9 @@
       const modified = session?.modifiedAt ? timeAgo(session.modifiedAt) : null;
       const selected = !isQueueItem && selectedSessionIds.has(sid);
       const transitionName = getViewTransitionName(sid);
-      const queueState = String(session?.queueState || '').toLowerCase();
+      const taskState = String(session?.taskState || session?.queueState || '').toLowerCase();
       const queueBadge = isQueueItem
-        ? `<span class="queue-pill">${escapeHtml(queueState === 'dispatching' ? 'Dispatching' : 'Queued')}</span>`
+        ? `<span class="queue-pill">${escapeHtml(taskState === 'dispatching' ? 'Dispatching' : taskState === 'leased' ? 'Leased' : taskState === 'running' ? 'Running' : 'Task')}</span>`
         : '';
       const selectControl = isQueueItem
         ? ''
@@ -2523,26 +2523,34 @@
       detailPanel.classList.add('visible');
 
       if (session.isQueueItem) {
-        const queueId = Number.isFinite(session.queueItemId) ? session.queueItemId : null;
-        const queueState = String(session.queueState || 'queued').toLowerCase();
-        const canCancel = queueState === 'queued' || queueState === 'dispatching';
+        const queueId = Number.isFinite(session.taskId) ? session.taskId : Number.isFinite(session.queueItemId) ? session.queueItemId : null;
+        const queueState = String(session.taskState || session.queueState || 'queued').toLowerCase();
+        const canCancel = queueState === 'queued' || queueState === 'dispatching' || queueState === 'leased' || queueState === 'running';
         const createdAt = session.createdAt ? formatDateTime(session.createdAt) : null;
         const updatedAt = session.modifiedAt ? formatDateTime(session.modifiedAt) : null;
+        const taskIssueCount = Number.isFinite(session.taskIssueCount) ? session.taskIssueCount : null;
         const pathAndLine = session.issuePath
           ? `${session.issuePath}${session.issueLine ? `:${session.issueLine}` : ''}`
           : null;
 
         detailContent.innerHTML = `
           <div class="detail-section">
-            <div class="detail-label">Queue item</div>
-            <h2 class="detail-title">${escapeHtml(session.issueKey || `queue-${queueId || ''}`)}</h2>
-            ${queueId ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">queue id: ${queueId}</div>` : ''}
+            <div class="detail-label">Task</div>
+            <h2 class="detail-title">${escapeHtml(session.taskKey || session.issueKey || `task-${queueId || ''}`)}</h2>
+            ${queueId ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">task id: ${queueId}</div>` : ''}
           </div>
 
           <div class="detail-section">
             <div class="detail-label">State</div>
             <div style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(queueState.toUpperCase())}</div>
           </div>
+
+          ${taskIssueCount ? `
+            <div class="detail-section">
+              <div class="detail-label">Grouped issues</div>
+              <div style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(String(taskIssueCount))}</div>
+            </div>
+          ` : ''}
 
           ${session.issueType ? `
             <div class="detail-section">
@@ -2589,7 +2597,7 @@
 
           ${canCancel && queueId ? `
             <div class="detail-section">
-              <button class="orch-btn" type="button" onclick="cancelQueueItem(${queueId})">Cancel queued item</button>
+              <button class="orch-btn" type="button" onclick="cancelTask(${queueId})">Cancel task</button>
             </div>
           ` : ''}
         `;
@@ -2668,7 +2676,7 @@
       loadLastAssistantMessage(sessionId);
     }
 
-    async function cancelQueueItem(queueId) {
+    async function cancelTask(queueId) {
       const id = parseInt(String(queueId || ''), 10);
       if (!Number.isFinite(id) || id <= 0) return;
       try {
@@ -2680,7 +2688,7 @@
         closeDetailPanel();
         await showAllSessions();
       } catch (error) {
-        alert(`Failed to cancel queue item: ${error?.message || 'Unknown error'}`);
+        alert(`Failed to cancel task: ${error?.message || 'Unknown error'}`);
       }
     }
 
