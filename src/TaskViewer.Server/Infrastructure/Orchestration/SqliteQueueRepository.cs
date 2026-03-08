@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
@@ -22,36 +23,55 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
+            var selectClause = @"
+SELECT
+    id AS Id,
+    issue_key AS IssueKey,
+    mapping_id AS MappingId,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    issue_type AS IssueType,
+    severity AS Severity,
+    rule AS Rule,
+    message AS Message,
+    component AS Component,
+    relative_path AS RelativePath,
+    absolute_path AS AbsolutePath,
+    line AS Line,
+    issue_status AS IssueStatus,
+    instructions_snapshot AS Instructions,
+    state AS State,
+    attempt_count AS AttemptCount,
+    max_attempts AS MaxAttempts,
+    next_attempt_at AS NextAttemptAt,
+    session_id AS SessionId,
+    open_code_url AS OpenCodeUrl,
+    last_error AS LastError,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt,
+    dispatched_at AS DispatchedAt,
+    completed_at AS CompletedAt,
+    cancelled_at AS CancelledAt
+FROM queue_items";
 
-            var where = string.Empty;
+            var sql = states.Count > 0
+                ? selectClause + @"
+WHERE state IN @States
+ORDER BY datetime(updated_at) DESC, id DESC
+LIMIT @Limit"
+                : selectClause + @"
+ORDER BY datetime(updated_at) DESC, id DESC
+LIMIT @Limit";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("Limit", limit);
 
             if (states.Count > 0)
-            {
-                var names = new List<string>();
+                parameters.Add("States", states.ToArray());
 
-                for (var i = 0; i < states.Count; i++)
-                {
-                    var p = $"$s{i}";
-                    names.Add(p);
-                    cmd.Parameters.AddWithValue(p, states[i]);
-                }
-
-                where = $"WHERE state IN ({string.Join(", ", names)})";
-            }
-
-            cmd.CommandText = $"SELECT * FROM queue_items {where} ORDER BY datetime(updated_at) DESC, id DESC LIMIT $limit";
-            cmd.Parameters.AddWithValue("$limit", limit);
-
-            using var reader = cmd.ExecuteReader();
-            var items = new List<QueueItemRecord>();
-
-            while (reader.Read())
-            {
-                items.Add(MapQueue(reader));
-            }
-
-            return items;
+            var rows = await conn.QueryAsync<QueueItemRow>(sql, parameters);
+            return rows.Select(MapQueue).ToList();
         }
         finally
         {
@@ -79,66 +99,65 @@ sealed class SqliteQueueRepository : IQueueRepository
 
             foreach (var issue in issues)
             {
-                using var existing = conn.CreateCommand();
-                existing.CommandText = "SELECT id, state FROM queue_items WHERE mapping_id = $mid AND issue_key = $issueKey AND state IN ('queued', 'dispatching') LIMIT 1";
-                existing.Parameters.AddWithValue("$mid", mapping.Id);
-                existing.Parameters.AddWithValue("$issueKey", issue.Key);
-                using var existingReader = existing.ExecuteReader();
+                var existing = await conn.QuerySingleOrDefaultAsync<QueuedStateRow>(@"
+SELECT
+    id AS Id,
+    state AS State
+FROM queue_items
+WHERE mapping_id = @MappingId
+  AND issue_key = @IssueKey
+  AND state IN ('queued', 'dispatching')
+LIMIT 1", new { MappingId = mapping.Id, IssueKey = issue.Key });
 
-                if (existingReader.Read())
+                if (existing is not null)
                 {
-                    var state = existingReader.GetString(existingReader.GetOrdinal("state"));
-                    skipped.Add(new QueueSkip(issue.Key, $"already-{state}"));
-
+                    skipped.Add(new QueueSkip(issue.Key, $"already-{existing.State}"));
                     continue;
                 }
 
-                using var insert = conn.CreateCommand();
+                var insertedId = await conn.ExecuteScalarAsync<long>(@"
+INSERT INTO queue_items (
+    issue_key, mapping_id, sonar_project_key, directory, branch,
+    issue_type, severity, rule, message,
+    component, relative_path, absolute_path, line, issue_status,
+    instructions_snapshot,
+    state, attempt_count, max_attempts, next_attempt_at,
+    created_at, updated_at
+) VALUES (
+    @IssueKey, @MappingId, @SonarProjectKey, @Directory, @Branch,
+    @IssueType, @Severity, @Rule, @Message,
+    @Component, @RelativePath, @AbsolutePath, @Line, @IssueStatus,
+    @Instructions,
+    'queued', 0, @MaxAttempts, @NextAttemptAt,
+    @CreatedAt, @UpdatedAt
+);
+SELECT last_insert_rowid();", new
+                {
+                    IssueKey = issue.Key,
+                    MappingId = mapping.Id,
+                    SonarProjectKey = mapping.SonarProjectKey,
+                    Directory = mapping.Directory,
+                    Branch = SqliteOrchestrationDataMapper.NullIfWhiteSpace(mapping.Branch),
+                    IssueType = SqliteOrchestrationDataMapper.NullIfWhiteSpace(type ?? issue.Type),
+                    issue.Severity,
+                    issue.Rule,
+                    issue.Message,
+                    issue.Component,
+                    issue.RelativePath,
+                    issue.AbsolutePath,
+                    issue.Line,
+                    IssueStatus = SqliteOrchestrationDataMapper.NullIfWhiteSpace(issue.Status),
+                    Instructions = SqliteOrchestrationDataMapper.NullIfWhiteSpace(instructionText),
+                    MaxAttempts = maxAttempts,
+                    NextAttemptAt = nowIso,
+                    CreatedAt = nowIso,
+                    UpdatedAt = nowIso
+                });
 
-                insert.CommandText = @"
-          INSERT INTO queue_items (
-            issue_key, mapping_id, sonar_project_key, directory, branch,
-            issue_type, severity, rule, message,
-            component, relative_path, absolute_path, line, issue_status,
-            instructions_snapshot,
-            state, attempt_count, max_attempts, next_attempt_at,
-            created_at, updated_at
-          ) VALUES (
-            $issue_key, $mapping_id, $sonar_key, $directory, $branch,
-            $issue_type, $severity, $rule, $message,
-            $component, $relative_path, $absolute_path, $line, $issue_status,
-            $instructions,
-            'queued', 0, $max_attempts, $next_attempt_at,
-            $created_at, $updated_at
-          )";
+                var inserted = await conn.QuerySingleOrDefaultAsync<QueueItemRow>(SelectQueueItemByIdSql, new { Id = insertedId });
 
-                insert.Parameters.AddWithValue("$issue_key", issue.Key);
-                insert.Parameters.AddWithValue("$mapping_id", mapping.Id);
-                insert.Parameters.AddWithValue("$sonar_key", mapping.SonarProjectKey);
-                insert.Parameters.AddWithValue("$directory", mapping.Directory);
-                AddNullableText(insert.Parameters, "$branch", mapping.Branch);
-                AddNullableText(insert.Parameters, "$issue_type", type ?? issue.Type);
-                AddNullableText(insert.Parameters, "$severity", issue.Severity);
-                AddNullableText(insert.Parameters, "$rule", issue.Rule);
-                AddNullableText(insert.Parameters, "$message", issue.Message);
-                AddNullableText(insert.Parameters, "$component", issue.Component);
-                AddNullableText(insert.Parameters, "$relative_path", issue.RelativePath);
-                AddNullableText(insert.Parameters, "$absolute_path", issue.AbsolutePath);
-                AddNullableInt(insert.Parameters, "$line", issue.Line);
-                AddNullableText(insert.Parameters, "$issue_status", issue.Status);
-                AddNullableText(insert.Parameters, "$instructions", instructionText);
-                insert.Parameters.AddWithValue("$max_attempts", maxAttempts);
-                insert.Parameters.AddWithValue("$next_attempt_at", nowIso);
-                insert.Parameters.AddWithValue("$created_at", nowIso);
-                insert.Parameters.AddWithValue("$updated_at", nowIso);
-                insert.ExecuteNonQuery();
-
-                using var readInserted = conn.CreateCommand();
-                readInserted.CommandText = "SELECT * FROM queue_items WHERE id = last_insert_rowid()";
-                using var insertedReader = readInserted.ExecuteReader();
-
-                if (insertedReader.Read())
-                    createdItems.Add(MapQueue(insertedReader));
+                if (inserted is not null)
+                    createdItems.Add(MapQueue(inserted));
             }
         }
         finally
@@ -166,18 +185,19 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT state, COUNT(*) AS count FROM queue_items GROUP BY state";
-            using var reader = cmd.ExecuteReader();
+            var rows = await conn.QueryAsync<QueueStateCountRow>(@"
+SELECT
+    state AS State,
+    COUNT(*) AS Count
+FROM queue_items
+GROUP BY state");
 
-            while (reader.Read())
+            foreach (var row in rows)
             {
-                var state = reader.GetString(reader.GetOrdinal("state"));
-
-                if (!stats.ContainsKey(state))
+                if (!stats.ContainsKey(row.State))
                     continue;
 
-                stats[state] = reader.GetInt32(reader.GetOrdinal("count"));
+                stats[row.State] = row.Count;
             }
         }
         finally
@@ -202,16 +222,10 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = @"
-        UPDATE queue_items
-        SET state = 'cancelled', cancelled_at = $now, updated_at = $now
-        WHERE id = $id AND state IN ('queued', 'dispatching')";
-
-            cmd.Parameters.AddWithValue("$now", nowIso);
-            cmd.Parameters.AddWithValue("$id", id);
-            var changed = cmd.ExecuteNonQuery();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'cancelled', cancelled_at = @Now, updated_at = @Now
+WHERE id = @Id AND state IN ('queued', 'dispatching')", new { Now = nowIso, Id = id });
 
             if (changed > 0)
                 _onChange();
@@ -232,15 +246,10 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = @"
-        UPDATE queue_items
-        SET state = 'queued', next_attempt_at = $now, updated_at = $now, last_error = NULL
-        WHERE state = 'failed'";
-
-            cmd.Parameters.AddWithValue("$now", nowIso);
-            var changed = cmd.ExecuteNonQuery();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'queued', next_attempt_at = @Now, updated_at = @Now, last_error = NULL
+WHERE state = 'failed'", new { Now = nowIso });
 
             if (changed > 0)
                 _onChange();
@@ -261,15 +270,10 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = @"
-        UPDATE queue_items
-        SET state = 'cancelled', cancelled_at = $now, updated_at = $now
-        WHERE state = 'queued'";
-
-            cmd.Parameters.AddWithValue("$now", nowIso);
-            var changed = cmd.ExecuteNonQuery();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'cancelled', cancelled_at = @Now, updated_at = @Now
+WHERE state = 'queued'", new { Now = nowIso });
 
             if (changed > 0)
                 _onChange();
@@ -290,47 +294,42 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var select = conn.CreateCommand();
+            using var transaction = conn.BeginTransaction();
 
-            select.CommandText = @"
-        SELECT *
-        FROM queue_items
-        WHERE state = 'queued'
-          AND (next_attempt_at IS NULL OR next_attempt_at <= $now)
-        ORDER BY datetime(created_at) ASC, id ASC
-        LIMIT 1";
+            var next = await conn.QuerySingleOrDefaultAsync<QueuedIdRow>(@"
+SELECT
+    id AS Id
+FROM queue_items
+WHERE state = 'queued'
+  AND (next_attempt_at IS NULL OR next_attempt_at <= @Now)
+ORDER BY datetime(created_at) ASC, id ASC
+LIMIT 1", new { Now = nowIso }, transaction);
 
-            select.Parameters.AddWithValue("$now", nowIso);
-
-            using var reader = select.ExecuteReader();
-
-            if (!reader.Read())
+            if (next is null)
+            {
+                transaction.Commit();
                 return null;
+            }
 
-            var id = reader.GetInt32(reader.GetOrdinal("id"));
-            using var claim = conn.CreateCommand();
+            var claimed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'dispatching',
+    attempt_count = attempt_count + 1,
+    updated_at = @Now,
+    dispatched_at = COALESCE(dispatched_at, @Now),
+    last_error = NULL
+WHERE id = @Id AND state = 'queued'", new { Now = nowIso, Id = next.Id }, transaction);
 
-            claim.CommandText = @"
-        UPDATE queue_items
-        SET state = 'dispatching',
-            attempt_count = attempt_count + 1,
-            updated_at = $now,
-            dispatched_at = COALESCE(dispatched_at, $now),
-            last_error = NULL
-        WHERE id = $id AND state = 'queued'";
-
-            claim.Parameters.AddWithValue("$now", nowIso);
-            claim.Parameters.AddWithValue("$id", id);
-
-            if (claim.ExecuteNonQuery() == 0)
+            if (claimed == 0)
+            {
+                transaction.Commit();
                 return null;
+            }
 
-            using var readClaimed = conn.CreateCommand();
-            readClaimed.CommandText = "SELECT * FROM queue_items WHERE id = $id";
-            readClaimed.Parameters.AddWithValue("$id", id);
-            using var claimedReader = readClaimed.ExecuteReader();
+            var row = await conn.QuerySingleOrDefaultAsync<QueueItemRow>(SelectQueueItemByIdSql, new { Id = next.Id }, transaction);
+            transaction.Commit();
 
-            return claimedReader.Read() ? MapQueue(claimedReader) : null;
+            return row is null ? null : MapQueue(row);
         }
         finally
         {
@@ -350,25 +349,22 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = @"
-          UPDATE queue_items
-          SET state = 'session_created',
-              session_id = $sid,
-              open_code_url = $url,
-              completed_at = $ts,
-              updated_at = $ts,
-              next_attempt_at = NULL,
-              last_error = NULL
-          WHERE id = $id AND state = 'dispatching'";
-
-            cmd.Parameters.AddWithValue("$sid", sessionId);
-            AddNullableText(cmd.Parameters, "$url", openCodeUrl);
-            cmd.Parameters.AddWithValue("$ts", timestampIso);
-            cmd.Parameters.AddWithValue("$id", id);
-
-            var changed = cmd.ExecuteNonQuery();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'session_created',
+    session_id = @SessionId,
+    open_code_url = @OpenCodeUrl,
+    completed_at = @Timestamp,
+    updated_at = @Timestamp,
+    next_attempt_at = NULL,
+    last_error = NULL
+WHERE id = @Id AND state = 'dispatching'", new
+            {
+                Id = id,
+                SessionId = sessionId,
+                OpenCodeUrl = SqliteOrchestrationDataMapper.NullIfWhiteSpace(openCodeUrl),
+                Timestamp = timestampIso
+            });
 
             if (changed > 0)
                 _onChange();
@@ -388,21 +384,17 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var read = conn.CreateCommand();
-            read.CommandText = "SELECT attempt_count, max_attempts FROM queue_items WHERE id = $id";
-            read.Parameters.AddWithValue("$id", id);
-            using var reader = read.ExecuteReader();
+            var row = await conn.QuerySingleOrDefaultAsync<AttemptInfoRow>(@"
+SELECT
+    attempt_count AS AttemptCount,
+    max_attempts AS MaxAttempts
+FROM queue_items
+WHERE id = @Id", new { Id = id });
 
-            if (!reader.Read())
+            if (row is null)
                 return (fallbackAttemptCount, fallbackMaxAttempts);
 
-            var attemptCountOrd = reader.GetOrdinal("attempt_count");
-            var maxAttemptsOrd = reader.GetOrdinal("max_attempts");
-
-            var attemptCount = reader.IsDBNull(attemptCountOrd) ? fallbackAttemptCount : reader.GetInt32(attemptCountOrd);
-            var maxAttempts = reader.IsDBNull(maxAttemptsOrd) ? fallbackMaxAttempts : reader.GetInt32(maxAttemptsOrd);
-
-            return (attemptCount, maxAttempts);
+            return (row.AttemptCount ?? fallbackAttemptCount, row.MaxAttempts ?? fallbackMaxAttempts);
         }
         finally
         {
@@ -423,23 +415,20 @@ sealed class SqliteQueueRepository : IQueueRepository
         try
         {
             using var conn = _openConnection();
-            using var update = conn.CreateCommand();
-
-            update.CommandText = @"
-          UPDATE queue_items
-          SET state = $state,
-              next_attempt_at = $next,
-              last_error = $error,
-              updated_at = $updated
-          WHERE id = $id AND state = 'dispatching'";
-
-            update.Parameters.AddWithValue("$state", state);
-            AddNullableDateTime(update.Parameters, "$next", nextAttemptAt);
-            update.Parameters.AddWithValue("$error", lastError);
-            update.Parameters.AddWithValue("$updated", updatedAtIso);
-            update.Parameters.AddWithValue("$id", id);
-
-            var changed = update.ExecuteNonQuery();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = @State,
+    next_attempt_at = @NextAttemptAt,
+    last_error = @LastError,
+    updated_at = @UpdatedAt
+WHERE id = @Id AND state = 'dispatching'", new
+            {
+                Id = id,
+                State = state,
+                NextAttemptAt = nextAttemptAt?.ToString("O"),
+                LastError = lastError,
+                UpdatedAt = updatedAtIso
+            });
 
             if (changed > 0)
                 _onChange();
@@ -452,104 +441,126 @@ sealed class SqliteQueueRepository : IQueueRepository
         }
     }
 
-    static void AddNullableText(SqliteParameterCollection parameters, string name, string? value)
+    static QueueItemRecord MapQueue(QueueItemRow row)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            parameters.AddWithValue(name, DBNull.Value);
-        else
-            parameters.AddWithValue(name, value);
-    }
-
-    static void AddNullableInt(SqliteParameterCollection parameters, string name, int? value)
-    {
-        if (value.HasValue)
-            parameters.AddWithValue(name, value.Value);
-        else
-            parameters.AddWithValue(name, DBNull.Value);
-    }
-
-    static void AddNullableDateTime(SqliteParameterCollection parameters, string name, DateTimeOffset? value)
-    {
-        if (value.HasValue)
-            parameters.AddWithValue(name, value.Value.ToString("O"));
-        else
-            parameters.AddWithValue(name, DBNull.Value);
-    }
-
-    static QueueItemRecord MapQueue(SqliteDataReader reader)
-    {
-        string? Str(string name)
-        {
-            var ord = reader.GetOrdinal(name);
-
-            return reader.IsDBNull(ord) ? null : reader.GetString(ord);
-        }
-
-        int? IntNullable(string name)
-        {
-            var ord = reader.GetOrdinal(name);
-
-            return reader.IsDBNull(ord) ? null : reader.GetInt32(ord);
-        }
-
-        DateTimeOffset ParseDateTime(string name)
-        {
-            var ord = reader.GetOrdinal(name);
-
-            if (reader.IsDBNull(ord))
-                return DateTimeOffset.MinValue;
-
-            var raw = reader.GetString(ord);
-
-            return DateTimeOffset.TryParse(raw, out var parsed)
-                ? parsed
-                : DateTimeOffset.MinValue;
-        }
-
-        DateTimeOffset? ParseDateTimeNullable(string name)
-        {
-            var ord = reader.GetOrdinal(name);
-
-            if (reader.IsDBNull(ord))
-                return null;
-
-            var raw = reader.GetString(ord);
-
-            return DateTimeOffset.TryParse(raw, out var parsed)
-                ? parsed
-                : null;
-        }
-
         return new QueueItemRecord
         {
-            Id = reader.GetInt32(reader.GetOrdinal("id")),
-            IssueKey = reader.GetString(reader.GetOrdinal("issue_key")),
-            MappingId = reader.GetInt32(reader.GetOrdinal("mapping_id")),
-            SonarProjectKey = reader.GetString(reader.GetOrdinal("sonar_project_key")),
-            Directory = reader.GetString(reader.GetOrdinal("directory")),
-            Branch = Str("branch"),
-            IssueType = Str("issue_type"),
-            Severity = Str("severity"),
-            Rule = Str("rule"),
-            Message = Str("message"),
-            Component = Str("component"),
-            RelativePath = Str("relative_path"),
-            AbsolutePath = Str("absolute_path"),
-            Line = IntNullable("line"),
-            IssueStatus = Str("issue_status"),
-            Instructions = Str("instructions_snapshot"),
-            State = reader.GetString(reader.GetOrdinal("state")),
-            AttemptCount = reader.GetInt32(reader.GetOrdinal("attempt_count")),
-            MaxAttempts = reader.GetInt32(reader.GetOrdinal("max_attempts")),
-            NextAttemptAt = ParseDateTimeNullable("next_attempt_at"),
-            SessionId = Str("session_id"),
-            OpenCodeUrl = Str("open_code_url"),
-            LastError = Str("last_error"),
-            CreatedAt = ParseDateTime("created_at"),
-            UpdatedAt = ParseDateTime("updated_at"),
-            DispatchedAt = ParseDateTimeNullable("dispatched_at"),
-            CompletedAt = ParseDateTimeNullable("completed_at"),
-            CancelledAt = ParseDateTimeNullable("cancelled_at")
+            Id = row.Id,
+            IssueKey = row.IssueKey,
+            MappingId = row.MappingId,
+            SonarProjectKey = row.SonarProjectKey,
+            Directory = row.Directory,
+            Branch = row.Branch,
+            IssueType = row.IssueType,
+            Severity = row.Severity,
+            Rule = row.Rule,
+            Message = row.Message,
+            Component = row.Component,
+            RelativePath = row.RelativePath,
+            AbsolutePath = row.AbsolutePath,
+            Line = row.Line,
+            IssueStatus = row.IssueStatus,
+            Instructions = row.Instructions,
+            State = row.State,
+            AttemptCount = row.AttemptCount,
+            MaxAttempts = row.MaxAttempts,
+            NextAttemptAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.NextAttemptAt),
+            SessionId = row.SessionId,
+            OpenCodeUrl = row.OpenCodeUrl,
+            LastError = row.LastError,
+            CreatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.CreatedAt),
+            UpdatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.UpdatedAt),
+            DispatchedAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.DispatchedAt),
+            CompletedAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.CompletedAt),
+            CancelledAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.CancelledAt)
         };
+    }
+
+    const string SelectQueueItemByIdSql = @"
+SELECT
+    id AS Id,
+    issue_key AS IssueKey,
+    mapping_id AS MappingId,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    issue_type AS IssueType,
+    severity AS Severity,
+    rule AS Rule,
+    message AS Message,
+    component AS Component,
+    relative_path AS RelativePath,
+    absolute_path AS AbsolutePath,
+    line AS Line,
+    issue_status AS IssueStatus,
+    instructions_snapshot AS Instructions,
+    state AS State,
+    attempt_count AS AttemptCount,
+    max_attempts AS MaxAttempts,
+    next_attempt_at AS NextAttemptAt,
+    session_id AS SessionId,
+    open_code_url AS OpenCodeUrl,
+    last_error AS LastError,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt,
+    dispatched_at AS DispatchedAt,
+    completed_at AS CompletedAt,
+    cancelled_at AS CancelledAt
+FROM queue_items
+WHERE id = @Id";
+
+    sealed class QueueItemRow
+    {
+        public int Id { get; init; }
+        public string IssueKey { get; init; } = string.Empty;
+        public int MappingId { get; init; }
+        public string SonarProjectKey { get; init; } = string.Empty;
+        public string Directory { get; init; } = string.Empty;
+        public string? Branch { get; init; }
+        public string? IssueType { get; init; }
+        public string? Severity { get; init; }
+        public string? Rule { get; init; }
+        public string? Message { get; init; }
+        public string? Component { get; init; }
+        public string? RelativePath { get; init; }
+        public string? AbsolutePath { get; init; }
+        public int? Line { get; init; }
+        public string? IssueStatus { get; init; }
+        public string? Instructions { get; init; }
+        public string State { get; init; } = string.Empty;
+        public int AttemptCount { get; init; }
+        public int MaxAttempts { get; init; }
+        public string? NextAttemptAt { get; init; }
+        public string? SessionId { get; init; }
+        public string? OpenCodeUrl { get; init; }
+        public string? LastError { get; init; }
+        public string CreatedAt { get; init; } = string.Empty;
+        public string UpdatedAt { get; init; } = string.Empty;
+        public string? DispatchedAt { get; init; }
+        public string? CompletedAt { get; init; }
+        public string? CancelledAt { get; init; }
+    }
+
+    sealed class QueuedStateRow
+    {
+        public int Id { get; init; }
+        public string State { get; init; } = string.Empty;
+    }
+
+    sealed class QueueStateCountRow
+    {
+        public string State { get; init; } = string.Empty;
+        public int Count { get; init; }
+    }
+
+    sealed class QueuedIdRow
+    {
+        public int Id { get; init; }
+    }
+
+    sealed class AttemptInfoRow
+    {
+        public int? AttemptCount { get; init; }
+        public int? MaxAttempts { get; init; }
     }
 }

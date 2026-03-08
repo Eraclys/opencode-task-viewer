@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
@@ -22,20 +23,19 @@ public sealed class SqliteMappingRepository : IMappingRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings ORDER BY sonar_project_key COLLATE NOCASE ASC";
-            using var reader = cmd.ExecuteReader();
-            var list = new List<MappingRecord>();
+            var rows = await conn.QueryAsync<MappingRow>(@"
+SELECT
+    id AS Id,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    enabled AS Enabled,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM project_mappings
+ORDER BY sonar_project_key COLLATE NOCASE ASC");
 
-            while (reader.Read())
-            {
-                var row = MapMapping(reader);
-
-                if (row is not null)
-                    list.Add(row);
-            }
-
-            return list;
+            return rows.Select(MapMapping).ToList();
         }
         finally
         {
@@ -50,12 +50,20 @@ public sealed class SqliteMappingRepository : IMappingRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings WHERE id = $id LIMIT 1";
-            cmd.Parameters.AddWithValue("$id", id);
-            using var reader = cmd.ExecuteReader();
+            var row = await conn.QuerySingleOrDefaultAsync<MappingRow>(@"
+SELECT
+    id AS Id,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    enabled AS Enabled,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM project_mappings
+WHERE id = @Id
+LIMIT 1", new { Id = id });
 
-            return reader.Read() ? MapMapping(reader) : null;
+            return row is null ? null : MapMapping(row);
         }
         finally
         {
@@ -72,6 +80,8 @@ public sealed class SqliteMappingRepository : IMappingRepository
         DateTimeOffset now)
     {
         var nowIso = now.ToString("O");
+        var normalizedBranch = SqliteOrchestrationDataMapper.NullIfWhiteSpace(branch);
+
         await _dbLock.WaitAsync();
 
         try
@@ -81,76 +91,83 @@ public sealed class SqliteMappingRepository : IMappingRepository
             if (id.HasValue &&
                 id.Value > 0)
             {
-                using var update = conn.CreateCommand();
+                var updated = await conn.ExecuteAsync(@"
+UPDATE project_mappings
+SET sonar_project_key = @SonarProjectKey,
+    directory = @Directory,
+    branch = @Branch,
+    enabled = @Enabled,
+    updated_at = @UpdatedAt
+WHERE id = @Id", new
+                {
+                    Id = id.Value,
+                    SonarProjectKey = sonarProjectKey,
+                    Directory = directory,
+                    Branch = normalizedBranch,
+                    Enabled = enabled ? 1 : 0,
+                    UpdatedAt = nowIso
+                });
 
-                update.CommandText = @"
-          UPDATE project_mappings
-          SET sonar_project_key = $key,
-              directory = $dir,
-              branch = $branch,
-              enabled = $enabled,
-              updated_at = $updated
-          WHERE id = $id";
-
-                update.Parameters.AddWithValue("$key", sonarProjectKey);
-                update.Parameters.AddWithValue("$dir", directory);
-                if (string.IsNullOrWhiteSpace(branch))
-                    update.Parameters.AddWithValue("$branch", DBNull.Value);
-                else
-                    update.Parameters.AddWithValue("$branch", branch);
-                update.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-                update.Parameters.AddWithValue("$updated", nowIso);
-                update.Parameters.AddWithValue("$id", id.Value);
-
-                if (update.ExecuteNonQuery() == 0)
+                if (updated == 0)
                     throw new InvalidOperationException("Mapping not found");
 
-                using var select = conn.CreateCommand();
-                select.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings WHERE id = $id LIMIT 1";
-                select.Parameters.AddWithValue("$id", id.Value);
-                using var reader = select.ExecuteReader();
+                var row = await conn.QuerySingleOrDefaultAsync<MappingRow>(@"
+SELECT
+    id AS Id,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    enabled AS Enabled,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM project_mappings
+WHERE id = @Id
+LIMIT 1", new { Id = id.Value });
 
-                if (!reader.Read())
+                if (row is null)
                     throw new InvalidOperationException("Mapping not found");
 
                 _onChange();
 
-                return MapMapping(reader)!;
+                return MapMapping(row);
             }
 
-            using var upsert = conn.CreateCommand();
+            await conn.ExecuteAsync(@"
+INSERT INTO project_mappings (sonar_project_key, directory, branch, enabled, created_at, updated_at)
+VALUES (@SonarProjectKey, @Directory, @Branch, @Enabled, @CreatedAt, @UpdatedAt)
+ON CONFLICT(sonar_project_key) DO UPDATE SET
+  directory = excluded.directory,
+  branch = excluded.branch,
+  enabled = excluded.enabled,
+  updated_at = excluded.updated_at", new
+            {
+                SonarProjectKey = sonarProjectKey,
+                Directory = directory,
+                Branch = normalizedBranch,
+                Enabled = enabled ? 1 : 0,
+                CreatedAt = nowIso,
+                UpdatedAt = nowIso
+            });
 
-            upsert.CommandText = @"
-        INSERT INTO project_mappings (sonar_project_key, directory, branch, enabled, created_at, updated_at)
-        VALUES ($key, $dir, $branch, $enabled, $created, $updated)
-        ON CONFLICT(sonar_project_key) DO UPDATE SET
-          directory = excluded.directory,
-          branch = excluded.branch,
-          enabled = excluded.enabled,
-          updated_at = excluded.updated_at";
+            var insertedRow = await conn.QuerySingleOrDefaultAsync<MappingRow>(@"
+SELECT
+    id AS Id,
+    sonar_project_key AS SonarProjectKey,
+    directory AS Directory,
+    branch AS Branch,
+    enabled AS Enabled,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM project_mappings
+WHERE sonar_project_key = @SonarProjectKey
+LIMIT 1", new { SonarProjectKey = sonarProjectKey });
 
-            upsert.Parameters.AddWithValue("$key", sonarProjectKey);
-            upsert.Parameters.AddWithValue("$dir", directory);
-            if (string.IsNullOrWhiteSpace(branch))
-                upsert.Parameters.AddWithValue("$branch", DBNull.Value);
-            else
-                upsert.Parameters.AddWithValue("$branch", branch);
-            upsert.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-            upsert.Parameters.AddWithValue("$created", nowIso);
-            upsert.Parameters.AddWithValue("$updated", nowIso);
-            upsert.ExecuteNonQuery();
-
-            using var select2 = conn.CreateCommand();
-            select2.CommandText = "SELECT id, sonar_project_key, directory, branch, enabled, created_at, updated_at FROM project_mappings WHERE sonar_project_key = $key LIMIT 1";
-            select2.Parameters.AddWithValue("$key", sonarProjectKey);
-            using var reader2 = select2.ExecuteReader();
-
-            if (!reader2.Read())
+            if (insertedRow is null)
                 throw new InvalidOperationException("Failed to save mapping");
 
             _onChange();
 
-            return MapMapping(reader2)!;
+            return MapMapping(insertedRow);
         }
         finally
         {
@@ -165,16 +182,19 @@ public sealed class SqliteMappingRepository : IMappingRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT id, mapping_id, issue_type, instructions, created_at, updated_at FROM instruction_profiles WHERE mapping_id = $mid AND issue_type = $type LIMIT 1";
-            cmd.Parameters.AddWithValue("$mid", mappingId);
-            cmd.Parameters.AddWithValue("$type", issueType);
-            using var reader = cmd.ExecuteReader();
+            var row = await conn.QuerySingleOrDefaultAsync<InstructionProfileRow>(@"
+SELECT
+    id AS Id,
+    mapping_id AS MappingId,
+    issue_type AS IssueType,
+    instructions AS Instructions,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM instruction_profiles
+WHERE mapping_id = @MappingId AND issue_type = @IssueType
+LIMIT 1", new { MappingId = mappingId, IssueType = issueType });
 
-            if (!reader.Read())
-                return null;
-
-            return MapInstructionProfile(reader);
+            return row is null ? null : MapInstructionProfile(row);
         }
         finally
         {
@@ -194,36 +214,39 @@ public sealed class SqliteMappingRepository : IMappingRepository
         try
         {
             using var conn = _openConnection();
-            using var upsert = conn.CreateCommand();
 
-            upsert.CommandText = @"
-        INSERT INTO instruction_profiles (mapping_id, issue_type, instructions, created_at, updated_at)
-        VALUES ($mid, $type, $instructions, $created, $updated)
-        ON CONFLICT(mapping_id, issue_type) DO UPDATE SET
-          instructions = excluded.instructions,
-          updated_at = excluded.updated_at";
+            await conn.ExecuteAsync(@"
+INSERT INTO instruction_profiles (mapping_id, issue_type, instructions, created_at, updated_at)
+VALUES (@MappingId, @IssueType, @Instructions, @CreatedAt, @UpdatedAt)
+ON CONFLICT(mapping_id, issue_type) DO UPDATE SET
+  instructions = excluded.instructions,
+  updated_at = excluded.updated_at", new
+            {
+                MappingId = mappingId,
+                IssueType = issueType,
+                Instructions = instructions,
+                CreatedAt = nowIso,
+                UpdatedAt = nowIso
+            });
 
-            upsert.Parameters.AddWithValue("$mid", mappingId);
-            upsert.Parameters.AddWithValue("$type", issueType);
-            upsert.Parameters.AddWithValue("$instructions", instructions);
-            upsert.Parameters.AddWithValue("$created", nowIso);
-            upsert.Parameters.AddWithValue("$updated", nowIso);
-            upsert.ExecuteNonQuery();
+            var row = await conn.QuerySingleOrDefaultAsync<InstructionProfileRow>(@"
+SELECT
+    id AS Id,
+    mapping_id AS MappingId,
+    issue_type AS IssueType,
+    instructions AS Instructions,
+    created_at AS CreatedAt,
+    updated_at AS UpdatedAt
+FROM instruction_profiles
+WHERE mapping_id = @MappingId AND issue_type = @IssueType
+LIMIT 1", new { MappingId = mappingId, IssueType = issueType });
 
-            using var select = conn.CreateCommand();
-            select.CommandText = "SELECT id, mapping_id, issue_type, instructions, created_at, updated_at FROM instruction_profiles WHERE mapping_id = $mid AND issue_type = $type LIMIT 1";
-            select.Parameters.AddWithValue("$mid", mappingId);
-            select.Parameters.AddWithValue("$type", issueType);
-            using var reader = select.ExecuteReader();
-
-            if (!reader.Read())
+            if (row is null)
                 throw new InvalidOperationException("Failed to save instruction profile");
-
-            var result = MapInstructionProfile(reader);
 
             _onChange();
 
-            return result;
+            return MapInstructionProfile(row);
         }
         finally
         {
@@ -238,26 +261,27 @@ public sealed class SqliteMappingRepository : IMappingRepository
         try
         {
             using var conn = _openConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT directory FROM project_mappings WHERE enabled = 1";
-            using var reader = cmd.ExecuteReader();
+            var directories = await conn.QueryAsync<string>(@"
+SELECT directory
+FROM project_mappings
+WHERE enabled = 1");
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var dirs = new List<string>();
+            var result = new List<string>();
 
-            while (reader.Read())
+            foreach (var directory in directories)
             {
-                var d = reader.IsDBNull(0) ? string.Empty : reader.GetString(0).Trim();
+                var trimmed = directory?.Trim() ?? string.Empty;
 
-                if (string.IsNullOrWhiteSpace(d))
+                if (string.IsNullOrWhiteSpace(trimmed))
                     continue;
 
-                var key = d.Replace('\\', '/');
+                var key = trimmed.Replace('\\', '/');
 
                 if (seen.Add(key))
-                    dirs.Add(d);
+                    result.Add(trimmed);
             }
 
-            return dirs;
+            return result;
         }
         finally
         {
@@ -265,37 +289,51 @@ public sealed class SqliteMappingRepository : IMappingRepository
         }
     }
 
-    static MappingRecord? MapMapping(SqliteDataReader reader)
+    static MappingRecord MapMapping(MappingRow row)
     {
         return new MappingRecord
         {
-            Id = reader.GetInt32(reader.GetOrdinal("id")),
-            SonarProjectKey = reader.GetString(reader.GetOrdinal("sonar_project_key")),
-            Directory = reader.GetString(reader.GetOrdinal("directory")),
-            Branch = reader.IsDBNull(reader.GetOrdinal("branch")) ? null : reader.GetString(reader.GetOrdinal("branch")),
-            Enabled = reader.GetInt32(reader.GetOrdinal("enabled")) != 0,
-            CreatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("created_at"))),
-            UpdatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("updated_at")))
+            Id = row.Id,
+            SonarProjectKey = row.SonarProjectKey,
+            Directory = row.Directory,
+            Branch = row.Branch,
+            Enabled = row.Enabled != 0,
+            CreatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.CreatedAt),
+            UpdatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.UpdatedAt)
         };
     }
 
-    static InstructionProfileRecord MapInstructionProfile(SqliteDataReader reader)
+    static InstructionProfileRecord MapInstructionProfile(InstructionProfileRow row)
     {
         return new InstructionProfileRecord
         {
-            Id = reader.GetInt32(reader.GetOrdinal("id")),
-            MappingId = reader.GetInt32(reader.GetOrdinal("mapping_id")),
-            IssueType = reader.GetString(reader.GetOrdinal("issue_type")),
-            Instructions = reader.GetString(reader.GetOrdinal("instructions")),
-            CreatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("created_at"))),
-            UpdatedAt = ParseDateTime(reader.GetString(reader.GetOrdinal("updated_at")))
+            Id = row.Id,
+            MappingId = row.MappingId,
+            IssueType = row.IssueType,
+            Instructions = row.Instructions,
+            CreatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.CreatedAt),
+            UpdatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.UpdatedAt)
         };
     }
 
-    static DateTimeOffset ParseDateTime(string value)
+    sealed class MappingRow
     {
-        return DateTimeOffset.TryParse(value, out var parsed)
-            ? parsed
-            : DateTimeOffset.MinValue;
+        public int Id { get; init; }
+        public string SonarProjectKey { get; init; } = string.Empty;
+        public string Directory { get; init; } = string.Empty;
+        public string? Branch { get; init; }
+        public int Enabled { get; init; }
+        public string CreatedAt { get; init; } = string.Empty;
+        public string UpdatedAt { get; init; } = string.Empty;
+    }
+
+    sealed class InstructionProfileRow
+    {
+        public int Id { get; init; }
+        public int MappingId { get; init; }
+        public string IssueType { get; init; } = string.Empty;
+        public string Instructions { get; init; } = string.Empty;
+        public string CreatedAt { get; init; } = string.Empty;
+        public string UpdatedAt { get; init; } = string.Empty;
     }
 }

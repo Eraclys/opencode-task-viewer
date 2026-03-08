@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Data.Sqlite;
 using TaskViewer.OpenCode;
 using TaskViewer.Server.Application.Orchestration;
@@ -119,9 +120,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     void InitializeSchema()
     {
         using var conn = OpenConnection();
-        using var cmd = conn.CreateCommand();
-
-        cmd.CommandText = @"
+        conn.Execute(@"
       CREATE TABLE IF NOT EXISTS project_mappings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sonar_project_key TEXT NOT NULL UNIQUE,
@@ -176,9 +175,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
       CREATE INDEX IF NOT EXISTS idx_queue_state_next_attempt ON queue_items(state, next_attempt_at, created_at);
       CREATE INDEX IF NOT EXISTS idx_queue_issue_key ON queue_items(issue_key);
       CREATE INDEX IF NOT EXISTS idx_queue_mapping_state ON queue_items(mapping_id, state, created_at);
-    ";
-
-        cmd.ExecuteNonQuery();
+    ");
     }
 
     public bool IsConfigured()

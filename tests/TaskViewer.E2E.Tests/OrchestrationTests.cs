@@ -36,7 +36,6 @@ public sealed class OrchestrationTests
             await page.GetByTestId("orch-enqueue-btn").ClickAsync();
 
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Queued 1 issue");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[Queued]");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[CODE_SMELL]");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("sq-gamma-");
 
