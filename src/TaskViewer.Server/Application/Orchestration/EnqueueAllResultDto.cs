@@ -2,6 +2,7 @@
 
 public sealed class EnqueueAllResultDto
 {
+    public int Requested { get; set; }
     public required int Matched { get; init; }
     public required int Created { get; init; }
     public required IReadOnlyList<QueueEnqueueSkipView> Skipped { get; init; }

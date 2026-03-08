@@ -17,8 +17,12 @@ public sealed class QueueDispatchServiceTests
         var result = await sut.DispatchAsync(
             new QueueItemRecord
             {
+                TaskKey = "alpha::main::src/file.js::javascript:S1126",
+                TaskUnit = "project+file+rule",
                 IssueKey = "sq-11",
+                IssueCount = 1,
                 Directory = "C:/Work/Alpha",
+                SonarProjectKey = "alpha",
                 IssueType = "CODE_SMELL",
                 Severity = "MAJOR",
                 Rule = "javascript:S1126",
@@ -27,20 +31,33 @@ public sealed class QueueDispatchServiceTests
                 Line = 12,
                 Message = "Remove this",
                 Instructions = "  keep patch tiny  "
-            });
+            },
+            [
+                new NormalizedIssue
+                {
+                    Key = "sq-11",
+                    Type = "CODE_SMELL",
+                    Rule = "javascript:S1126",
+                    Message = "Remove this",
+                    RelativePath = "src/file.js",
+                    AbsolutePath = "C:/Work/Alpha/src/file.js",
+                    Line = 12,
+                    Status = "OPEN"
+                }
+            ]);
 
         Assert.Equal("sess-123", result.SessionId);
         Assert.Equal("http://opencode.local/session/sess-123?dir=C:/Work/Alpha", result.OpenCodeUrl);
         var createCall = Assert.Single(client.CreateCalls);
         var promptCall = Assert.Single(client.PromptCalls);
         Assert.Equal("C:/Work/Alpha", createCall.Directory);
-        Assert.Equal("[CODE_SMELL] sq-11", createCall.Title);
+        Assert.Equal("[CODE_SMELL] javascript:S1126 :: src/file.js", createCall.Title);
         Assert.Equal("C:/Work/Alpha", promptCall.Directory);
         Assert.Equal("sess-123", promptCall.SessionId);
         var text = promptCall.Prompt;
-        Assert.Contains("Issue key: sq-11", text);
-        Assert.Contains("Issue type: CODE_SMELL", text);
-        Assert.Contains("File: src/file.js", text);
+        Assert.Contains("Task key: alpha::main::src/file.js::javascript:S1126", text);
+        Assert.Contains("Issue count: 1", text);
+        Assert.Contains("Primary file: src/file.js", text);
         Assert.Contains("Additional instructions:", text);
         Assert.Contains("keep patch tiny", text);
     }
@@ -57,7 +74,8 @@ public sealed class QueueDispatchServiceTests
             {
                 IssueKey = "sq-missing",
                 Directory = "C:/Work"
-            }));
+            },
+            []));
 
         Assert.Contains("session id", ex.Message, StringComparison.OrdinalIgnoreCase);
     }

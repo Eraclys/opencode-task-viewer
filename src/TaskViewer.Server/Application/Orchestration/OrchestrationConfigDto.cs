@@ -8,4 +8,6 @@ public sealed class OrchestrationConfigDto
     public required int MaxAttempts { get; init; }
     public required int MaxWorkingGlobal { get; init; }
     public required int WorkingResumeBelow { get; init; }
+    public int? PerProjectMaxActive { get; init; }
+    public int? LeaseSeconds { get; init; }
 }

@@ -10,10 +10,13 @@ public sealed class SonarOrchestratorOptions
     public required string SonarToken { get; init; }
     public required string DbPath { get; init; }
     public required int MaxActive { get; init; }
+    public required int PerProjectMaxActive { get; init; }
     public required int PollMs { get; init; }
+    public required int LeaseSeconds { get; init; }
     public required int MaxAttempts { get; init; }
     public required int MaxWorkingGlobal { get; init; }
     public required int WorkingResumeBelow { get; init; }
+    public OpenCodeApiClient? OpenCodeApiClient { get; init; }
     public ISonarQubeService? SonarQubeService { get; init; }
     public ISonarRuleReadService? SonarRuleReadService { get; init; }
     public ISonarRulesReadService? SonarRulesReadService { get; init; }
@@ -34,7 +37,9 @@ public sealed class SonarOrchestratorOptions
     internal IQueueEnqueueService? QueueEnqueueService { get; init; }
     internal IQueueCommandsService? QueueCommandsService { get; init; }
     internal IQueueQueryService? QueueQueryService { get; init; }
-    internal IQueueDispatchOrchestrationService? QueueDispatchOrchestrationService { get; init; }
+    internal ITaskSchedulerService? TaskSchedulerService { get; init; }
+    internal ITaskReconcilerService? TaskReconcilerService { get; init; }
+    internal ITaskReadinessGate? TaskReadinessGate { get; init; }
     public required Func<string?, string?> NormalizeDirectory { get; init; }
     public required Func<string, string?, string?> BuildOpenCodeSessionUrl { get; init; }
     public required Action OnChange { get; init; }

@@ -31,4 +31,5 @@ internal interface IOrchestrationGateway
     Task<bool> CancelQueueItem(int? queueId);
     Task<int> RetryFailed();
     Task<int> ClearQueued();
+    Task ResetState();
 }

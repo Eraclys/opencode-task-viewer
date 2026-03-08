@@ -26,4 +26,5 @@ public interface IOrchestrationUseCases
     Task<bool> CancelQueueItemAsync(string queueId);
     Task<int> RetryFailedAsync();
     Task<int> ClearQueuedAsync();
+    Task ResetStateAsync();
 }

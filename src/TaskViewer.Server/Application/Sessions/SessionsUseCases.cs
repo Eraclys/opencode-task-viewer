@@ -168,7 +168,7 @@ public sealed class SessionsUseCases : ISessionsUseCases
 
         try
         {
-            var queueItems = await _orchestrator.ListQueue("queued,dispatching", "1000");
+            var queueItems = await _orchestrator.ListQueue("queued,dispatching,leased,running", "1000");
             var queueSummaries = queueItems.Select(_mapQueueItemToSessionSummary).Where(x => x is not null).Cast<SessionSummaryDto>();
             summaries.AddRange(queueSummaries);
         }

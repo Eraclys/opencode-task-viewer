@@ -22,7 +22,8 @@ public sealed class SqliteQueueRepositoryTests
             3,
             now);
 
-        Assert.Equal(2, first.CreatedItems.Count);
+        Assert.Single(first.CreatedItems);
+        Assert.Equal(2, first.CreatedItems[0].IssueCount);
         Assert.Empty(first.Skipped);
 
         var second = await repository.EnqueueIssuesBatch(
@@ -40,7 +41,7 @@ public sealed class SqliteQueueRepositoryTests
     }
 
     [Fact]
-    public async Task ClaimNextQueuedItem_ClaimsOldestQueuedItem_First()
+    public async Task TryLeaseTask_ClaimsOldestQueuedItem_First()
     {
         var dbPath = await InitializeSchemaAsync();
         var repository = CreateRepository(dbPath);
@@ -58,17 +59,23 @@ public sealed class SqliteQueueRepositoryTests
             mapping,
             "CODE_SMELL",
             "Keep the fix focused",
-            [CreateIssue("sq-new")],
+            [CreateIssue("sq-new", "src/other-file.js")],
             3,
             DateTimeOffset.Parse("2026-03-08T10:05:00Z"));
 
-        var claimed = await repository.ClaimNextQueuedItem(DateTimeOffset.Parse("2026-03-08T10:10:00Z"));
+        var queuedItems = await repository.ListQueue(["queued"], 10);
+        var oldest = queuedItems.OrderBy(item => item.CreatedAt).First();
+        var claimed = await repository.TryLeaseTask(
+            oldest.Id,
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:10:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:13:00Z"));
 
         Assert.NotNull(claimed);
         Assert.Equal("sq-old", claimed!.IssueKey);
-        Assert.Equal("dispatching", claimed.State);
-        Assert.Equal(1, claimed.AttemptCount);
-        Assert.NotNull(claimed.DispatchedAt);
+        Assert.Equal("leased", claimed.State);
+        Assert.Equal("worker-1", claimed.LeaseOwner);
+        Assert.NotNull(claimed.LeaseExpiresAt);
 
         var remainingQueued = await repository.ListQueue(["queued"], 10);
         var queued = Assert.Single(remainingQueued);
@@ -76,7 +83,7 @@ public sealed class SqliteQueueRepositoryTests
     }
 
     [Fact]
-    public async Task RetryFailed_AndMarkSessionCreated_PreserveQueueMetadata()
+    public async Task RetryFailed_AndMarkTaskRunning_PreserveQueueMetadata()
     {
         var dbPath = await InitializeSchemaAsync();
         var repository = CreateRepository(dbPath);
@@ -90,7 +97,12 @@ public sealed class SqliteQueueRepositoryTests
             4,
             DateTimeOffset.Parse("2026-03-08T10:00:00Z"));
 
-        var claimed = await repository.ClaimNextQueuedItem(DateTimeOffset.Parse("2026-03-08T10:01:00Z"));
+        var queuedItems = await repository.ListQueue(["queued"], 10);
+        var claimed = await repository.TryLeaseTask(
+            queuedItems.Single().Id,
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:01:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:04:00Z"));
         Assert.NotNull(claimed);
 
         var attemptInfo = await repository.GetAttemptInfo(claimed!.Id, 0, 0);
@@ -113,22 +125,29 @@ public sealed class SqliteQueueRepositoryTests
         var retried = await repository.RetryFailed(DateTimeOffset.Parse("2026-03-08T10:03:00Z"));
         Assert.Equal(1, retried);
 
-        var claimedAgain = await repository.ClaimNextQueuedItem(DateTimeOffset.Parse("2026-03-08T10:04:00Z"));
+        var queuedAgain = await repository.ListQueue(["queued"], 10);
+        var claimedAgain = await repository.TryLeaseTask(
+            queuedAgain.Single().Id,
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:04:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:07:00Z"));
         Assert.NotNull(claimedAgain);
 
-        var marked = await repository.MarkSessionCreated(
+        var marked = await repository.MarkTaskRunning(
             claimedAgain!.Id,
             "sess-123",
             "http://opencode.local/session/sess-123",
-            DateTimeOffset.Parse("2026-03-08T10:05:00Z"));
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:05:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:08:00Z"));
 
         Assert.True(marked);
 
-        var completedItems = await repository.ListQueue(["session_created"], 10);
+        var completedItems = await repository.ListQueue(["running"], 10);
         var completed = Assert.Single(completedItems);
         Assert.Equal("sess-123", completed.SessionId);
         Assert.Equal("http://opencode.local/session/sess-123", completed.OpenCodeUrl);
-        Assert.Equal("session_created", completed.State);
+        Assert.Equal("running", completed.State);
     }
 
     [Fact]
@@ -146,7 +165,17 @@ public sealed class SqliteQueueRepositoryTests
             3,
             DateTimeOffset.Parse("2026-03-08T10:00:00Z"));
 
-        Assert.Equal(2, created.CreatedItems.Count);
+        Assert.Single(created.CreatedItems);
+
+        var secondCreate = await repository.EnqueueIssuesBatch(
+            mapping,
+            "CODE_SMELL",
+            "Keep the fix focused",
+            [CreateIssue("sq-clear-2", "src/second-file.js")],
+            3,
+            DateTimeOffset.Parse("2026-03-08T10:00:01Z"));
+
+        Assert.Single(secondCreate.CreatedItems);
 
         var cancelled = await repository.CancelQueueItem(
             created.CreatedItems[0].Id,
@@ -186,7 +215,7 @@ public sealed class SqliteQueueRepositoryTests
         };
     }
 
-    static NormalizedIssue CreateIssue(string key)
+    static NormalizedIssue CreateIssue(string key, string relativePath = "src/file.js")
     {
         return new NormalizedIssue
         {
@@ -197,9 +226,9 @@ public sealed class SqliteQueueRepositoryTests
             Message = $"Message for {key}",
             Line = 42,
             Status = "OPEN",
-            Component = "gamma-key:src/file.js",
-            RelativePath = "src/file.js",
-            AbsolutePath = "C:/Work/Gamma/src/file.js"
+            Component = $"gamma-key:{relativePath}",
+            RelativePath = relativePath,
+            AbsolutePath = $"C:/Work/Gamma/{relativePath}"
         };
     }
 
@@ -229,12 +258,15 @@ public sealed class SqliteQueueRepositoryTests
                 SonarToken = string.Empty,
                 DbPath = dbPath,
                 MaxActive = 1,
+                PerProjectMaxActive = 1,
                 PollMs = 1000,
+                LeaseSeconds = 180,
                 MaxAttempts = 1,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
                 OpenCodeStatusReader = new DisabledOpenCodeStatusReader(),
                 OpenCodeDispatchClient = new DisabledOpenCodeDispatchClient(),
+                TaskReadinessGate = new TestTaskReadinessGate(),
                 NormalizeDirectory = value => value,
                 BuildOpenCodeSessionUrl = (_, _) => null,
                 OnChange = () => { }

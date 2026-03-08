@@ -712,5 +712,6 @@ public sealed class ApiContractSerializationTests
         public Task<bool> CancelQueueItemAsync(string queueId) => Task.FromResult(cancelQueueItemResult);
         public Task<int> RetryFailedAsync() => Task.FromResult(retried);
         public Task<int> ClearQueuedAsync() => Task.FromResult(cleared);
+        public Task ResetStateAsync() => Task.CompletedTask;
     }
 }

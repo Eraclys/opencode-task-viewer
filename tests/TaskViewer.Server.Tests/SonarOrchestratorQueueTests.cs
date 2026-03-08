@@ -7,9 +7,16 @@ namespace TaskViewer.Server.Tests;
 
 public sealed class SonarOrchestratorQueueTests
 {
+    const string GammaDirectory = "C:/Temp/TaskViewerTests/Gamma";
+
     [Fact]
     public async Task Tick_CreatesSessionAndMarksItemSessionCreated()
     {
+        Directory.CreateDirectory(GammaDirectory);
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, ".git"));
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
+        File.WriteAllText(Path.Combine(GammaDirectory, "src", "worker.js"), "// worker\n");
+
         await using var orchestrator = CreateOrchestrator((path, request) =>
         {
             if (path == "/session" &&
@@ -38,7 +45,7 @@ public sealed class SonarOrchestratorQueueTests
             new UpsertMappingRequest(
                 Id: null,
                 SonarProjectKey: "gamma-key",
-                Directory: "C:/Work/Gamma",
+                Directory: GammaDirectory,
                 Branch: null,
                 Enabled: true));
 
@@ -65,7 +72,7 @@ public sealed class SonarOrchestratorQueueTests
 
         await orchestrator.Tick();
 
-        var item = await WaitForSingleQueueItem(orchestrator, "session_created", TimeSpan.FromSeconds(5));
+        var item = await WaitForSingleQueueItem(orchestrator, "running", TimeSpan.FromSeconds(5));
         Assert.Equal("sess-created-1", item.SessionId);
         Assert.Contains("/session/sess-created-1", item.OpenCodeUrl);
     }
@@ -73,6 +80,11 @@ public sealed class SonarOrchestratorQueueTests
     [Fact]
     public async Task Tick_FailedDispatch_MarksItemFailed_WhenAttemptsExhausted()
     {
+        Directory.CreateDirectory(GammaDirectory);
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, ".git"));
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
+        File.WriteAllText(Path.Combine(GammaDirectory, "src", "fail.js"), "// fail\n");
+
         await using var orchestrator = CreateOrchestrator(
             (path, request) =>
             {
@@ -88,7 +100,7 @@ public sealed class SonarOrchestratorQueueTests
             new UpsertMappingRequest(
                 Id: null,
                 SonarProjectKey: "gamma-key",
-                Directory: "C:/Work/Gamma",
+                Directory: GammaDirectory,
                 Branch: null,
                 Enabled: true));
 
@@ -117,6 +129,11 @@ public sealed class SonarOrchestratorQueueTests
     [Fact]
     public async Task CancelQueueItem_CancelsQueuedItem_AndPreventsDispatch()
     {
+        Directory.CreateDirectory(GammaDirectory);
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, ".git"));
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
+        File.WriteAllText(Path.Combine(GammaDirectory, "src", "cancel.js"), "// cancel\n");
+
         await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<JsonNode?>(
             new JsonObject
             {
@@ -127,7 +144,7 @@ public sealed class SonarOrchestratorQueueTests
             new UpsertMappingRequest(
                 Id: null,
                 SonarProjectKey: "gamma-key",
-                Directory: "C:/Work/Gamma",
+                Directory: GammaDirectory,
                 Branch: null,
                 Enabled: true));
 
@@ -154,13 +171,18 @@ public sealed class SonarOrchestratorQueueTests
     [Fact]
     public async Task EnqueueIssues_SkipsInvalidAndDuplicateIssues()
     {
+        Directory.CreateDirectory(GammaDirectory);
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, ".git"));
+        Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
+        File.WriteAllText(Path.Combine(GammaDirectory, "src", "dupe.js"), "// dupe\n");
+
         await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<JsonNode?>(null));
 
         var mapping = await orchestrator.UpsertMapping(
             new UpsertMappingRequest(
                 Id: null,
                 SonarProjectKey: "gamma-key",
-                Directory: "C:/Work/Gamma",
+                Directory: GammaDirectory,
                 Branch: null,
                 Enabled: true));
 
@@ -227,12 +249,15 @@ public sealed class SonarOrchestratorQueueTests
                 SonarToken = "token",
                 DbPath = dbPath,
                 MaxActive = 1,
+                PerProjectMaxActive = 1,
                 PollMs = 1000,
+                LeaseSeconds = 180,
                 MaxAttempts = maxAttempts,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
                 OpenCodeStatusReader = new DelegateOpenCodeStatusReader(openCodeFetch),
                 OpenCodeDispatchClient = new DelegateOpenCodeDispatchClient(openCodeFetch),
+                TaskReadinessGate = new TestTaskReadinessGate(),
                 NormalizeDirectory = directory => directory,
                 BuildOpenCodeSessionUrl = (sessionId, _) => $"http://opencode.local/session/{sessionId}",
                 OnChange = () => { }

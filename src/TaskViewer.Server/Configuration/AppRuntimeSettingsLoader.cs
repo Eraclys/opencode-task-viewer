@@ -15,7 +15,9 @@ public static class AppRuntimeSettingsLoader
         var sonarToken = FirstNonEmpty(configuration["SONARQUBE_TOKEN"]);
         var dbPathSetting = ReadString(configuration, "Orchestration:DbPath", "ORCHESTRATOR_DB_PATH", "data/orchestrator.sqlite");
         var maxActive = ReadInt(configuration, "Orchestration:MaxActive", "ORCH_MAX_ACTIVE", 3, 1);
+        var perProjectMaxActive = ReadInt(configuration, "Orchestration:PerProjectMaxActive", "ORCH_PER_PROJECT_MAX_ACTIVE", 2, 1);
         var pollMs = ReadInt(configuration, "Orchestration:PollMs", "ORCH_POLL_MS", 3000, 1000);
+        var leaseSeconds = ReadInt(configuration, "Orchestration:LeaseSeconds", "ORCH_LEASE_SECONDS", 180, 30);
         var maxAttempts = ReadInt(configuration, "Orchestration:MaxAttempts", "ORCH_MAX_ATTEMPTS", 3, 1);
         var maxWorkingGlobal = ReadInt(configuration, "Orchestration:MaxWorkingGlobal", "ORCH_MAX_WORKING_GLOBAL", 5, 0);
         var resumeFallback = maxWorkingGlobal > 1 ? maxWorkingGlobal - 1 : maxWorkingGlobal;
@@ -35,7 +37,9 @@ public static class AppRuntimeSettingsLoader
             new OrchestrationRuntimeSettings(
                 ResolvePath(environment.ContentRootPath, dbPathSetting),
                 maxActive,
+                perProjectMaxActive,
                 pollMs,
+                leaseSeconds,
                 maxAttempts,
                 maxWorkingGlobal,
                 workingResumeBelow));

@@ -235,5 +235,6 @@ public sealed class OrchestrationUseCasesTests
         public Task<bool> CancelQueueItem(int? queueId) => Task.FromResult(true);
         public Task<int> RetryFailed() => Task.FromResult(0);
         public Task<int> ClearQueued() => Task.FromResult(0);
+        public Task ResetState() => Task.CompletedTask;
     }
 }

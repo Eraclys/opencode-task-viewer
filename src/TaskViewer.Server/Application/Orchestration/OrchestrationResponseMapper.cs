@@ -80,6 +80,7 @@ static class OrchestrationResponseMapper
     {
         return new EnqueueIssuesResultDto
         {
+            Requested = createdItems.Count + skipped.Count,
             Created = createdItems.Count,
             Skipped = skipped,
             Items = createdItems
@@ -94,6 +95,7 @@ static class OrchestrationResponseMapper
     {
         return new EnqueueAllResultDto
         {
+            Requested = matched,
             Matched = matched,
             Created = createdItems.Count,
             Skipped = skipped,
@@ -111,13 +113,20 @@ static class OrchestrationResponseMapper
             SessionCreated = stats.SessionCreated,
             Done = stats.Done,
             Failed = stats.Failed,
-            Cancelled = stats.Cancelled
+            Cancelled = stats.Cancelled,
+            Leased = stats.Dispatching,
+            Running = stats.SessionCreated,
+            AwaitingReview = stats.SessionCreated,
+            Approved = stats.Done
         };
     }
 
     public static OrchestrationWorkerStateDto BuildWorkerState(
-        int inFlightDispatches,
+        int inFlightLeases,
+        int runningTasks,
         int maxActiveDispatches,
+        int perProjectMaxActive,
+        int leaseSeconds,
         bool pausedByWorking,
         int workingCount,
         int maxWorkingGlobal,
@@ -126,8 +135,11 @@ static class OrchestrationResponseMapper
     {
         return new OrchestrationWorkerStateDto
         {
-            InFlightDispatches = inFlightDispatches,
+            InFlightDispatches = inFlightLeases,
+            RunningTasks = runningTasks,
             MaxActiveDispatches = maxActiveDispatches,
+            PerProjectMaxActive = perProjectMaxActive,
+            LeaseSeconds = leaseSeconds,
             PausedByWorking = pausedByWorking,
             WorkingCount = workingCount,
             MaxWorkingGlobal = maxWorkingGlobal,

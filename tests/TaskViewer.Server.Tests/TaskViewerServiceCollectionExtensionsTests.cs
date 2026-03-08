@@ -21,7 +21,9 @@ public sealed class TaskViewerServiceCollectionExtensionsTests
                 new OrchestrationRuntimeSettings(
                     Path.Combine(Path.GetTempPath(), $"taskviewer-di-{Guid.NewGuid():N}.sqlite"),
                     MaxActive: 1,
+                    PerProjectMaxActive: 1,
                     PollMs: 1000,
+                    LeaseSeconds: 180,
                     MaxAttempts: 3,
                     MaxWorkingGlobal: 5,
                     WorkingResumeBelow: 3)));

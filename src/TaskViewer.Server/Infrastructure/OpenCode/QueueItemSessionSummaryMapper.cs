@@ -8,7 +8,7 @@ sealed class QueueItemSessionSummaryMapper
     {
         var queueState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
 
-        if (queueState is not ("queued" or "dispatching"))
+        if (queueState is not ("queued" or "dispatching" or "leased" or "running"))
             return null;
 
         var titleParts = new List<string>();
@@ -22,9 +22,16 @@ sealed class QueueItemSessionSummaryMapper
         if (!string.IsNullOrWhiteSpace(item.Message))
             titleParts.Add(item.Message);
 
+        var queueLabel = queueState switch
+        {
+            "leased" => "Leased",
+            "running" => "Running",
+            _ => "Queued"
+        };
+
         var name = titleParts.Count > 0
-            ? $"[Queued] {string.Join(" - ", titleParts)}"
-            : $"[Queued] Item #{item.Id}";
+            ? $"[{queueLabel}] {string.Join(" - ", titleParts)}"
+            : $"[{queueLabel}] Item #{item.Id}";
 
         return new SessionSummaryDto
         {
@@ -35,7 +42,7 @@ sealed class QueueItemSessionSummaryMapper
             GitBranch = null,
             CreatedAt = item.CreatedAt,
             ModifiedAt = item.UpdatedAt,
-            RuntimeStatus = new SessionRuntimeStatus(queueState == "dispatching" ? "busy" : "queued"),
+            RuntimeStatus = new SessionRuntimeStatus(queueState is "dispatching" or "leased" or "running" ? "busy" : "queued"),
             Status = "pending",
             HasAssistantResponse = false,
             OpenCodeUrl = null,

@@ -9,4 +9,7 @@ public sealed class OrchestrationWorkerStateDto
     public required int MaxWorkingGlobal { get; init; }
     public required int WorkingResumeBelow { get; init; }
     public DateTimeOffset? WorkingSampleAt { get; init; }
+    public int? RunningTasks { get; init; }
+    public int? PerProjectMaxActive { get; init; }
+    public int? LeaseSeconds { get; init; }
 }

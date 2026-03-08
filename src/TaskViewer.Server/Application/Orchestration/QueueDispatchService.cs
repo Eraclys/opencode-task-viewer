@@ -15,56 +15,63 @@ public sealed class QueueDispatchService : IQueueDispatchService
         _buildOpenCodeSessionUrl = buildOpenCodeSessionUrl;
     }
 
-    public async Task<QueueDispatchResult> DispatchAsync(QueueItemRecord item)
+    public async Task<QueueDispatchResult> DispatchAsync(QueueItemRecord item, IReadOnlyList<NormalizedIssue> issues)
     {
-        var title = $"[{item.IssueType ?? "ISSUE"}] {item.IssueKey}";
-
+        var title = BuildTitle(item);
         var sessionId = await _openCodeDispatchClient.CreateSessionAsync(item.Directory, title);
-
-        var prompt = ComposePrompt(item);
+        var prompt = ComposePrompt(item, issues);
 
         await _openCodeDispatchClient.SendPromptAsync(item.Directory, sessionId, prompt);
 
         var openCodeUrl = _buildOpenCodeSessionUrl(sessionId, item.Directory);
-
         return new QueueDispatchResult(sessionId, openCodeUrl);
     }
 
-    static string ComposePrompt(QueueItemRecord item)
+    static string BuildTitle(QueueItemRecord item)
+    {
+        var rule = string.IsNullOrWhiteSpace(item.Rule) ? "RULE" : item.Rule;
+        var path = string.IsNullOrWhiteSpace(item.RelativePath) ? item.AbsolutePath ?? item.IssueKey : item.RelativePath;
+        return $"[{item.IssueType ?? "ISSUE"}] {rule} :: {path}";
+    }
+
+    static string ComposePrompt(QueueItemRecord item, IReadOnlyList<NormalizedIssue> issues)
     {
         var lines = new List<string>
         {
-            "Resolve the following SonarQube warning with a minimal, targeted change.",
+            $"Resolve the grouped SonarQube task using the `{item.TaskUnit ?? "project+file+rule"}` batching model.",
             string.Empty,
-            $"Issue key: {item.IssueKey}"
+            $"Task key: {item.TaskKey ?? item.IssueKey}",
+            $"Project: {item.SonarProjectKey}",
+            $"Directory: {item.Directory}",
+            $"Issue type: {item.IssueType ?? "UNKNOWN"}",
+            $"Rule: {item.Rule ?? "UNKNOWN"}",
+            $"Issue count: {Math.Max(1, item.IssueCount)}"
         };
 
-        if (!string.IsNullOrWhiteSpace(item.IssueType))
-            lines.Add($"Issue type: {item.IssueType}");
-
-        if (!string.IsNullOrWhiteSpace(item.Severity))
-            lines.Add($"Severity: {item.Severity}");
-
-        if (!string.IsNullOrWhiteSpace(item.Rule))
-            lines.Add($"Rule: {item.Rule}");
-
-        if (!string.IsNullOrWhiteSpace(item.IssueStatus))
-            lines.Add($"Issue status: {item.IssueStatus}");
-
         if (!string.IsNullOrWhiteSpace(item.RelativePath))
-            lines.Add($"File: {item.RelativePath}");
-
-        if (item.Line.HasValue)
-            lines.Add($"Line: {item.Line.Value}");
+            lines.Add($"Primary file: {item.RelativePath}");
 
         if (!string.IsNullOrWhiteSpace(item.Message))
-            lines.Add($"Message: {item.Message}");
+            lines.Add($"Task summary: {item.Message}");
 
         lines.Add(string.Empty);
-        lines.Add("Constraints:");
-        lines.Add("- Fix only this issue; avoid unrelated refactors.");
-        lines.Add("- Preserve behavior and public contracts.");
-        lines.Add("- If the issue is not actionable, explain why and propose the safest alternative.");
+        lines.Add("Goals:");
+        lines.Add("- Make one coherent set of changes for this file+rule batch.");
+        lines.Add("- Do not modify unrelated files unless absolutely required.");
+        lines.Add("- If some linked warnings are stale or false positives, explain that clearly.");
+
+        lines.Add(string.Empty);
+        lines.Add("Linked warnings:");
+
+        foreach (var issue in issues.OrderBy(issue => issue.Line ?? int.MaxValue).ThenBy(issue => issue.Key, StringComparer.Ordinal))
+        {
+            var location = issue.RelativePath ?? issue.AbsolutePath ?? "<unknown>";
+            var lineSuffix = issue.Line.HasValue ? $":{issue.Line.Value}" : string.Empty;
+            lines.Add($"- {issue.Key} | {issue.Rule ?? item.Rule ?? "UNKNOWN"} | {location}{lineSuffix}");
+
+            if (!string.IsNullOrWhiteSpace(issue.Message))
+                lines.Add($"  Message: {issue.Message}");
+        }
 
         var extra = (item.Instructions ?? string.Empty).Trim();
 

@@ -97,13 +97,11 @@ public sealed class QueueQueryServiceTests
         public Task<bool> CancelQueueItem(int id, DateTimeOffset now) => throw new NotSupportedException();
         public Task<int> RetryFailed(DateTimeOffset now) => throw new NotSupportedException();
         public Task<int> ClearQueued(DateTimeOffset now) => throw new NotSupportedException();
-        public Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now) => throw new NotSupportedException();
-
-        public Task<bool> MarkSessionCreated(
-            int id,
-            string sessionId,
-            string? openCodeUrl,
-            DateTimeOffset timestamp) => throw new NotSupportedException();
+        public Task<QueueItemRecord?> TryLeaseTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt) => throw new NotSupportedException();
+        public Task<bool> HeartbeatTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt) => throw new NotSupportedException();
+        public Task<List<NormalizedIssue>> GetTaskIssues(int id) => throw new NotSupportedException();
+        public Task<bool> MarkTaskRunning(int id, string sessionId, string? openCodeUrl, string leaseOwner, DateTimeOffset timestamp, DateTimeOffset leaseExpiresAt) => throw new NotSupportedException();
+        public Task<bool> MarkTaskAwaitingReview(int id, DateTimeOffset timestamp) => throw new NotSupportedException();
 
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts) => throw new NotSupportedException();
 

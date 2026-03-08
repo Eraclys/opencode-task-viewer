@@ -9,6 +9,8 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
 {
     readonly List<Process> _processes = [];
     string _orchestratorDbPath = string.Empty;
+    string _alphaDir = string.Empty;
+    string _gammaDir = string.Empty;
 
     public string RootDir { get; private set; } = string.Empty;
     public string MockUrl { get; private set; } = string.Empty;
@@ -24,7 +26,11 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
     {
         RootDir = FindRootDir();
         _orchestratorDbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-e2e-{Guid.NewGuid():N}.sqlite");
+        _alphaDir = Path.Combine(Path.GetTempPath(), $"taskviewer-alpha-{Guid.NewGuid():N}");
+        _gammaDir = Path.Combine(Path.GetTempPath(), $"taskviewer-gamma-{Guid.NewGuid():N}");
         CleanupOrchestratorDb(_orchestratorDbPath);
+        InitializeRepoFixture(_alphaDir, ["src/index.js"]);
+        InitializeRepoFixture(_gammaDir, ["src/worker.js", "src/server.js", "src/auth.js", "src/jobs.js", "src/cancel.js", "src/dupe.js", "src/fail.js"]);
 
         var mockProjectPath = Path.Combine(
             RootDir,
@@ -106,8 +112,12 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
         }
 
         CleanupOrchestratorDb(_orchestratorDbPath);
+        CleanupDirectory(_alphaDir);
+        CleanupDirectory(_gammaDir);
         Http.Dispose();
     }
+
+    public string GammaDirectory => _gammaDir.Replace('\\', '/');
 
     public async Task ResetOpenCodeAsync()
     {
@@ -131,6 +141,12 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
 
     public async Task ResetMocksAsync()
     {
+        await PostJsonAsync(
+            $"{ViewerUrl}/api/test/orch/reset",
+            new
+            {
+            });
+
         await ResetOpenCodeAsync();
 
         await PostJsonAsync(
@@ -146,6 +162,36 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
             new
             {
             });
+    }
+
+    static void InitializeRepoFixture(string root, IReadOnlyList<string> files)
+    {
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, ".git"));
+
+        foreach (var file in files)
+        {
+            var path = Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            if (!File.Exists(path))
+                File.WriteAllText(path, "// fixture\n");
+        }
+    }
+
+    static void CleanupDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            return;
+
+        try
+        {
+            Directory.Delete(path, true);
+        }
+        catch
+        {
+            // Best effort cleanup for temp test fixtures.
+        }
     }
 
     public async Task PostJsonAsync(string url, object payload)

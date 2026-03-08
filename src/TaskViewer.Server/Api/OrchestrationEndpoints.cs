@@ -375,6 +375,33 @@ public static class OrchestrationEndpoints
                 }
             });
 
+        app.MapPost(
+            "/api/test/orch/reset",
+            async () =>
+            {
+                try
+                {
+                    await useCases.ResetStateAsync();
+
+                    return Results.Json(
+                        new OrchestrationResetStateDto
+                        {
+                            Ok = true
+                        });
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine($"Error resetting orchestration state: {error}");
+
+                    return Results.Json(
+                        new ErrorResponseDto
+                        {
+                            Error = "Failed to reset orchestration state"
+                        },
+                        statusCode: 502);
+                }
+            });
+
         return app;
     }
 

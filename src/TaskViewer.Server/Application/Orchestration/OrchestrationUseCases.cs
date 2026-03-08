@@ -102,4 +102,6 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
     public Task<int> RetryFailedAsync() => _gateway.RetryFailed();
 
     public Task<int> ClearQueuedAsync() => _gateway.ClearQueued();
+
+    public Task ResetStateAsync() => _gateway.ResetState();
 }

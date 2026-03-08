@@ -15,13 +15,19 @@ interface IQueueRepository
     Task<bool> CancelQueueItem(int id, DateTimeOffset now);
     Task<int> RetryFailed(DateTimeOffset now);
     Task<int> ClearQueued(DateTimeOffset now);
-    Task<QueueItemRecord?> ClaimNextQueuedItem(DateTimeOffset now);
+    Task<QueueItemRecord?> TryLeaseTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt);
+    Task<bool> HeartbeatTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt);
+    Task<List<NormalizedIssue>> GetTaskIssues(int id);
 
-    Task<bool> MarkSessionCreated(
+    Task<bool> MarkTaskRunning(
         int id,
         string sessionId,
         string? openCodeUrl,
-        DateTimeOffset timestamp);
+        string leaseOwner,
+        DateTimeOffset timestamp,
+        DateTimeOffset leaseExpiresAt);
+
+    Task<bool> MarkTaskAwaitingReview(int id, DateTimeOffset timestamp);
 
     Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts);
 

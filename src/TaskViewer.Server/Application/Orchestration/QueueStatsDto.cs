@@ -13,4 +13,12 @@ public sealed class QueueStatsDto
     public required int Done { get; init; }
     public required int Failed { get; init; }
     public required int Cancelled { get; init; }
+
+    public int? Leased { get; init; }
+    public int? Running { get; init; }
+
+    [JsonPropertyName("awaiting_review")]
+    public int? AwaitingReview { get; init; }
+
+    public int? Approved { get; init; }
 }

@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using System.Text.RegularExpressions;
 using static Microsoft.Playwright.Assertions;
 
 namespace TaskViewer.E2E.Tests;
@@ -37,7 +37,7 @@ public sealed class OrchestrationTests
 
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Queued 1 issue");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[CODE_SMELL]");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("sq-gamma-");
+            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("javascript:S1126");
 
             await Expect(page.GetByTestId("column-pending"))
                 .Not.ToContainTextAsync(
@@ -171,17 +171,13 @@ public sealed class OrchestrationTests
 
             var firstIssue = page.Locator(".orch-issue-row").First;
             var firstIssueText = await firstIssue.TextContentAsync() ?? string.Empty;
-            var issueKeyMatch = Regex.Match(firstIssueText, "sq-gamma-\\d+");
-            Assert.True(issueKeyMatch.Success);
-            var issueKey = issueKeyMatch.Value;
-
             await firstIssue.Locator("input[type=\"checkbox\"]").CheckAsync();
             await page.GetByTestId("orch-instructions").FillAsync("Retry path test instruction.");
             await page.GetByTestId("orch-enqueue-btn").ClickAsync();
 
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Queued 1 issue");
 
-            var queuedItem = await GetLatestQueueItemForIssueAsync(issueKey);
+            var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
             var queueId = AsInt(queuedItem!["id"]);
 
@@ -194,12 +190,12 @@ public sealed class OrchestrationTests
                 {
                 });
 
-            var sessionCreated = await WaitForQueueItemStateByIdAsync(queueId, "session_created", TimeSpan.FromSeconds(20));
+            var sessionCreated = await WaitForQueueItemStateByIdAsync(queueId, "running", TimeSpan.FromSeconds(20));
             Assert.False(string.IsNullOrWhiteSpace(sessionCreated["sessionId"]?.ToString()));
             Assert.Contains("/session/", sessionCreated["openCodeUrl"]?.ToString());
 
             await page.ReloadAsync();
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync(issueKey);
+            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("javascript:S1126");
         });
     }
 
@@ -228,16 +224,12 @@ public sealed class OrchestrationTests
 
             var firstIssue = page.Locator(".orch-issue-row").First;
             var firstIssueText = await firstIssue.TextContentAsync() ?? string.Empty;
-            var issueKeyMatch = Regex.Match(firstIssueText, "sq-gamma-\\d+");
-            Assert.True(issueKeyMatch.Success);
-            var issueKey = issueKeyMatch.Value;
-
             await firstIssue.Locator("input[type=\"checkbox\"]").CheckAsync();
             await page.GetByTestId("orch-instructions").FillAsync("Cancellation flow test instruction.");
             await page.GetByTestId("orch-enqueue-btn").ClickAsync();
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Queued 1 issue");
 
-            var queuedItem = await GetLatestQueueItemForIssueAsync(issueKey);
+            var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
             var queueId = AsInt(queuedItem!["id"]);
 
@@ -251,7 +243,7 @@ public sealed class OrchestrationTests
             Assert.False(string.IsNullOrWhiteSpace(cancelled["cancelledAt"]?.ToString()));
 
             await Task.Delay(3200);
-            var latest = await GetLatestQueueItemForIssueAsync(issueKey);
+            var latest = await GetQueueItemByIdAsync(queueId);
             Assert.NotNull(latest);
             Assert.Equal("cancelled", latest!["state"]?.ToString());
 
@@ -268,7 +260,7 @@ public sealed class OrchestrationTests
         await page.GetByTestId("orch-settings-toggle").ClickAsync();
         await Expect(page.GetByTestId("orch-settings-modal")).ToBeVisibleAsync();
         await page.GetByTestId("orch-new-project-key").FillAsync("gamma-key");
-        await page.GetByTestId("orch-new-directory").FillAsync("C:/Work/Gamma");
+        await page.GetByTestId("orch-new-directory").FillAsync(_fixture.GammaDirectory);
         await page.GetByTestId("orch-save-mapping-btn").ClickAsync();
         await Expect(page.GetByTestId("orch-settings-modal")).Not.ToBeVisibleAsync();
         await Expect(page.GetByTestId("orch-mapping-select")).ToHaveValueAsync(new Regex("\\d+"));
@@ -283,17 +275,24 @@ public sealed class OrchestrationTests
 
     async Task<JsonNode> GetQueueResponseAsync() => await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
 
-    async Task<JsonNode?> GetLatestQueueItemForIssueAsync(string issueKey)
+    async Task<JsonNode?> GetLatestQueueItemForRuleAsync(string rule)
     {
         var data = await GetQueueResponseAsync();
         var items = data["items"] as JsonArray ?? [];
 
         var matches = items
-            .Where(item => item?["issueKey"]?.ToString() == issueKey)
+            .Where(item => string.Equals(item?["rule"]?.ToString(), rule, StringComparison.Ordinal))
             .OrderByDescending(item => AsInt(item?["id"]))
             .ToList();
 
         return matches.FirstOrDefault();
+    }
+
+    async Task<JsonNode?> GetQueueItemByIdAsync(int queueId)
+    {
+        var data = await GetQueueResponseAsync();
+        var items = data["items"] as JsonArray ?? [];
+        return items.FirstOrDefault(item => AsInt(item?["id"]) == queueId);
     }
 
     async Task<JsonNode> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)
