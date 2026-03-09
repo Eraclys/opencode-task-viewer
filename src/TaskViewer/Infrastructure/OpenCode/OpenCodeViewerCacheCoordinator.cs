@@ -29,10 +29,10 @@ public sealed class OpenCodeViewerCacheCoordinator
     public void InvalidateSessionsList()
         => _viewerState.InvalidateSessionsList();
 
-    public List<OpenCodeProjectTransport>? GetFreshProjects()
+    public List<OpenCodeProject>? GetFreshProjects()
         => _viewerState.GetFreshProjects(_cachePolicy.ProjectsCacheTtlMs);
 
-    public void StoreProjects(List<OpenCodeProjectTransport> projects, DateTimeOffset timestamp)
+    public void StoreProjects(List<OpenCodeProject> projects, DateTimeOffset timestamp)
         => _viewerState.StoreProjects(projects, timestamp);
 
     public bool TryGetFreshStatusMap(string directoryKey, out Dictionary<string, SessionRuntimeStatus> statusMap)

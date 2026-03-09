@@ -6,7 +6,7 @@ namespace TaskViewer.Application.Sessions;
 
 public sealed class SessionTodoViewService
 {
-    public SessionTodoDto NormalizeTodo(OpenCodeTodoTransport todo)
+    public SessionTodoDto NormalizeTodo(OpenCodeTodo todo)
     {
         return new SessionTodoDto(
             todo.Content,

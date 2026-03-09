@@ -78,18 +78,15 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
         public string? LastSeverity { get; private set; }
         public string? LastIssueStatus { get; private set; }
 
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
             => Task.FromResult(new SonarRuleDetailsResponse(null));
 
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
-            Dictionary<string, string?> query,
-            int fallbackPageIndex,
-            int fallbackPageSize)
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
         {
             RequestCount += 1;
-            LastIssueType = query.GetValueOrDefault("types");
-            LastSeverity = query.GetValueOrDefault("severities");
-            LastIssueStatus = query.GetValueOrDefault("statuses");
+            LastIssueType = query.Types.FirstOrDefault();
+            LastSeverity = query.Severities.FirstOrDefault();
+            LastIssueStatus = query.Statuses.FirstOrDefault();
 
             if (RequestCount == 1)
             {

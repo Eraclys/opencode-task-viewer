@@ -2,10 +2,7 @@ namespace TaskViewer.SonarQube;
 
 public interface ISonarQubeService
 {
-    Task<SonarIssuesSearchResponse> SearchIssuesAsync(
-        Dictionary<string, string?> query,
-        int fallbackPageIndex,
-        int fallbackPageSize);
+    Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default);
 
-    Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey);
+    Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default);
 }

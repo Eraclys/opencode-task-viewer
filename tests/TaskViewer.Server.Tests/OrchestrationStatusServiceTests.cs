@@ -60,10 +60,10 @@ public sealed class OrchestrationStatusServiceTests
 
     private sealed class FakeSonarGateway : ISonarQubeService
     {
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
-            => Task.FromResult(new SonarIssuesSearchResponse(fallbackPageIndex, fallbackPageSize, 0, []));
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SonarIssuesSearchResponse(query.PageIndex, query.PageSize, 0, []));
 
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
             => Task.FromResult(new SonarRuleDetailsResponse(null));
     }
 }

@@ -9,15 +9,9 @@ public sealed class SonarQubeService : ISonarQubeService
         _createClient = createClient;
     }
 
-    public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize, CancellationToken cancellationToken = default)
-        => _createClient().SearchIssuesAsync(query, fallbackPageIndex, fallbackPageSize, cancellationToken);
-
-    Task<SonarIssuesSearchResponse> ISonarQubeService.SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
-        => SearchIssuesAsync(query, fallbackPageIndex, fallbackPageSize);
+    public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
+        => _createClient().SearchIssuesAsync(query, cancellationToken);
 
     public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
         => _createClient().GetRuleAsync(ruleKey, cancellationToken);
-
-    Task<SonarRuleDetailsResponse> ISonarQubeService.GetRuleAsync(string ruleKey)
-        => GetRuleAsync(ruleKey);
 }

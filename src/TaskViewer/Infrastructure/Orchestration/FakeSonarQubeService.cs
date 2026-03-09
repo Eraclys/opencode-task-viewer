@@ -21,15 +21,16 @@ public sealed class FakeSonarQubeService : ISonarQubeService
         new("sq-alpha-001", null, "CODE_SMELL", null, "MINOR", "javascript:S1481", "Remove this unused local variable.", "alpha-key:src/index.js", null, "7", "OPEN")
     ];
 
-    public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+    public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
     {
-        var componentKeys = NormalizeSet(Get(query, "componentKeys"));
-        var types = NormalizeSet(Get(query, "types"));
-        var severities = NormalizeSet(Get(query, "severities"));
-        var statuses = NormalizeSet(Get(query, "statuses"));
-        var rules = NormalizeSet(Get(query, "rules"), preserveCase: true);
-        var pageIndex = ParseBoundedInt(Get(query, "p"), fallbackPageIndex, 1);
-        var pageSize = ParseBoundedInt(Get(query, "ps"), fallbackPageSize, 1);
+        var componentKeys = NormalizeSet([query.ComponentKey]);
+        var types = NormalizeSet(query.Types);
+        var severities = NormalizeSet(query.Severities);
+        var statuses = NormalizeSet(query.Statuses);
+        var rules = NormalizeSet(query.RuleKeys, preserveCase: true);
+        var issueKeys = NormalizeSet(query.IssueKeys, preserveCase: true);
+        var pageIndex = Math.Max(1, query.PageIndex);
+        var pageSize = Math.Max(1, query.PageSize);
 
         var filtered = Issues
             .Where(issue => componentKeys.Count == 0 || componentKeys.Contains(ParseProjectKey(issue.Component)))
@@ -37,6 +38,7 @@ public sealed class FakeSonarQubeService : ISonarQubeService
             .Where(issue => severities.Count == 0 || severities.Contains((issue.Severity ?? string.Empty).Trim().ToUpperInvariant()))
             .Where(issue => statuses.Count == 0 || statuses.Contains((issue.Status ?? string.Empty).Trim().ToUpperInvariant()))
             .Where(issue => rules.Count == 0 || rules.Contains((issue.Rule ?? string.Empty).Trim()))
+            .Where(issue => issueKeys.Count == 0 || issueKeys.Contains((issue.Key ?? string.Empty).Trim()))
             .ToList();
 
         var total = filtered.Count;
@@ -48,31 +50,25 @@ public sealed class FakeSonarQubeService : ISonarQubeService
         return Task.FromResult(new SonarIssuesSearchResponse(pageIndex, pageSize, total, paged));
     }
 
-    public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+    public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
     {
         Rules.TryGetValue(ruleKey.Trim(), out var name);
         return Task.FromResult(new SonarRuleDetailsResponse(name));
     }
 
-    static string? Get(Dictionary<string, string?> query, string key)
-        => query.TryGetValue(key, out var value) ? value : null;
-
-    static HashSet<string> NormalizeSet(string? raw, bool preserveCase = false)
+    static HashSet<string> NormalizeSet(IReadOnlyList<string> raw, bool preserveCase = false)
     {
         var comparer = preserveCase ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
         var values = new HashSet<string>(comparer);
 
-        if (string.IsNullOrWhiteSpace(raw))
+        if (raw.Count == 0)
             return values;
 
-        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var part in raw.Where(part => !string.IsNullOrWhiteSpace(part)))
             values.Add(preserveCase ? part : part.ToUpperInvariant());
 
         return values;
     }
-
-    static int ParseBoundedInt(string? raw, int fallback, int min)
-        => int.TryParse(raw, out var parsed) && parsed >= min ? parsed : fallback;
 
     static string ParseProjectKey(string? component)
     {

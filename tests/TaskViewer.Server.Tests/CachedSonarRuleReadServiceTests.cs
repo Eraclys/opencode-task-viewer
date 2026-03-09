@@ -34,21 +34,21 @@ public sealed class CachedSonarRuleReadServiceTests
     {
         public int CallCount { get; private set; }
 
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
         {
             CallCount++;
             return Task.FromResult(new SonarRuleDetailsResponse("No collapsible if statements"));
         }
 
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
-            => Task.FromResult(new SonarIssuesSearchResponse(fallbackPageIndex, fallbackPageSize, 0, []));
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SonarIssuesSearchResponse(query.PageIndex, query.PageSize, 0, []));
     }
 
     sealed class ThrowingGateway : ISonarQubeService
     {
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey) => throw new InvalidOperationException("boom");
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default) => throw new InvalidOperationException("boom");
 
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("boom");
     }
 }

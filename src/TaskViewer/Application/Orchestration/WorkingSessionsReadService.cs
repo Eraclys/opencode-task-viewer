@@ -6,15 +6,15 @@ namespace TaskViewer.Application.Orchestration;
 public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
 {
     readonly IMappingRepository _mappingRepository;
-    readonly IOpenCodeStatusReader _openCodeStatusReader;
+    readonly IOpenCodeService _openCodeService;
     (DateTimeOffset Ts, int Count) _cachedSample = (DateTimeOffset.MinValue, 0);
 
     public WorkingSessionsReadService(
         IMappingRepository mappingRepository,
-        IOpenCodeStatusReader openCodeStatusReader)
+        IOpenCodeService openCodeService)
     {
         _mappingRepository = mappingRepository;
-        _openCodeStatusReader = openCodeStatusReader;
+        _openCodeService = openCodeService;
     }
 
     public async Task<WorkingSessionsSample> GetWorkingSessionsCountAsync(bool forceRefresh, int pollMs)
@@ -53,7 +53,7 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         {
             try
             {
-                var map = await _openCodeStatusReader.ReadWorkingStatusMapAsync(variant);
+                var map = await _openCodeService.ReadWorkingStatusMapAsync(variant);
 
                 if (map.Count > 0)
                     return map;

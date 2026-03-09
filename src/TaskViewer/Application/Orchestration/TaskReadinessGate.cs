@@ -27,16 +27,16 @@ sealed class TaskReadinessGate : ITaskReadinessGate
         if (_sonarQubeService is null || issues.Count == 0)
             return new TaskReadinessDecision(true, null);
 
-        var query = new Dictionary<string, string?>
+        var query = new SearchIssuesQuery
         {
-            ["componentKeys"] = task.SonarProjectKey,
-            ["issues"] = string.Join(',', issues.Select(issue => issue.Key))
+            ComponentKey = task.SonarProjectKey,
+            Branch = string.IsNullOrWhiteSpace(task.Branch) ? null : task.Branch,
+            PageIndex = 1,
+            PageSize = Math.Max(1, issues.Count),
+            IssueKeys = issues.Select(issue => issue.Key).ToList()
         };
 
-        if (!string.IsNullOrWhiteSpace(task.Branch))
-            query["branch"] = task.Branch;
-
-        var response = await _sonarQubeService.SearchIssuesAsync(query, 1, Math.Max(1, issues.Count));
+        var response = await _sonarQubeService.SearchIssuesAsync(query);
 
         return response.Issues.Count == 0
             ? new TaskReadinessDecision(false, "SonarQube no longer reports any active issues for this task.")

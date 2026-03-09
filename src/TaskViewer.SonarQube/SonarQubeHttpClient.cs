@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -16,10 +17,10 @@ public sealed class SonarQubeHttpClient
         _options = options;
     }
 
-    public async Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize, CancellationToken cancellationToken = default)
+    public async Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
     {
-        var data = await FetchAsync("/api/issues/search", query, cancellationToken);
-        return SonarResponseParsers.ParseIssuesSearchResponse(data, fallbackPageIndex, fallbackPageSize);
+        var data = await FetchAsync("/api/issues/search", BuildSearchIssuesQueryParams(query), cancellationToken);
+        return SonarResponseParsers.ParseIssuesSearchResponse(data, query.PageIndex, query.PageSize);
     }
 
     public async Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
@@ -67,5 +68,39 @@ public sealed class SonarQubeHttpClient
             throw new InvalidOperationException($"SonarQube request failed: {(int)response.StatusCode} {response.ReasonPhrase}");
 
         return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
+    }
+
+    static Dictionary<string, string?> BuildSearchIssuesQueryParams(SearchIssuesQuery query)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["componentKeys"] = query.ComponentKey,
+            ["p"] = query.PageIndex.ToString(CultureInfo.InvariantCulture),
+            ["ps"] = query.PageSize.ToString(CultureInfo.InvariantCulture)
+        };
+
+        if (!string.IsNullOrWhiteSpace(query.Branch))
+            parameters["branch"] = query.Branch;
+
+        AddCsv(parameters, "types", query.Types, preserveCase: false);
+        AddCsv(parameters, "severities", query.Severities, preserveCase: false);
+        AddCsv(parameters, "statuses", query.Statuses, preserveCase: false);
+        AddCsv(parameters, "rules", query.RuleKeys, preserveCase: true);
+        AddCsv(parameters, "issues", query.IssueKeys, preserveCase: true);
+        return parameters;
+    }
+
+    static void AddCsv(Dictionary<string, string?> parameters, string key, IReadOnlyList<string> values, bool preserveCase)
+    {
+        if (values.Count == 0)
+            return;
+
+        var normalized = values
+            .Select(value => preserveCase ? value.Trim() : value.Trim().ToUpperInvariant())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToList();
+
+        if (normalized.Count > 0)
+            parameters[key] = string.Join(',', normalized);
     }
 }

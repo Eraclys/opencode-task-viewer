@@ -25,8 +25,7 @@ public sealed class SonarOrchestratorSonarGatewayTests
                 MaxAttempts = 1,
                 MaxWorkingGlobal = 0,
                 WorkingResumeBelow = 0,
-                OpenCodeStatusReader = new DisabledOpenCodeStatusReader(),
-                OpenCodeDispatchClient = new DisabledOpenCodeDispatchClient(),
+                OpenCodeApiClient = new DisabledOpenCodeService(),
                 TaskReadinessGate = new TestTaskReadinessGate(),
                 NormalizeDirectory = value => value,
                 BuildOpenCodeSessionUrl = (_, _) => null,
@@ -58,10 +57,7 @@ public sealed class SonarOrchestratorSonarGatewayTests
     {
         public int Calls { get; private set; }
 
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
-            Dictionary<string, string?> query,
-            int fallbackPageIndex,
-            int fallbackPageSize)
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
         {
             Calls++;
 
@@ -86,7 +82,7 @@ public sealed class SonarOrchestratorSonarGatewayTests
                     ]));
         }
 
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
             => Task.FromResult(new SonarRuleDetailsResponse(ruleKey));
     }
 }

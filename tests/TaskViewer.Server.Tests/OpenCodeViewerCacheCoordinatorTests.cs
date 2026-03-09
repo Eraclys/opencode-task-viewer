@@ -70,7 +70,7 @@ public sealed class OpenCodeViewerCacheCoordinatorTests
                 new OpenCodeSessionDto("sess-1", "Session", "C:/Work", null, now, now)
             ],
             now);
-        sut.StoreProjects([new OpenCodeProjectTransport("C:/Work", ["C:/Work"])], now);
+        sut.StoreProjects([new OpenCodeProject("C:/Work", ["C:/Work"])], now);
         sut.StoreStatusMap(
             directoryKey,
             new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal)

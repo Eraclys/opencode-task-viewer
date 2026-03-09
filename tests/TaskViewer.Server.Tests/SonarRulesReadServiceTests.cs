@@ -40,17 +40,14 @@ public sealed class SonarRulesReadServiceTests
 
     sealed class FakeGateway : ISonarQubeService
     {
-        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+        public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
             => Task.FromResult(new SonarRuleDetailsResponse(null));
 
-        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(
-            Dictionary<string, string?> query,
-            int fallbackPageIndex,
-            int fallbackPageSize)
+        public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new SonarIssuesSearchResponse(
-                    fallbackPageIndex,
-                    fallbackPageSize,
+                    query.PageIndex,
+                    query.PageSize,
                     3,
                     [
                         new SonarIssueTransport(null, null, null, null, null, "javascript:S1126", null, null, null, null, null),

@@ -28,8 +28,6 @@ public static class OpenCodeServiceCollectionExtensions
             sp => new OpenCodeService(
                 () => sp.GetRequiredService<OpenCodeHttpClient>(),
                 optionsFactory(sp)));
-        services.AddSingleton<IOpenCodeStatusReader>(sp => sp.GetRequiredService<IOpenCodeService>());
-        services.AddSingleton<IOpenCodeDispatchClient>(sp => sp.GetRequiredService<IOpenCodeService>());
         services.AddSingleton(sp => new OpenCodeUpstreamSseService(sp.GetRequiredService<OpenCodeSseHttpClient>));
 
         return services;

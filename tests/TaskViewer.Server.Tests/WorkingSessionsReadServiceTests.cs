@@ -10,7 +10,7 @@ public sealed class WorkingSessionsReadServiceTests
     public async Task GetWorkingSessionsCountAsync_UsesCacheWithinTtl()
     {
         var repo = new FakeMappingRepository(["C:/Work/Alpha"]);
-        var statusReader = new FakeOpenCodeStatusReader(
+        var openCodeService = new FakeOpenCodeService(
             readMap: directory =>
             {
                 Assert.Equal("C:/Work/Alpha", directory);
@@ -22,14 +22,14 @@ public sealed class WorkingSessionsReadServiceTests
 
         var service = new WorkingSessionsReadService(
             repo,
-            statusReader);
+            openCodeService);
 
         var first = await service.GetWorkingSessionsCountAsync(false, 1000);
         var second = await service.GetWorkingSessionsCountAsync(false, 1000);
 
         Assert.Equal(1, first.Count);
         Assert.Equal(1, second.Count);
-        Assert.Equal(1, statusReader.RequestCount);
+        Assert.Equal(1, openCodeService.RequestCount);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public sealed class WorkingSessionsReadServiceTests
 
         var service = new WorkingSessionsReadService(
             repo,
-            new FakeOpenCodeStatusReader(
+            new FakeOpenCodeService(
                 readMap: dir =>
             {
                 seenDirectories.Add(dir);
@@ -96,18 +96,18 @@ public sealed class WorkingSessionsReadServiceTests
             DateTimeOffset now) => throw new NotSupportedException();
     }
 
-    sealed class FakeOpenCodeStatusReader : IOpenCodeStatusReader
+    sealed class FakeOpenCodeService : DisabledOpenCodeService
     {
         readonly Func<string, Dictionary<string, string>> _readMap;
 
-        public FakeOpenCodeStatusReader(Func<string, Dictionary<string, string>> readMap)
+        public FakeOpenCodeService(Func<string, Dictionary<string, string>> readMap)
         {
             _readMap = readMap;
         }
 
         public int RequestCount { get; private set; }
 
-        public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory)
+        public override Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
         {
             RequestCount += 1;
             return Task.FromResult(_readMap(directory));

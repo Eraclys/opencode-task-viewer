@@ -65,15 +65,15 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
                                            ? new SonarEnqueueAllIssuesReadService(_options.SonarQubeService)
                                            : new DisabledSonarEnqueueAllIssuesReadService());
 
-        var openCodeStatusReader = _options.OpenCodeStatusReader ?? new DisabledOpenCodeStatusReader();
-        var workingSessionsReadService = _options.WorkingSessionsReadService ?? new WorkingSessionsReadService(mappingRepository, openCodeStatusReader);
-        var queueDispatchService = _options.QueueDispatchService ?? new QueueDispatchService(_options.OpenCodeDispatchClient ?? new DisabledOpenCodeDispatchClient(), _options.BuildOpenCodeSessionUrl);
+        var openCodeService = _options.OpenCodeApiClient ?? new DisabledOpenCodeService();
+        var workingSessionsReadService = _options.WorkingSessionsReadService ?? new WorkingSessionsReadService(mappingRepository, openCodeService);
+        var queueDispatchService = _options.QueueDispatchService ?? new QueueDispatchService(openCodeService, _options.BuildOpenCodeSessionUrl);
         var dispatchFailurePolicy = _options.DispatchFailurePolicy ?? new DispatchFailurePolicy();
         var workloadBackpressurePolicy = _options.WorkloadBackpressurePolicy ?? new WorkloadBackpressurePolicy();
 
         _taskSchedulerService = _options.TaskSchedulerService ?? new TaskSchedulerService(_queueRepository, NowUtc);
         _taskReadinessGate = _options.TaskReadinessGate ?? new TaskReadinessGate(_options.SonarQubeService);
-        _taskReconcilerService = _options.TaskReconcilerService ?? new TaskReconcilerService(_queueRepository, openCodeStatusReader, dispatchFailurePolicy, NowUtc);
+        _taskReconcilerService = _options.TaskReconcilerService ?? new TaskReconcilerService(_queueRepository, openCodeService, dispatchFailurePolicy, NowUtc);
         _orchestratorRuntime = _options.OrchestratorRuntime ?? new OrchestratorRuntime();
         _workloadBackpressureStateService = _options.WorkloadBackpressureStateService ?? new WorkloadBackpressureStateService(workingSessionsReadService, workloadBackpressurePolicy);
         _queueEnqueueService = _options.QueueEnqueueService ?? new QueueEnqueueService(_queueRepository, _options.MaxAttempts, NowUtc);

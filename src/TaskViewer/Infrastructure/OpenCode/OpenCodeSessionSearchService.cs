@@ -154,7 +154,7 @@ public sealed class OpenCodeSessionSearchService
     static int ParseIntSafe(string? value, int fallback)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : fallback;
 
-    static List<(string Directory, string ProjectWorktree)> BuildProjectSearchEntries(List<OpenCodeProjectTransport> projects)
+    static List<(string Directory, string ProjectWorktree)> BuildProjectSearchEntries(List<OpenCodeProject> projects)
     {
         var entries = new List<(string Directory, string ProjectWorktree)>();
         var seenDirectoryKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -189,7 +189,7 @@ public sealed class OpenCodeSessionSearchService
         return entries;
     }
 
-    async Task<List<OpenCodeProjectTransport>> ListProjectsAsync()
+    async Task<List<OpenCodeProject>> ListProjectsAsync()
     {
         var cachedProjects = _cacheCoordinator.GetFreshProjects();
 

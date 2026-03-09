@@ -72,7 +72,7 @@ public sealed class OpenCodeViewerState
             _sessions.Timestamp = DateTimeOffset.MinValue;
     }
 
-    public List<OpenCodeProjectTransport>? GetFreshProjects(int projectsCacheTtlMs)
+    public List<OpenCodeProject>? GetFreshProjects(int projectsCacheTtlMs)
     {
         lock (_projectsSync)
         {
@@ -84,7 +84,7 @@ public sealed class OpenCodeViewerState
         }
     }
 
-    public void StoreProjects(List<OpenCodeProjectTransport> projects, DateTimeOffset timestamp)
+    public void StoreProjects(List<OpenCodeProject> projects, DateTimeOffset timestamp)
     {
         lock (_projectsSync)
         {

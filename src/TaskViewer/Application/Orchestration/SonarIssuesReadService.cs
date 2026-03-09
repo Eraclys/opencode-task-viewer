@@ -24,17 +24,22 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
         var type = NormalizeUpper(issueType);
         var sev = NormalizeUpper(severity);
         var status = NormalizeUpper(issueStatus);
+        var types = string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
+        var severities = string.IsNullOrWhiteSpace(sev) ? Array.Empty<string>() : new[] { sev };
+        var statuses = string.IsNullOrWhiteSpace(status) ? Array.Empty<string>() : new[] { status };
 
-        var query = SonarIssuesQueryBuilder.Build(
-            mapping,
-            page,
-            pageSize,
-            type,
-            sev,
-            status,
-            ruleKeys);
+        var response = await _sonarQubeService.SearchIssuesAsync(new SearchIssuesQuery
+        {
+            ComponentKey = mapping.SonarProjectKey,
+            Branch = mapping.Branch,
+            PageIndex = page,
+            PageSize = pageSize,
+            Types = types,
+            Severities = severities,
+            Statuses = statuses,
+            RuleKeys =  ruleKeys
+        });
 
-        var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
         var issues = new List<SonarIssueSummaryItem>();
 
         foreach (var raw in response.Issues)

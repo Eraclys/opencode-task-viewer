@@ -8,17 +8,17 @@ sealed class TaskReconcilerService : ITaskReconcilerService
 {
     readonly IDispatchFailurePolicy _dispatchFailurePolicy;
     readonly Func<DateTimeOffset> _nowUtc;
-    readonly IOpenCodeStatusReader _openCodeStatusReader;
+    readonly IOpenCodeService _openCodeService;
     readonly IQueueRepository _queueRepository;
 
     public TaskReconcilerService(
         IQueueRepository queueRepository,
-        IOpenCodeStatusReader openCodeStatusReader,
+        IOpenCodeService openCodeService,
         IDispatchFailurePolicy dispatchFailurePolicy,
         Func<DateTimeOffset>? nowUtc = null)
     {
         _queueRepository = queueRepository;
-        _openCodeStatusReader = openCodeStatusReader;
+        _openCodeService = openCodeService;
         _dispatchFailurePolicy = dispatchFailurePolicy;
         _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
     }
@@ -91,7 +91,7 @@ sealed class TaskReconcilerService : ITaskReconcilerService
 
         try
         {
-            var statusMap = await _openCodeStatusReader.ReadWorkingStatusMapAsync(directory);
+            var statusMap = await _openCodeService.ReadWorkingStatusMapAsync(directory);
             cache[directory] = statusMap;
             return statusMap;
         }

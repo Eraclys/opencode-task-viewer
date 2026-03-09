@@ -19,8 +19,10 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         string? issueStatus,
         int maxScanIssues)
     {
-        var normalizedType = NormalizeUpper(issueType);
-        var normalizedStatus = NormalizeUpper(issueStatus) ?? string.Empty;
+        var type = NormalizeUpper(issueType);
+        var status = NormalizeUpper(issueStatus) ?? string.Empty;
+        var types = string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
+        var statuses = string.IsNullOrWhiteSpace(status) ? Array.Empty<string>() : new[] { status };
 
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         const int pageSize = 500;
@@ -30,16 +32,16 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
 
         while (true)
         {
-            var query = SonarIssuesQueryBuilder.Build(
-                mapping,
-                page,
-                pageSize,
-                normalizedType,
-                null,
-                normalizedStatus,
-                null);
+            var response = await _sonarQubeService.SearchIssuesAsync(new SearchIssuesQuery
+            {
+                ComponentKey = mapping.SonarProjectKey,
+                Branch = mapping.Branch,
+                PageIndex = page,
+                PageSize = pageSize,
+                Types = types,
+                Statuses = statuses
+            });
 
-            var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
             var issues = response.Issues;
             total ??= response.Total;
 
@@ -78,8 +80,8 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
             .ToList();
 
         return new SonarRulesSummary(
-            normalizedType,
-            string.IsNullOrWhiteSpace(normalizedStatus) ? null : normalizedStatus,
+            type,
+            string.IsNullOrWhiteSpace(status) ? null : status,
             scanned,
             scanned >= maxScanIssues,
             rules);

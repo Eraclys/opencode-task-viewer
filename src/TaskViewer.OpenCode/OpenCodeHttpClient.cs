@@ -30,7 +30,7 @@ public sealed class OpenCodeHttpClient
         return OpenCodeStatusParsers.ParseWorkingStatusMap(data);
     }
 
-    public async Task<List<OpenCodeTodoTransport>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+    public async Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
     {
         var data = await SendAsync(
             $"/session/{Uri.EscapeDataString(sessionId)}/todo",
@@ -45,7 +45,7 @@ public sealed class OpenCodeHttpClient
             .ToList();
     }
 
-    public async Task<List<OpenCodeMessageTransport>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default)
+    public async Task<List<OpenCodeMessage>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default)
     {
         var query = new Dictionary<string, string?>();
 
@@ -65,17 +65,17 @@ public sealed class OpenCodeHttpClient
             .ToList();
     }
 
-    public async Task<List<OpenCodeProjectTransport>> ReadProjectsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<OpenCodeProject>> ReadProjectsAsync(CancellationToken cancellationToken = default)
     {
         var data = await SendAsync("/project", new OpenCodeRequest(), cancellationToken);
 
         return ToArrayResponse(data)
             .Select(ParseProject)
-            .OfType<OpenCodeProjectTransport>()
+            .OfType<OpenCodeProject>()
             .ToList();
     }
 
-    public async Task<List<OpenCodeSessionTransport>> ReadSessionsAsync(string directory, int limit, CancellationToken cancellationToken = default)
+    public async Task<List<OpenCodeSession>> ReadSessionsAsync(string directory, int limit, CancellationToken cancellationToken = default)
     {
         var data = await SendAsync(
             "/session",
@@ -92,11 +92,11 @@ public sealed class OpenCodeHttpClient
 
         return ToArrayResponse(data)
             .Select(session => ParseSession(session, directory))
-            .OfType<OpenCodeSessionTransport>()
+            .OfType<OpenCodeSession>()
             .ToList();
     }
 
-    public async Task<OpenCodeSessionTransport?> ReadSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+    public async Task<OpenCodeSession?> ReadSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
     {
         var data = await SendAsync(
             $"/session/{Uri.EscapeDataString(sessionId)}",
@@ -290,18 +290,18 @@ public sealed class OpenCodeHttpClient
         return [];
     }
 
-    static OpenCodeTodoTransport ParseTodo(JsonNode? todo)
+    static OpenCodeTodo ParseTodo(JsonNode? todo)
     {
         var content = todo?["content"]?.ToString() ?? todo?["text"]?.ToString() ?? todo?["title"]?.ToString() ?? string.Empty;
-        return new OpenCodeTodoTransport(content, NormalizeTodoStatus(todo?["status"]?.ToString() ?? todo?["state"]?.ToString()), NormalizePriority(todo?["priority"]?.ToString()));
+        return new OpenCodeTodo(content, NormalizeTodoStatus(todo?["status"]?.ToString() ?? todo?["state"]?.ToString()), NormalizePriority(todo?["priority"]?.ToString()));
     }
 
-    static OpenCodeMessageTransport ParseMessage(JsonNode? message)
+    static OpenCodeMessage ParseMessage(JsonNode? message)
     {
-        return new OpenCodeMessageTransport(GetMessageRole(message), ExtractMessageText(message), ExtractMessageCreatedAt(message));
+        return new OpenCodeMessage(GetMessageRole(message), ExtractMessageText(message), ExtractMessageCreatedAt(message));
     }
 
-    static OpenCodeProjectTransport? ParseProject(JsonNode? project)
+    static OpenCodeProject? ParseProject(JsonNode? project)
     {
         if (project is null)
             return null;
@@ -309,10 +309,10 @@ public sealed class OpenCodeHttpClient
         var worktree = NormalizeDirectory(project["worktree"]?.ToString());
         var sandboxes = new List<string>();
         CollectSandboxDirectories(project["sandboxes"], sandboxes);
-        return new OpenCodeProjectTransport(worktree, sandboxes);
+        return new OpenCodeProject(worktree, sandboxes);
     }
 
-    static OpenCodeSessionTransport? ParseSession(JsonNode? session, string? fallbackDirectory)
+    static OpenCodeSession? ParseSession(JsonNode? session, string? fallbackDirectory)
     {
         var sessionId = session?["id"]?.ToString().Trim();
 
@@ -325,7 +325,7 @@ public sealed class OpenCodeHttpClient
         var updatedAt = ParseTime(session?["time"]?["updated"]);
         var archivedAt = ParseTime(session?["time"]?["archived"]);
 
-        return new OpenCodeSessionTransport(
+        return new OpenCodeSession(
             sessionId,
             session?["title"]?.ToString() ?? session?["name"]?.ToString(),
             directory,

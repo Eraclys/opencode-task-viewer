@@ -23,13 +23,13 @@ public sealed class SonarQubeServiceTests
         var gateway = CreateGateway(handler);
 
         var response = await gateway.SearchIssuesAsync(
-            new Dictionary<string, string?>
+            new SearchIssuesQuery
             {
-                ["componentKeys"] = "alpha",
-                ["types"] = "CODE_SMELL"
-            },
-            1,
-            50);
+                ComponentKey = "alpha",
+                Types = ["CODE_SMELL"],
+                PageIndex = 1,
+                PageSize = 50
+            });
 
         Assert.Equal(3, response.PageIndex);
         Assert.Equal(25, response.PageSize);
@@ -51,7 +51,7 @@ public sealed class SonarQubeServiceTests
 
         var gateway = CreateGateway(handler);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.SearchIssuesAsync(new Dictionary<string, string?>(), 1, 100));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.SearchIssuesAsync(new SearchIssuesQuery { ComponentKey = "alpha", PageIndex = 1, PageSize = 100 }));
         Assert.Contains("SonarQube request failed", error.Message);
     }
 

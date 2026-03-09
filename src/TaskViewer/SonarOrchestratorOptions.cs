@@ -23,9 +23,7 @@ public sealed class SonarOrchestratorOptions
     public ISonarIssuesReadService? SonarIssuesReadService { get; init; }
     public ISonarEnqueueAllIssuesReadService? SonarEnqueueAllIssuesReadService { get; init; }
     public IWorkingSessionsReadService? WorkingSessionsReadService { get; init; }
-    public IOpenCodeStatusReader? OpenCodeStatusReader { get; init; }
     public IQueueDispatchService? QueueDispatchService { get; init; }
-    public IOpenCodeDispatchClient? OpenCodeDispatchClient { get; init; }
     public IDispatchFailurePolicy? DispatchFailurePolicy { get; init; }
     public IQueueWorkerCoordinator? QueueWorkerCoordinator { get; init; }
     public IOrchestratorRuntime? OrchestratorRuntime { get; init; }

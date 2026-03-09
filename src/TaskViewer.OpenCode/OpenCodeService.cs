@@ -43,22 +43,19 @@ public sealed class OpenCodeService : IOpenCodeService
     public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
         => _createClient().ReadWorkingStatusMapAsync(directory, cancellationToken);
 
-    Task<Dictionary<string, string>> IOpenCodeStatusReader.ReadWorkingStatusMapAsync(string directory)
-        => ReadWorkingStatusMapAsync(directory);
-
-    public Task<List<OpenCodeTodoTransport>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+    public Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
         => _createClient().ReadTodosAsync(sessionId, directory, cancellationToken);
 
-    public Task<List<OpenCodeMessageTransport>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default)
+    public Task<List<OpenCodeMessage>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default)
         => _createClient().ReadMessagesAsync(sessionId, limit, cancellationToken);
 
-    public Task<List<OpenCodeProjectTransport>> ReadProjectsAsync(CancellationToken cancellationToken = default)
+    public Task<List<OpenCodeProject>> ReadProjectsAsync(CancellationToken cancellationToken = default)
         => _createClient().ReadProjectsAsync(cancellationToken);
 
-    public Task<List<OpenCodeSessionTransport>> ReadSessionsAsync(string directory, int limit, CancellationToken cancellationToken = default)
+    public Task<List<OpenCodeSession>> ReadSessionsAsync(string directory, int limit, CancellationToken cancellationToken = default)
         => _createClient().ReadSessionsAsync(directory, limit, cancellationToken);
 
-    public Task<OpenCodeSessionTransport?> ReadSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+    public Task<OpenCodeSession?> ReadSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
         => _createClient().ReadSessionAsync(sessionId, directory, cancellationToken);
 
     public Task<DateTimeOffset?> ArchiveSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
@@ -67,14 +64,8 @@ public sealed class OpenCodeService : IOpenCodeService
     public Task<string> CreateSessionAsync(string directory, string title, CancellationToken cancellationToken = default)
         => _createClient().CreateSessionAsync(directory, title, cancellationToken);
 
-    Task<string> IOpenCodeDispatchClient.CreateSessionAsync(string directory, string title)
-        => CreateSessionAsync(directory, title);
-
     public Task SendPromptAsync(string directory, string sessionId, string prompt, CancellationToken cancellationToken = default)
         => _createClient().SendPromptAsync(directory, sessionId, prompt, cancellationToken);
-
-    Task IOpenCodeDispatchClient.SendPromptAsync(string directory, string sessionId, string prompt)
-        => SendPromptAsync(directory, sessionId, prompt);
 
     static string? NormalizeDirectory(string? value)
     {

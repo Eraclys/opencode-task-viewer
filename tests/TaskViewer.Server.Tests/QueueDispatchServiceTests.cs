@@ -8,7 +8,7 @@ public sealed class QueueDispatchServiceTests
     [Fact]
     public async Task DispatchAsync_CreatesSessionThenPostsPrompt()
     {
-        var client = new FakeOpenCodeDispatchClient();
+        var client = new FakeOpenCodeService();
 
         var sut = new QueueDispatchService(
             client,
@@ -66,7 +66,7 @@ public sealed class QueueDispatchServiceTests
     public async Task DispatchAsync_ThrowsWhenSessionIdMissing()
     {
         var sut = new QueueDispatchService(
-            new MissingSessionIdDispatchClient(),
+            new MissingSessionIdOpenCodeService(),
             (sessionId, _) => sessionId);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DispatchAsync(
@@ -80,31 +80,51 @@ public sealed class QueueDispatchServiceTests
         Assert.Contains("session id", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    sealed class FakeOpenCodeDispatchClient : IOpenCodeDispatchClient
+    sealed class FakeOpenCodeService : IOpenCodeService
     {
         public List<(string Directory, string Title)> CreateCalls { get; } = [];
 
         public List<(string Directory, string SessionId, string Prompt)> PromptCalls { get; } = [];
 
-        public Task<string> CreateSessionAsync(string directory, string title)
+        public string? BuildSessionUrl(string sessionId, string? directory) => null;
+
+        public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+            => Task.FromResult(new Dictionary<string, string>(StringComparer.Ordinal));
+
+        public Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<OpenCodeTodo>());
+
+        public Task<List<OpenCodeMessage>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<OpenCodeMessage>());
+
+        public Task<List<OpenCodeProject>> ReadProjectsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<OpenCodeProject>());
+
+        public Task<List<OpenCodeSession>> ReadSessionsAsync(string directory, int limit, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<OpenCodeSession>());
+
+        public Task<OpenCodeSession?> ReadSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+            => Task.FromResult<OpenCodeSession?>(null);
+
+        public Task<DateTimeOffset?> ArchiveSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
+            => Task.FromResult<DateTimeOffset?>(null);
+
+        public Task<string> CreateSessionAsync(string directory, string title, CancellationToken cancellationToken = default)
         {
             CreateCalls.Add((directory, title));
             return Task.FromResult("sess-123");
         }
 
-        public Task SendPromptAsync(string directory, string sessionId, string prompt)
+        public Task SendPromptAsync(string directory, string sessionId, string prompt, CancellationToken cancellationToken = default)
         {
             PromptCalls.Add((directory, sessionId, prompt));
             return Task.CompletedTask;
         }
     }
 
-    sealed class MissingSessionIdDispatchClient : IOpenCodeDispatchClient
+    sealed class MissingSessionIdOpenCodeService : DisabledOpenCodeService
     {
-        public Task<string> CreateSessionAsync(string directory, string title)
+        public override Task<string> CreateSessionAsync(string directory, string title, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("OpenCode did not return a session id");
-
-        public Task SendPromptAsync(string directory, string sessionId, string prompt)
-            => Task.CompletedTask;
     }
 }

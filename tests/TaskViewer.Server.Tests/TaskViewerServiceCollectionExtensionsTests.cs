@@ -36,16 +36,13 @@ public sealed class TaskViewerServiceCollectionExtensionsTests
         await using var provider = services.BuildServiceProvider();
 
         var openCodeApiClient = provider.GetRequiredService<IOpenCodeService>();
-        var openCodeStatusReader = provider.GetRequiredService<IOpenCodeStatusReader>();
-        var openCodeDispatchClient = provider.GetRequiredService<IOpenCodeDispatchClient>();
         var sonarQubeApiClient = provider.GetRequiredService<SonarQubeService>();
         var sonarQubeService = provider.GetRequiredService<ISonarQubeService>();
         var orchestrator = provider.GetRequiredService<SonarOrchestrator>();
         var orchestrationUseCases = provider.GetRequiredService<IOrchestrationUseCases>();
         var orchestrationGateway = provider.GetService<IOrchestrationGateway>();
 
-        Assert.Same(openCodeApiClient, openCodeStatusReader);
-        Assert.Same(openCodeApiClient, openCodeDispatchClient);
+        Assert.NotNull(openCodeApiClient);
         Assert.Same(sonarQubeApiClient, sonarQubeService);
         Assert.IsType<OrchestrationUseCases>(orchestrationUseCases);
         Assert.Null(orchestrationGateway);

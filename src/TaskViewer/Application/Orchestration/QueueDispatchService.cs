@@ -4,24 +4,24 @@ namespace TaskViewer.Application.Orchestration;
 
 public sealed class QueueDispatchService : IQueueDispatchService
 {
-    readonly IOpenCodeDispatchClient _openCodeDispatchClient;
+    readonly IOpenCodeService _openCodeService;
     readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
 
     public QueueDispatchService(
-        IOpenCodeDispatchClient openCodeDispatchClient,
+        IOpenCodeService openCodeService,
         Func<string, string?, string?> buildOpenCodeSessionUrl)
     {
-        _openCodeDispatchClient = openCodeDispatchClient;
+        _openCodeService = openCodeService;
         _buildOpenCodeSessionUrl = buildOpenCodeSessionUrl;
     }
 
     public async Task<QueueDispatchResult> DispatchAsync(QueueItemRecord item, IReadOnlyList<NormalizedIssue> issues)
     {
         var title = BuildTitle(item);
-        var sessionId = await _openCodeDispatchClient.CreateSessionAsync(item.Directory, title);
+        var sessionId = await _openCodeService.CreateSessionAsync(item.Directory, title);
         var prompt = ComposePrompt(item, issues);
 
-        await _openCodeDispatchClient.SendPromptAsync(item.Directory, sessionId, prompt);
+        await _openCodeService.SendPromptAsync(item.Directory, sessionId, prompt);
 
         var openCodeUrl = _buildOpenCodeSessionUrl(sessionId, item.Directory);
         return new QueueDispatchResult(sessionId, openCodeUrl);

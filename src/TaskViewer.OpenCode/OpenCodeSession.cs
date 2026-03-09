@@ -1,6 +1,6 @@
 ﻿namespace TaskViewer.OpenCode;
 
-public sealed record OpenCodeSessionTransport(
+public sealed record OpenCodeSession(
     string Id,
     string? Name,
     string? Directory,

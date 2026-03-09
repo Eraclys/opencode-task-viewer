@@ -23,6 +23,9 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
         var type = NormalizeUpper(issueType);
         var sev = NormalizeUpper(severity);
         var status = NormalizeUpper(issueStatus);
+        var types = string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
+        var severities = string.IsNullOrWhiteSpace(sev) ? Array.Empty<string>() : new[] { sev };
+        var statuses = string.IsNullOrWhiteSpace(status) ? Array.Empty<string>() : new[] { status };
 
         const int pageSize = 500;
         var page = 1;
@@ -31,16 +34,18 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
 
         while (allIssues.Count < maxScanIssues)
         {
-            var query = SonarIssuesQueryBuilder.Build(
-                mapping,
-                page,
-                pageSize,
-                type,
-                sev,
-                status,
-                ruleKeys);
+            var response = await _sonarQubeService.SearchIssuesAsync(new SearchIssuesQuery
+            {
+                ComponentKey = mapping.SonarProjectKey,
+                Branch = mapping.Branch,
+                PageIndex = page,
+                PageSize = pageSize,
+                Types = types,
+                Severities = severities,
+                Statuses = statuses,
+                RuleKeys =  ruleKeys
+            });
 
-            var response = await _sonarQubeService.SearchIssuesAsync(query, page, pageSize);
             total ??= response.Total;
             var issuesRaw = response.Issues;
 

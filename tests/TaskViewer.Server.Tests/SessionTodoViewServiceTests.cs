@@ -9,7 +9,7 @@ public sealed class SessionTodoViewServiceTests
     public void NormalizeTodo_NormalizesContentStatusAndPriority()
     {
         var sut = new SessionTodoViewService();
-        var raw = new OpenCodeTodoTransport("Ship feature", "in_progress", "high");
+        var raw = new OpenCodeTodo("Ship feature", "in_progress", "high");
 
         var todo = sut.NormalizeTodo(raw);
 

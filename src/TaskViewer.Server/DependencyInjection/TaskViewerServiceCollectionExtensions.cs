@@ -82,9 +82,7 @@ internal static class TaskViewerServiceCollectionExtensions
                         MaxAttempts = runtimeSettings.Orchestration.MaxAttempts,
                         MaxWorkingGlobal = runtimeSettings.Orchestration.MaxWorkingGlobal,
                         WorkingResumeBelow = runtimeSettings.Orchestration.WorkingResumeBelow,
-                        OpenCodeStatusReader = sp.GetRequiredService<IOpenCodeStatusReader>(),
                         TaskReadinessGate = new AlwaysReadyGate(),
-                        OpenCodeDispatchClient = sp.GetRequiredService<IOpenCodeDispatchClient>(),
                         NormalizeDirectory = DirectoryPath.Normalize,
                         BuildOpenCodeSessionUrl = sp.GetRequiredService<OpenCodeSessionSearchService>().BuildOpenCodeSessionUrl,
                         OnChange = () => _ = sp.GetRequiredService<OpenCodeViewerUpdateNotifier>().InvalidateAllAndBroadcastAsync()
