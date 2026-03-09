@@ -71,6 +71,33 @@ LIMIT 1", new { Id = id });
         }
     }
 
+    public async Task<bool> DeleteMapping(int id)
+    {
+        await _dbLock.WaitAsync();
+
+        try
+        {
+            using var conn = _openConnection();
+
+            var deletedProfiles = await conn.ExecuteAsync(@"
+DELETE FROM instruction_profiles
+WHERE mapping_id = @Id", new { Id = id });
+
+            var deleted = await conn.ExecuteAsync(@"
+DELETE FROM project_mappings
+WHERE id = @Id", new { Id = id });
+
+            if (deleted > 0 || deletedProfiles > 0)
+                _onChange();
+
+            return deleted > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     public async Task<MappingRecord> UpsertMapping(
         int? id,
         string sonarProjectKey,

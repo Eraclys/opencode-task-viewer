@@ -33,6 +33,9 @@ public sealed class QueueItemRecord
     public string? SessionId { get; init; }
     public string? OpenCodeUrl { get; init; }
     public string? LastError { get; init; }
+    public string? LastReviewAction { get; init; }
+    public string? LastReviewReason { get; init; }
+    public DateTimeOffset? LastReviewedAt { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
     public DateTimeOffset? DispatchedAt { get; init; }

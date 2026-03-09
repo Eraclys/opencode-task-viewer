@@ -77,6 +77,7 @@ public sealed class WorkingSessionsReadServiceTests
 
         public Task<List<MappingRecord>> ListMappings() => throw new NotSupportedException();
         public Task<MappingRecord?> GetMappingById(int id) => throw new NotSupportedException();
+        public Task<bool> DeleteMapping(int id) => throw new NotSupportedException();
 
         public Task<MappingRecord> UpsertMapping(
             int? id,

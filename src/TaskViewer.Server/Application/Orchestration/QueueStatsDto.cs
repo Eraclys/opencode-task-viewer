@@ -20,5 +20,5 @@ public sealed class QueueStatsDto
     [JsonPropertyName("awaiting_review")]
     public int? AwaitingReview { get; init; }
 
-    public int? Approved { get; init; }
+    public int? Rejected { get; init; }
 }

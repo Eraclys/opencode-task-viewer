@@ -11,6 +11,7 @@ public static class AppRuntimeSettingsLoader
         var openCodeUrl = ReadString(configuration, "OpenCode:Url", "OPENCODE_URL", "http://localhost:4096");
         var openCodeUsername = ReadString(configuration, "OpenCode:Username", "OPENCODE_USERNAME", "opencode");
         var openCodePassword = FirstNonEmpty(configuration["OPENCODE_PASSWORD"]);
+        var sonarMode = ReadString(configuration, "SonarQube:Mode", "SONARQUBE_MODE", SonarQubeMode.Real).ToLowerInvariant();
         var sonarUrl = ReadString(configuration, "SonarQube:Url", "SONARQUBE_URL", string.Empty);
         var sonarToken = FirstNonEmpty(configuration["SONARQUBE_TOKEN"]);
         var dbPathSetting = ReadString(configuration, "Orchestration:DbPath", "ORCHESTRATOR_DB_PATH", "data/orchestrator.sqlite");
@@ -28,12 +29,13 @@ public static class AppRuntimeSettingsLoader
             workingResumeBelow = Math.Max(0, maxWorkingGlobal - 1);
 
         ValidateRequiredAbsoluteUri("OpenCode:Url", openCodeUrl);
-        ValidateOptionalAbsoluteUri("SonarQube:Url", sonarUrl);
+        if (!string.Equals(sonarMode, SonarQubeMode.Fake, StringComparison.Ordinal))
+            ValidateOptionalAbsoluteUri("SonarQube:Url", sonarUrl);
 
         return new AppRuntimeSettings(
             new ViewerRuntimeSettings(viewerHost, viewerPort),
             new OpenCodeRuntimeSettings(openCodeUrl, openCodeUsername, openCodePassword),
-            new SonarQubeRuntimeSettings(sonarUrl, sonarToken),
+            new SonarQubeRuntimeSettings(sonarUrl, sonarToken, string.Equals(sonarMode, SonarQubeMode.Fake, StringComparison.Ordinal) ? SonarQubeMode.Fake : SonarQubeMode.Real),
             new OrchestrationRuntimeSettings(
                 ResolvePath(environment.ContentRootPath, dbPathSetting),
                 maxActive,

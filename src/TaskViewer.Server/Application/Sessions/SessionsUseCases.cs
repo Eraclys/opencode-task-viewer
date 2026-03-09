@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Domain;
 using TaskViewer.Server.Infrastructure.OpenCode;
 
@@ -8,17 +13,12 @@ public sealed class SessionsUseCases : ISessionsUseCases
     readonly Func<string, string?, Task<DateTimeOffset?>> _archiveSessionOnOpenCode;
     readonly Func<Task> _broadcastUpdate;
     readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
-    readonly Func<string, DateTimeOffset, bool?, string> _deriveSessionKanbanStatus;
     readonly Func<string, Task<OpenCodeSessionDto?>> _findSessionInfo;
-    readonly Func<string, Task<bool?>> _getHasAssistantResponse;
     readonly Func<string, Task<LastAssistantMessage?>> _getLastAssistantMessage;
-    readonly Func<string?, Task<Dictionary<string, SessionRuntimeStatus>>> _getStatusMapForDirectory;
     readonly Func<string, string?, Task<List<SessionTodoDto>>> _getTodosForSession;
     readonly Action _invalidateAllCaches;
-    readonly Func<string, Task<List<OpenCodeSessionDto>>> _listGlobalSessions;
     readonly Func<QueueItemRecord, SessionSummaryDto?> _mapQueueItemToSessionSummary;
     readonly Func<List<SessionTodoDto>, List<ViewerTaskDto>> _mapTodosToViewerTasks;
-    readonly Func<string?, string, Dictionary<string, SessionRuntimeStatus>, string> _normalizeRuntimeStatus;
     readonly SonarOrchestrator _orchestrator;
 
     internal SessionsUseCases(
@@ -29,14 +29,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
         SessionTodoViewService sessionTodoViewService,
         OpenCodeViewerUpdateNotifier updateNotifier)
         : this(
-            limit => sessionSearchService.ListGlobalSessionsAsync(
-                limit,
-                TaskViewerRuntimeDefaults.MaxAllSessions,
-                TaskViewerRuntimeDefaults.MaxSessionsPerProject),
-            sessionSearchService.GetStatusMapForDirectoryAsync,
-            runtimeService.NormalizeRuntimeStatus,
-            sessionSearchService.GetHasAssistantResponseAsync,
-            runtimeService.DeriveSessionKanbanStatus,
             sessionSearchService.BuildOpenCodeSessionUrl,
             orchestrator,
             queueItemSessionSummaryMapper.Map,
@@ -54,11 +46,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
     }
 
     internal SessionsUseCases(
-        Func<string, Task<List<OpenCodeSessionDto>>> listGlobalSessions,
-        Func<string?, Task<Dictionary<string, SessionRuntimeStatus>>> getStatusMapForDirectory,
-        Func<string?, string, Dictionary<string, SessionRuntimeStatus>, string> normalizeRuntimeStatus,
-        Func<string, Task<bool?>> getHasAssistantResponse,
-        Func<string, DateTimeOffset, bool?, string> deriveSessionKanbanStatus,
         Func<string, string?, string?> buildOpenCodeSessionUrl,
         SonarOrchestrator orchestrator,
         Func<QueueItemRecord, SessionSummaryDto?> mapQueueItemToSessionSummary,
@@ -70,11 +57,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
         Action invalidateAllCaches,
         Func<Task> broadcastUpdate)
     {
-        _listGlobalSessions = listGlobalSessions;
-        _getStatusMapForDirectory = getStatusMapForDirectory;
-        _normalizeRuntimeStatus = normalizeRuntimeStatus;
-        _getHasAssistantResponse = getHasAssistantResponse;
-        _deriveSessionKanbanStatus = deriveSessionKanbanStatus;
         _buildOpenCodeSessionUrl = buildOpenCodeSessionUrl;
         _orchestrator = orchestrator;
         _mapQueueItemToSessionSummary = mapQueueItemToSessionSummary;
@@ -89,87 +71,16 @@ public sealed class SessionsUseCases : ISessionsUseCases
 
     public async Task<IReadOnlyList<SessionSummaryDto>> ListSessionsAsync(string? limitParam)
     {
-        var requestedLimit = string.IsNullOrWhiteSpace(limitParam) ? "20" : limitParam;
-        var globalSessions = await _listGlobalSessions(requestedLimit);
-
-        var directoriesByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var session in globalSessions)
-        {
-            var key = OpenCodeCacheKeys.Directory(session.Directory);
-
-            if (string.IsNullOrWhiteSpace(key))
-                continue;
-
-            if (!directoriesByKey.ContainsKey(key))
-                directoriesByKey[key] = session.Directory!;
-        }
-
-        var statusByDirectory = new Dictionary<string, Dictionary<string, SessionRuntimeStatus>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var directory in directoriesByKey.Values)
-        {
-            var directoryKey = OpenCodeCacheKeys.Directory(directory);
-
-            if (!string.IsNullOrWhiteSpace(directoryKey))
-                statusByDirectory[directoryKey] = await _getStatusMapForDirectory(directory);
-        }
-
+        var requestedLimit = string.IsNullOrWhiteSpace(limitParam) ? "1000" : limitParam;
         var summaries = new List<SessionSummaryDto>();
-        var semaphore = new SemaphoreSlim(6);
-
-        var tasks = globalSessions.Select(async session =>
-        {
-            await semaphore.WaitAsync();
-
-            try
-            {
-                var directoryKey = OpenCodeCacheKeys.Directory(session.Directory);
-                var statusMap = !string.IsNullOrWhiteSpace(directoryKey) && statusByDirectory.TryGetValue(directoryKey, out var cachedStatusMap)
-                    ? cachedStatusMap
-                    : new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
-
-                var runtimeStatus = _normalizeRuntimeStatus(session.Directory, session.Id, statusMap);
-                var createdAt = session.CreatedAt;
-                var modifiedAt = session.UpdatedAt ?? createdAt ?? DateTimeOffset.UtcNow;
-
-                var hasAssistantResponse = SessionStatusPolicy.IsRuntimeRunning(runtimeStatus)
-                    ? null
-                    : await _getHasAssistantResponse(session.Id);
-
-                var status = _deriveSessionKanbanStatus(runtimeStatus, modifiedAt, hasAssistantResponse);
-
-                lock (summaries)
-                {
-                    summaries.Add(
-                        new SessionSummaryDto
-                        {
-                            Id = session.Id,
-                            Name = session.Name,
-                            Project = session.Project,
-                            Description = null,
-                            GitBranch = null,
-                            CreatedAt = createdAt,
-                            ModifiedAt = modifiedAt,
-                            RuntimeStatus = new SessionRuntimeStatus(runtimeStatus),
-                            Status = status,
-                            HasAssistantResponse = hasAssistantResponse,
-                            OpenCodeUrl = _buildOpenCodeSessionUrl(session.Id, session.Directory)
-                        });
-                }
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        await Task.WhenAll(tasks);
 
         try
         {
-            var queueItems = await _orchestrator.ListQueue("queued,dispatching,leased,running", "1000");
-            var queueSummaries = queueItems.Select(_mapQueueItemToSessionSummary).Where(x => x is not null).Cast<SessionSummaryDto>();
+            var queueItems = await _orchestrator.ListQueue("queued,dispatching,leased,running,awaiting_review,rejected,failed,cancelled", requestedLimit);
+            var queueSummaries = queueItems
+                .Select(item => _mapQueueItemToSessionSummary(item))
+                .Where(x => x is not null)
+                .Cast<SessionSummaryDto>();
             summaries.AddRange(queueSummaries);
         }
         catch (Exception queueError)
@@ -217,6 +128,24 @@ public sealed class SessionsUseCases : ISessionsUseCases
             last?.CreatedAt);
     }
 
+    public async Task<LastAssistantMessageResult> GetTaskLastAssistantMessageAsync(string taskId)
+    {
+        var normalizedTaskId = (taskId ?? string.Empty).Trim();
+        if (normalizedTaskId.StartsWith("queue-", StringComparison.OrdinalIgnoreCase))
+            normalizedTaskId = normalizedTaskId[6..];
+
+        var taskKey = $"queue-{normalizedTaskId}";
+        var summaries = await ListSessionsAsync("1000");
+        var task = summaries.FirstOrDefault(summary => string.Equals(summary.Id, taskKey, StringComparison.Ordinal));
+
+        var sessionId = ExtractSessionIdFromOpenCodeUrl(task?.OpenCodeUrl);
+
+        if (task is null || string.IsNullOrWhiteSpace(sessionId))
+            return new LastAssistantMessageResult(false, taskKey, null, null);
+
+        return await GetLastAssistantMessageAsync(sessionId);
+    }
+
     public async Task<ArchiveSessionResult> ArchiveSessionAsync(string sessionId)
     {
         var info = await _findSessionInfo(sessionId);
@@ -229,5 +158,19 @@ public sealed class SessionsUseCases : ISessionsUseCases
         await _broadcastUpdate();
 
         return new ArchiveSessionResult(true, archivedAt);
+    }
+
+    static string? ExtractSessionIdFromOpenCodeUrl(string? openCodeUrl)
+    {
+        if (string.IsNullOrWhiteSpace(openCodeUrl))
+            return null;
+
+        var marker = "/session/";
+        var index = openCodeUrl.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return null;
+
+        var sessionId = openCodeUrl[(index + marker.Length)..].Trim();
+        return string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
     }
 }

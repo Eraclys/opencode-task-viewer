@@ -20,6 +20,12 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 
     public Task<List<MappingRecord>> ListMappingsAsync() => _gateway.ListMappings();
 
+    public Task<bool> DeleteMappingAsync(string mappingId)
+    {
+        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
+        return _gateway.DeleteMapping(parsedMappingId);
+    }
+
     public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => _gateway.UpsertMapping(request);
 
     public async Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType)
@@ -89,7 +95,12 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         {
             Items = items,
             Stats = stats,
-            Worker = worker
+            Worker = worker,
+            Review = new TaskReviewSummaryDto
+            {
+                AwaitingReview = stats.AwaitingReview ?? 0,
+                Rejected = stats.Rejected ?? 0
+            }
         };
     }
 
@@ -102,6 +113,36 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
     public Task<int> RetryFailedAsync() => _gateway.RetryFailed();
 
     public Task<int> ClearQueuedAsync() => _gateway.ClearQueued();
+
+    public Task<bool> ApproveTaskAsync(string taskId)
+    {
+        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
+        return _gateway.ApproveTask(parsedTaskId);
+    }
+
+    public Task<bool> RejectTaskAsync(string taskId, string? reason)
+    {
+        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
+        return _gateway.RejectTask(parsedTaskId, reason);
+    }
+
+    public Task<bool> RequeueTaskAsync(string taskId, string? reason)
+    {
+        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
+        return _gateway.RequeueTask(parsedTaskId, reason);
+    }
+
+    public Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason)
+    {
+        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
+        return _gateway.RepromptTask(parsedTaskId, instructions, reason);
+    }
+
+    public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId)
+    {
+        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
+        return _gateway.GetTaskReviewHistory(parsedTaskId);
+    }
 
     public Task ResetStateAsync() => _gateway.ResetState();
 }

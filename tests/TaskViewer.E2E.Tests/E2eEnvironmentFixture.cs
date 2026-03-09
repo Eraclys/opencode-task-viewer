@@ -88,7 +88,7 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
                 ["ORCH_MAX_ATTEMPTS"] = "1"
             });
 
-        await WaitForOk($"{ViewerUrl}/api/sessions?limit=1", TimeSpan.FromSeconds(15));
+        await WaitForOk($"{ViewerUrl}/api/tasks/board?limit=1", TimeSpan.FromSeconds(15));
     }
 
     public async Task DisposeAsync()
@@ -118,6 +118,7 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
     }
 
     public string GammaDirectory => _gammaDir.Replace('\\', '/');
+    public string AlphaDirectory => _alphaDir.Replace('\\', '/');
 
     public async Task ResetOpenCodeAsync()
     {
@@ -204,6 +205,17 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
         var body = await response.Content.ReadAsStringAsync();
 
         throw new HttpRequestException($"Request failed: {(int)response.StatusCode} {response.ReasonPhrase} for {url}. Body: {body}");
+    }
+
+    public async Task<JsonNode> PostJsonAndReadAsync(string url, object payload)
+    {
+        using var response = await Http.PostAsJsonAsync(url, payload);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Request failed: {(int)response.StatusCode} {response.ReasonPhrase} for {url}. Body: {body}");
+
+        return JsonNode.Parse(body) ?? new JsonObject();
     }
 
     public async Task<JsonNode> GetJsonAsync(string url)

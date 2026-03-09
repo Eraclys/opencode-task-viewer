@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Infrastructure.Orchestration;
@@ -43,6 +44,15 @@ public static class OrchestrationRequestParsers
             payload?["issueStatus"]?.ToString(),
             payload?["severity"]?.ToString(),
             payload?["instructions"]?.ToString());
+    }
+
+    public static TaskReviewRequestDto ParseTaskReviewRequest(JsonNode? payload)
+    {
+        return new TaskReviewRequestDto
+        {
+            Instructions = NormalizeOptionalString(payload?["instructions"]?.ToString()),
+            Reason = NormalizeOptionalString(payload?["reason"]?.ToString())
+        };
     }
 
     static int? ParseNullableInt(string? value)

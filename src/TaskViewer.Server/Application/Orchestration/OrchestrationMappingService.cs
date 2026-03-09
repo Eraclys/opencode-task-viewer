@@ -30,6 +30,16 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
         return await _mappingRepository.GetMappingById(id);
     }
 
+    public async Task<bool> DeleteMappingAsync(int? mappingId)
+    {
+        var id = mappingId.GetValueOrDefault(-1);
+
+        if (id <= 0)
+            return false;
+
+        return await _mappingRepository.DeleteMapping(id);
+    }
+
     public async Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request)
     {
         var sonarProjectKey = request.SonarProjectKey ?? string.Empty;

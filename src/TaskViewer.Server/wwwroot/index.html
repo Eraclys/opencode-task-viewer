@@ -1457,13 +1457,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
         </svg>
-        <p>No sessions found</p>
+        <p>No tasks found</p>
       </div>
 
       <div id="session-view" class="session-view">
         <header class="view-header">
           <div>
-            <h1 id="session-title" class="view-title">All Sessions</h1>
+            <h1 id="session-title" class="view-title">All Tasks</h1>
             <p id="session-meta" class="view-meta"></p>
           </div>
           <div class="view-actions">
@@ -1472,22 +1472,6 @@
               <select id="project-filter" class="project-filter" data-testid="project-filter">
                 <option value="all">All projects</option>
               </select>
-              <button
-                id="bulk-archive-btn"
-                class="bulk-archive-btn"
-                data-testid="bulk-archive-btn"
-                onclick="archiveSelectedSessions()"
-                disabled>
-                Archive selected (0)
-              </button>
-              <button
-                id="clear-selection-btn"
-                class="clear-selection-btn"
-                data-testid="clear-selection-btn"
-                onclick="clearSelectedSessions()"
-                disabled>
-                Clear selection
-              </button>
             </div>
             <div id="connection-status" class="connection" data-testid="connection-status">
               <span class="connection-dot"></span>
@@ -1639,9 +1623,16 @@
             <label class="form-label" for="orch-new-branch">Branch (optional)</label>
             <input id="orch-new-branch" class="form-input" data-testid="orch-new-branch" type="text" placeholder="main">
           </div>
+          <div class="form-group">
+            <label class="form-label" for="orch-delete-mapping-select">Remove mapping</label>
+            <select id="orch-delete-mapping-select" class="form-input" data-testid="orch-delete-mapping-select">
+              <option value="">Select mapping</option>
+            </select>
+          </div>
         </div>
         <div class="modal-footer">
           <button id="orch-settings-cancel" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="orch-delete-mapping-btn" class="btn btn-secondary" data-testid="orch-delete-mapping-btn" type="button">Remove mapping</button>
           <button id="orch-save-mapping-btn" class="btn btn-primary" data-testid="orch-save-mapping-btn" type="button">Save mapping</button>
         </div>
       </div>
@@ -1651,13 +1642,12 @@
   <script>
     // State
     const PROJECT_FILTER_STORAGE_KEY = 'otv.projectFilter';
+    const REPROMPT_STORAGE_KEY = 'otv.lastRepromptInstructions';
     let currentSessions = [];
-    let allSessionsCache = []; // Cache all sessions for notifications
+    let allSessionsCache = [];
     let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
     let selectedProjectFilter = localStorage.getItem(PROJECT_FILTER_STORAGE_KEY) || 'all';
-    let selectedSessionIds = new Set();
     let activeDetailSessionId = null;
-    let bulkArchiveInFlight = false;
     let orchestratorConfigured = false;
     let orchestrationMappings = [];
     let orchestrationRules = [];
@@ -1665,6 +1655,7 @@
     let orchestrationIssues = [];
     let selectedIssueKeys = new Set();
     let orchActionInFlight = false;
+    let lastRepromptInstructions = localStorage.getItem(REPROMPT_STORAGE_KEY) || '';
 
     // DOM
     const noSession = document.getElementById('no-session');
@@ -1689,8 +1680,6 @@
     const orchSettingsClose = document.getElementById('orch-settings-close');
     const orchSettingsCancel = document.getElementById('orch-settings-cancel');
     const projectFilter = document.getElementById('project-filter');
-    const bulkArchiveBtn = document.getElementById('bulk-archive-btn');
-    const clearSelectionBtn = document.getElementById('clear-selection-btn');
     const orchestratorPanel = document.getElementById('orchestrator-panel');
     const orchMappingSelect = document.getElementById('orch-mapping-select');
     const orchIssueType = document.getElementById('orch-issue-type');
@@ -1705,6 +1694,8 @@
     const orchNewProjectKey = document.getElementById('orch-new-project-key');
     const orchNewDirectory = document.getElementById('orch-new-directory');
     const orchNewBranch = document.getElementById('orch-new-branch');
+    const orchDeleteMappingSelect = document.getElementById('orch-delete-mapping-select');
+    const orchDeleteMappingBtn = document.getElementById('orch-delete-mapping-btn');
     const orchSaveMappingBtn = document.getElementById('orch-save-mapping-btn');
 
     // Sidebar (sessions list / filters / live updates) removed.
@@ -1718,16 +1709,14 @@
           oldStatuses.set(s.id, s.status);
         }
 
-        const res = await fetch('/api/sessions?limit=all');
-        if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.status}`);
+        const res = await fetch('/api/tasks/board?limit=all');
+        if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.status}`);
         const data = await res.json();
         const sessions = Array.isArray(data) ? data : [];
         allSessionsCache = sessions;
 
         syncProjectFilterOptions();
         currentSessions = getFilteredAndSortedSessions(allSessionsCache);
-        pruneSelection();
-        updateBulkArchiveUi();
         if (activeDetailSessionId && !allSessionsCache.some(s => s?.id === activeDetailSessionId)) {
           closeDetailPanel();
         }
@@ -1744,12 +1733,10 @@
 
         renderAllSessions();
       } catch (error) {
-        console.error('Failed to fetch sessions:', error);
+        console.error('Failed to fetch tasks:', error);
         allSessionsCache = [];
         currentSessions = [];
-        selectedSessionIds.clear();
         syncProjectFilterOptions();
-        updateBulkArchiveUi();
         renderAllSessions();
       }
     }
@@ -1757,35 +1744,35 @@
     function renderAllSessions() {
       const overallTotal = allSessionsCache.length;
       const visibleTotal = currentSessions.length;
+      sessionView.classList.add('visible');
+
       if (overallTotal === 0) {
-        sessionView.classList.remove('visible');
         noSession.style.display = 'flex';
         pendingCount.textContent = '0';
         inProgressCount.textContent = '0';
         completedCount.textContent = '0';
         cancelledCount.textContent = '0';
-        pendingTasks.innerHTML = '<div class="column-empty">No pending sessions</div>';
-        inProgressTasks.innerHTML = '<div class="column-empty">No in-progress sessions</div>';
-        completedTasks.innerHTML = '<div class="column-empty">No completed sessions</div>';
-        cancelledTasks.innerHTML = '<div class="column-empty">No cancelled sessions</div>';
+        pendingTasks.innerHTML = '<div class="column-empty">No pending tasks</div>';
+        inProgressTasks.innerHTML = '<div class="column-empty">No in-progress tasks</div>';
+        completedTasks.innerHTML = '<div class="column-empty">No completed tasks</div>';
+        cancelledTasks.innerHTML = '<div class="column-empty">No cancelled tasks</div>';
         progressPercent.textContent = '0%';
         progressBar.style.width = '0%';
-        sessionTitle.textContent = 'All Sessions';
-        sessionMeta.textContent = '0 sessions';
+        sessionTitle.textContent = 'All Tasks';
+        sessionMeta.textContent = '0 tasks';
         return;
       }
 
       noSession.style.display = 'none';
-      sessionView.classList.add('visible');
 
       const completed = currentSessions.filter(s => s.status === 'completed').length;
       const percent = visibleTotal > 0 ? Math.round((completed / visibleTotal) * 100) : 0;
 
-      sessionTitle.textContent = 'All Sessions';
+      sessionTitle.textContent = 'All Tasks';
       if (selectedProjectFilter === 'all') {
-        sessionMeta.textContent = `${visibleTotal} sessions`;
+        sessionMeta.textContent = `${visibleTotal} tasks`;
       } else {
-        sessionMeta.textContent = `${visibleTotal} of ${overallTotal} sessions`;
+        sessionMeta.textContent = `${visibleTotal} of ${overallTotal} tasks`;
       }
       progressPercent.textContent = `${percent}%`;
       progressBar.style.width = `${percent}%`;
@@ -1865,33 +1852,10 @@
       return list;
     }
 
-    function pruneSelection() {
-      const visibleIds = new Set(currentSessions.map(s => s?.id).filter(Boolean));
-      selectedSessionIds = new Set(Array.from(selectedSessionIds).filter(id => visibleIds.has(id)));
-    }
-
-    function updateBulkArchiveUi() {
-      const selectedCount = selectedSessionIds.size;
-      bulkArchiveBtn.textContent = bulkArchiveInFlight
-        ? `Archiving ${selectedCount}...`
-        : `Archive selected (${selectedCount})`;
-      bulkArchiveBtn.disabled = bulkArchiveInFlight || selectedCount === 0;
-      clearSelectionBtn.disabled = bulkArchiveInFlight || selectedCount === 0;
-    }
-
-    function clearSelectedSessions() {
-      if (bulkArchiveInFlight || selectedSessionIds.size === 0) return;
-      selectedSessionIds.clear();
-      updateBulkArchiveUi();
-      renderAllSessions();
-    }
-
     function onProjectFilterChanged() {
       selectedProjectFilter = projectFilter.value || 'all';
       localStorage.setItem(PROJECT_FILTER_STORAGE_KEY, selectedProjectFilter);
       currentSessions = getFilteredAndSortedSessions(allSessionsCache);
-      pruneSelection();
-      updateBulkArchiveUi();
       if (activeDetailSessionId && !currentSessions.some(s => s?.id === activeDetailSessionId)) {
         closeDetailPanel();
       }
@@ -1986,11 +1950,13 @@
     function syncOrchestrationMappingOptions() {
       if (!orchestratorConfigured) {
         orchMappingSelect.innerHTML = '<option value="">Not configured</option>';
+        orchDeleteMappingSelect.innerHTML = '<option value="">Not configured</option>';
         return;
       }
 
       if (orchestrationMappings.length === 0) {
         orchMappingSelect.innerHTML = '<option value="">No mappings configured</option>';
+        orchDeleteMappingSelect.innerHTML = '<option value="">No mappings configured</option>';
         return;
       }
 
@@ -2000,9 +1966,11 @@
         return `<option value="${m.id}">${escapeHtml(label)}</option>`;
       });
       orchMappingSelect.innerHTML = options.join('');
+      orchDeleteMappingSelect.innerHTML = ['<option value="">Select mapping</option>', ...options].join('');
 
       if (selected && orchestrationMappings.some(m => m.id === selected)) {
         orchMappingSelect.value = String(selected);
+        orchDeleteMappingSelect.value = String(selected);
       }
     }
 
@@ -2341,6 +2309,45 @@
       }
     }
 
+    async function deleteSelectedMapping() {
+      if (!orchestratorConfigured) return;
+
+      const mappingId = parseInt(String(orchDeleteMappingSelect.value || ''), 10);
+      if (!Number.isFinite(mappingId) || mappingId <= 0) {
+        setOrchStatus('Select a mapping to remove.');
+        return;
+      }
+
+      const ok = window.confirm('Remove this SonarQube mapping? Stored instruction profiles for it will also be removed.');
+      if (!ok) return;
+
+      orchDeleteMappingBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/orch/mappings/${encodeURIComponent(String(mappingId))}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+
+        if (getSelectedMappingId() === mappingId) {
+          orchMappingSelect.value = '';
+          orchestrationIssues = [];
+          selectedIssueKeys.clear();
+          renderOrchestrationIssues();
+        }
+
+        await loadOrchestrationMappings();
+        closeOrchSettingsModal();
+        setOrchStatus('Mapping removed.');
+      } catch (error) {
+        setOrchStatus(`Failed to remove mapping: ${error?.message || 'Unknown error'}`);
+      } finally {
+        orchDeleteMappingBtn.disabled = false;
+      }
+    }
+
     function renderWithCardTransitions(renderFn) {
       const supportsTransitions = typeof document.startViewTransition === 'function';
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2360,28 +2367,16 @@
       const sidJs = escapeJsString(sid);
       const status = session?.status || 'pending';
       const statusClass = String(status).replace('_', '-');
-      const isQueueItem = Boolean(session?.isQueueItem);
-      const title = session?.name || sid || 'Untitled session';
+      const title = session?.name || sid || 'Untitled task';
       const projectPath = session?.project || null;
       const projectLabel = projectPath ? compactProjectLabel(projectPath) : null;
       const runtimeType = session?.runtimeStatus?.type ? String(session.runtimeStatus.type).toLowerCase() : null;
       const retryBadge = runtimeType === 'retry' ? '<span class="runtime-pill">Retry</span>' : '';
       const modified = session?.modifiedAt ? timeAgo(session.modifiedAt) : null;
-      const selected = !isQueueItem && selectedSessionIds.has(sid);
       const transitionName = getViewTransitionName(sid);
       const taskState = String(session?.taskState || session?.queueState || '').toLowerCase();
-      const queueBadge = isQueueItem
-        ? `<span class="queue-pill">${escapeHtml(taskState === 'dispatching' ? 'Dispatching' : taskState === 'leased' ? 'Leased' : taskState === 'running' ? 'Running' : 'Task')}</span>`
-        : '';
-      const selectControl = isQueueItem
-        ? ''
-        : `<input
-            type="checkbox"
-            class="card-select"
-            data-testid="session-select"
-            aria-label="Select session"
-            ${selected ? 'checked' : ''}
-            onclick="toggleSessionSelection(event, '${sidJs}')">`;
+      const instructionBadge = session?.taskInstructions ? '<span class="runtime-pill">Instructions</span>' : '';
+      const queueBadge = `<span class="queue-pill">${escapeHtml(taskState === 'dispatching' ? 'Dispatching' : taskState === 'leased' ? 'Leased' : taskState === 'running' ? 'Running' : taskState === 'awaiting_review' ? 'Review' : taskState === 'rejected' ? 'Rejected' : taskState === 'failed' ? 'Failed' : taskState === 'cancelled' ? 'Cancelled' : 'Task')}</span>`;
 
       return `
         <div
@@ -2389,14 +2384,13 @@
           data-testid="session-card"
           data-session-id="${escapeHtml(sid)}"
           data-status="${escapeHtml(status)}"
-          class="task-card ${statusClass} ${isQueueItem ? 'queue-item' : ''} ${isQueueItem ? '' : 'has-selection'} ${selected ? 'selected' : ''}"
+          class="task-card ${statusClass} queue-item"
           style="view-transition-name: ${escapeHtml(transitionName)};">
-          ${selectControl}
           <div class="task-title">${escapeHtml(title)}</div>
           ${(projectLabel || modified || retryBadge || queueBadge) ? `
             <div class="session-meta-row">
               <span class="session-project" title="${projectPath ? escapeHtml(projectPath) : ''}">${projectLabel ? escapeHtml(projectLabel) : ''}</span>
-              <span class="session-right">${queueBadge}${retryBadge}${modified ? `Updated ${escapeHtml(modified)}` : ''}</span>
+              <span class="session-right">${queueBadge}${instructionBadge}${retryBadge}${modified ? `Updated ${escapeHtml(modified)}` : ''}</span>
             </div>
           ` : ''}
         </div>
@@ -2409,82 +2403,6 @@
       return `session-${raw.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
     }
 
-    function toggleSessionSelection(e, sessionId) {
-      e?.stopPropagation?.();
-      const sid = String(sessionId || '').trim();
-      if (!sid) return;
-
-      const checked = Boolean(e?.target?.checked);
-      if (checked) selectedSessionIds.add(sid);
-      else selectedSessionIds.delete(sid);
-
-      const card = e?.target?.closest('.task-card');
-      if (card) card.classList.toggle('selected', checked);
-      updateBulkArchiveUi();
-    }
-
-    async function archiveSelectedSessions() {
-      if (bulkArchiveInFlight) return;
-
-      const selectedIds = Array.from(selectedSessionIds);
-      if (selectedIds.length === 0) return;
-
-      const sessionsById = new Map((allSessionsCache || []).map(s => [s?.id, s]));
-      const runningCount = selectedIds.reduce((acc, sid) => {
-        const runtimeType = sessionsById.get(sid)?.runtimeStatus?.type;
-        return acc + (isRuntimeRunning(runtimeType) ? 1 : 0);
-      }, 0);
-
-      const confirmMessage = runningCount > 0
-        ? `Archive ${selectedIds.length} selected sessions?\n\n${runningCount} currently running session(s) will also be archived.`
-        : `Archive ${selectedIds.length} selected sessions?`;
-
-      if (!confirm(confirmMessage)) return;
-
-      bulkArchiveInFlight = true;
-      updateBulkArchiveUi();
-
-      try {
-        const failed = [];
-        const granular = await Promise.all(selectedIds.map(async (sid) => {
-          try {
-            const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/archive`, { method: 'POST' });
-            if (!res.ok) {
-              const body = await res.json().catch(() => null);
-              throw new Error(body?.error || `Failed (HTTP ${res.status})`);
-            }
-            return { sid, ok: true };
-          } catch (error) {
-            return { sid, ok: false, error: error?.message || 'Failed to archive' };
-          }
-        }));
-
-        const succeeded = granular.filter(x => x.ok).length;
-        for (const x of granular) {
-          if (!x.ok) failed.push(`${x.sid}: ${x.error}`);
-        }
-
-        if (activeDetailSessionId && selectedIds.includes(activeDetailSessionId)) {
-          closeDetailPanel();
-        }
-
-        selectedSessionIds.clear();
-        await showAllSessions();
-
-        if (failed.length > 0) {
-          alert(`${succeeded} archived, ${failed.length} failed.\n\n${failed.join('\n')}`);
-        }
-      } finally {
-        bulkArchiveInFlight = false;
-        updateBulkArchiveUi();
-      }
-    }
-
-    function isRuntimeRunning(type) {
-      if (!type) return false;
-      const t = String(type).trim().toLowerCase();
-      return t === 'busy' || t === 'retry' || t === 'running';
-    }
 
     function renderKanban() {
       const pending = currentSessions.filter(s => s.status === 'pending');
@@ -2499,19 +2417,19 @@
 
       pendingTasks.innerHTML = pending.length > 0
         ? pending.map(renderSessionCard).join('')
-        : '<div class="column-empty">No pending sessions</div>';
+        : '<div class="column-empty">No pending tasks</div>';
 
       inProgressTasks.innerHTML = inProgress.length > 0
         ? inProgress.map(renderSessionCard).join('')
-        : '<div class="column-empty">No in-progress sessions</div>';
+        : '<div class="column-empty">No in-progress tasks</div>';
 
       completedTasks.innerHTML = completed.length > 0
         ? completed.map(renderSessionCard).join('')
-        : '<div class="column-empty">No completed sessions</div>';
+        : '<div class="column-empty">No completed tasks</div>';
 
       cancelledTasks.innerHTML = cancelled.length > 0
         ? cancelled.map(renderSessionCard).join('')
-        : '<div class="column-empty">No cancelled sessions</div>';
+        : '<div class="column-empty">No cancelled tasks</div>';
 
     }
 
@@ -2526,9 +2444,17 @@
         const queueId = Number.isFinite(session.taskId) ? session.taskId : Number.isFinite(session.queueItemId) ? session.queueItemId : null;
         const queueState = String(session.taskState || session.queueState || 'queued').toLowerCase();
         const canCancel = queueState === 'queued' || queueState === 'dispatching' || queueState === 'leased' || queueState === 'running';
+        const canApprove = queueState === 'awaiting_review';
+        const canReject = queueState === 'awaiting_review';
+        const canRequeue = queueState === 'rejected';
+        const canReprompt = queueState === 'awaiting_review' || queueState === 'rejected';
         const createdAt = session.createdAt ? formatDateTime(session.createdAt) : null;
         const updatedAt = session.modifiedAt ? formatDateTime(session.modifiedAt) : null;
         const taskIssueCount = Number.isFinite(session.taskIssueCount) ? session.taskIssueCount : null;
+        const taskInstructions = String(session.taskInstructions || '').trim();
+        const lastReviewedAt = session.lastReviewedAt ? formatDateTime(session.lastReviewedAt) : null;
+        const reviewAction = String(session.lastReviewAction || '').trim();
+        const reviewReason = String(session.lastReviewReason || '').trim();
         const pathAndLine = session.issuePath
           ? `${session.issuePath}${session.issueLine ? `:${session.issueLine}` : ''}`
           : null;
@@ -2595,12 +2521,83 @@
             </div>
           ` : ''}
 
+          ${taskInstructions ? `
+            <div class="detail-section">
+              <div class="detail-label">Instructions</div>
+              <div style="font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word;">${escapeHtml(taskInstructions)}</div>
+            </div>
+          ` : ''}
+
+          ${(reviewAction || reviewReason || lastReviewedAt) ? `
+            <div class="detail-section">
+              <div class="detail-label">Latest review</div>
+              ${reviewAction ? `<div style="font-size: 12px; color: var(--text-secondary);">Action: ${escapeHtml(reviewAction)}</div>` : ''}
+              ${reviewReason ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px; word-break: break-word;">Reason: ${escapeHtml(reviewReason)}</div>` : ''}
+              ${lastReviewedAt ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">At: ${escapeHtml(lastReviewedAt)}</div>` : ''}
+            </div>
+          ` : ''}
+
+          ${session.openCodeUrl ? `
+            <div class="detail-section">
+              <div class="detail-label">OpenCode</div>
+              <a
+                class="detail-link"
+                data-testid="detail-opencode-link"
+                href="${escapeHtml(sanitizeUrl(session.openCodeUrl) || '')}"
+                target="_blank"
+                rel="noopener noreferrer">
+                View in OpenCode Web
+              </a>
+            </div>
+          ` : ''}
+
+          ${session.openCodeUrl ? `
+            <div class="detail-section">
+              <div class="detail-label">Last agent message</div>
+              <div id="detail-last-agent-message" data-testid="detail-last-agent-message" class="detail-last-message">Loading...</div>
+              <div id="detail-last-agent-meta" class="detail-last-meta"></div>
+            </div>
+          ` : ''}
+
+          <div class="detail-section">
+            <div class="detail-label">Review history</div>
+            <div id="detail-review-history" data-testid="detail-review-history" class="detail-last-message">Loading...</div>
+          </div>
+
           ${canCancel && queueId ? `
             <div class="detail-section">
               <button class="orch-btn" type="button" onclick="cancelTask(${queueId})">Cancel task</button>
             </div>
           ` : ''}
+
+          ${canApprove && queueId ? `
+            <div class="detail-section">
+              <button class="orch-btn" type="button" onclick="approveTask(${queueId})">Complete task</button>
+            </div>
+          ` : ''}
+
+          ${canReject && queueId ? `
+            <div class="detail-section">
+              <button class="orch-btn" type="button" onclick="rejectTask(${queueId})">Reject task</button>
+            </div>
+          ` : ''}
+
+          ${canRequeue && queueId ? `
+            <div class="detail-section">
+              <button class="orch-btn" type="button" onclick="requeueTask(${queueId})">Requeue task</button>
+            </div>
+          ` : ''}
+
+          ${canReprompt && queueId ? `
+            <div class="detail-section">
+              <button class="orch-btn" data-testid="reprompt-task-btn" type="button" onclick="repromptTask(${queueId}, ${JSON.stringify(taskInstructions || '').replace(/</g, '\\u003c')})">Reprompt task</button>
+            </div>
+          ` : ''}
         `;
+        if (session.openCodeUrl) {
+          loadLastAssistantMessage(sessionId);
+        }
+        loadTaskReviewHistory(queueId);
         return;
       }
 
@@ -2692,6 +2689,135 @@
       }
     }
 
+    async function approveTask(taskId) {
+      const id = parseInt(String(taskId || ''), 10);
+      if (!Number.isFinite(id) || id <= 0) return;
+      try {
+        const res = await fetch(`/api/orch/tasks/${encodeURIComponent(String(id))}/approve`, {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+        closeDetailPanel();
+        await showAllSessions();
+      } catch (error) {
+        alert(`Failed to approve task: ${error?.message || 'Unknown error'}`);
+      }
+    }
+
+    async function rejectTask(taskId) {
+      const id = parseInt(String(taskId || ''), 10);
+      if (!Number.isFinite(id) || id <= 0) return;
+      const reason = window.prompt('Why is this task rejected?', 'Needs prompt changes or manual follow-up') || '';
+      try {
+        const res = await fetch(`/api/orch/tasks/${encodeURIComponent(String(id))}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ reason })
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+        closeDetailPanel();
+        await showAllSessions();
+      } catch (error) {
+        alert(`Failed to reject task: ${error?.message || 'Unknown error'}`);
+      }
+    }
+
+    async function requeueTask(taskId) {
+      const id = parseInt(String(taskId || ''), 10);
+      if (!Number.isFinite(id) || id <= 0) return;
+      const reason = window.prompt('Reason for requeueing this task?', 'Retry with adjusted instructions') || '';
+      try {
+        const res = await fetch(`/api/orch/tasks/${encodeURIComponent(String(id))}/requeue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ reason })
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+        closeDetailPanel();
+        await showAllSessions();
+      } catch (error) {
+        alert(`Failed to requeue task: ${error?.message || 'Unknown error'}`);
+      }
+    }
+
+    async function repromptTask(taskId, currentInstructions) {
+      const id = parseInt(String(taskId || ''), 10);
+      if (!Number.isFinite(id) || id <= 0) return;
+
+      const seed = String(currentInstructions || lastRepromptInstructions || '').trim();
+      const instructions = window.prompt('Updated instructions for this retry?', seed) || '';
+      const trimmedInstructions = instructions.trim();
+      if (!trimmedInstructions) {
+        alert('Reprompt requires updated instructions.');
+        return;
+      }
+
+      const reason = window.prompt('Why are we reprompting this task?', 'Retry with narrower instructions') || '';
+
+      try {
+        const res = await fetch(`/api/orch/tasks/${encodeURIComponent(String(id))}/reprompt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ instructions: trimmedInstructions, reason })
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Failed (HTTP ${res.status})`);
+        }
+        lastRepromptInstructions = trimmedInstructions;
+        localStorage.setItem(REPROMPT_STORAGE_KEY, lastRepromptInstructions);
+        closeDetailPanel();
+        await showAllSessions();
+      } catch (error) {
+        alert(`Failed to reprompt task: ${error?.message || 'Unknown error'}`);
+      }
+    }
+
+    async function loadTaskReviewHistory(taskId) {
+      const id = parseInt(String(taskId || ''), 10);
+      const historyEl = document.getElementById('detail-review-history');
+      if (!historyEl) return;
+
+      if (!Number.isFinite(id) || id <= 0) {
+        historyEl.textContent = 'No review history.';
+        return;
+      }
+
+      historyEl.textContent = 'Loading...';
+
+      try {
+        const res = await fetch(`/api/orch/tasks/${encodeURIComponent(String(id))}/review-history`);
+        if (!res.ok) throw new Error(`Failed (HTTP ${res.status})`);
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+
+        if (items.length === 0) {
+          historyEl.textContent = 'No review history yet.';
+          return;
+        }
+
+        historyEl.innerHTML = items
+          .map(item => {
+            const action = escapeHtml(String(item?.action || 'unknown'));
+            const reason = String(item?.reason || '').trim();
+            const createdAt = item?.createdAt ? formatDateTime(item.createdAt) : null;
+            return `<div style="margin-bottom: 10px;"><div style="font-size: 12px; color: var(--text-secondary);">${action}${createdAt ? ` - ${escapeHtml(createdAt)}` : ''}</div>${reason ? `<div style="font-size: 12px; color: var(--text-muted); margin-top: 4px; word-break: break-word;">${escapeHtml(reason)}</div>` : ''}</div>`;
+          })
+          .join('');
+      } catch (error) {
+        historyEl.textContent = 'Unable to load review history.';
+      }
+    }
+
     function closeDetailPanel() {
       activeDetailSessionId = null;
       detailPanel.classList.remove('visible');
@@ -2709,7 +2835,7 @@
       metaEl.textContent = '';
 
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/last-assistant-message`);
+        const res = await fetch(`/api/tasks/board/${encodeURIComponent(sid)}/last-assistant-message`);
         if (!res.ok) {
           throw new Error(`Failed (HTTP ${res.status})`);
         }
@@ -2771,6 +2897,9 @@
     });
     orchSaveMappingBtn.addEventListener('click', () => {
       saveOrchestrationMapping().catch(() => {});
+    });
+    orchDeleteMappingBtn.addEventListener('click', () => {
+      deleteSelectedMapping().catch(() => {});
     });
 
     document.addEventListener('keydown', (e) => {

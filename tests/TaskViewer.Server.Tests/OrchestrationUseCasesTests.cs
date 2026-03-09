@@ -30,6 +30,18 @@ public sealed class OrchestrationUseCasesTests
     }
 
     [Fact]
+    public async Task DeleteMappingAsync_ParsesMappingId()
+    {
+        var gateway = new FakeGateway();
+        var sut = new OrchestrationUseCases(gateway);
+
+        var deleted = await sut.DeleteMappingAsync("42");
+
+        Assert.True(deleted);
+        Assert.Equal(42, gateway.LastDeletedMappingId);
+    }
+
+    [Fact]
     public async Task EnqueueAllMatchingAsync_UsesFallbackRuleField()
     {
         var gateway = new FakeGateway();
@@ -94,12 +106,77 @@ public sealed class OrchestrationUseCasesTests
         Assert.NotNull(result.Worker);
     }
 
+    [Fact]
+    public async Task GetTaskReviewHistoryAsync_ParsesTaskId()
+    {
+        var gateway = new FakeGateway
+        {
+            ReviewHistoryResult =
+            [
+                new TaskReviewHistoryDto
+                {
+                    Action = "rejected",
+                    Reason = "Needs manual follow-up",
+                    CreatedAt = DateTimeOffset.Parse("2026-03-08T10:04:00Z")
+                }
+            ]
+        };
+
+        var sut = new OrchestrationUseCases(gateway);
+        var result = await sut.GetTaskReviewHistoryAsync("42");
+
+        Assert.Single(result);
+        Assert.Equal(42, gateway.LastReviewTaskId);
+        Assert.Equal("rejected", result[0].Action);
+    }
+
+    [Fact]
+    public async Task ReviewActions_ForwardReasonAndTaskId()
+    {
+        var gateway = new FakeGateway();
+        var sut = new OrchestrationUseCases(gateway);
+
+        await sut.ApproveTaskAsync("12");
+        await sut.RejectTaskAsync("13", "Needs prompt changes");
+        await sut.RequeueTaskAsync("14", "Retry later");
+
+        Assert.Equal(12, gateway.LastApprovedTaskId);
+        Assert.Equal(13, gateway.LastRejectedTaskId);
+        Assert.Equal("Needs prompt changes", gateway.LastRejectedReason);
+        Assert.Equal(14, gateway.LastRequeuedTaskId);
+        Assert.Equal("Retry later", gateway.LastRequeuedReason);
+    }
+
+    [Fact]
+    public async Task RepromptTaskAsync_ForwardsInstructionsAndReason()
+    {
+        var gateway = new FakeGateway();
+        var sut = new OrchestrationUseCases(gateway);
+
+        await sut.RepromptTaskAsync("22", "Retry with a narrower patch", "Previous response overreached");
+
+        Assert.Equal(22, gateway.LastRepromptedTaskId);
+        Assert.Equal("Retry with a narrower patch", gateway.LastRepromptedInstructions);
+        Assert.Equal("Previous response overreached", gateway.LastRepromptedReason);
+    }
+
     sealed class FakeGateway : IOrchestrationGateway
     {
         public string? LastRuleKeys { get; private set; }
 
         public InstructionProfileRecord? InstructionProfileResult { get; set; }
         public List<QueueItemRecord> QueueItemsResult { get; set; } = [];
+        public IReadOnlyList<TaskReviewHistoryDto> ReviewHistoryResult { get; set; } = [];
+        public int? LastDeletedMappingId { get; private set; }
+        public int? LastReviewTaskId { get; private set; }
+        public int? LastApprovedTaskId { get; private set; }
+        public int? LastRejectedTaskId { get; private set; }
+        public string? LastRejectedReason { get; private set; }
+        public int? LastRequeuedTaskId { get; private set; }
+        public string? LastRequeuedReason { get; private set; }
+        public int? LastRepromptedTaskId { get; private set; }
+        public string? LastRepromptedInstructions { get; private set; }
+        public string? LastRepromptedReason { get; private set; }
 
         public QueueStatsDto QueueStatsResult { get; set; } = new()
         {
@@ -133,6 +210,12 @@ public sealed class OrchestrationUseCasesTests
         };
 
         public Task<List<MappingRecord>> ListMappings() => Task.FromResult(new List<MappingRecord>());
+
+        public Task<bool> DeleteMapping(int? mappingId)
+        {
+            LastDeletedMappingId = mappingId;
+            return Task.FromResult(mappingId.GetValueOrDefault() > 0);
+        }
 
         public Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => Task.FromResult(
             new MappingRecord
@@ -235,6 +318,39 @@ public sealed class OrchestrationUseCasesTests
         public Task<bool> CancelQueueItem(int? queueId) => Task.FromResult(true);
         public Task<int> RetryFailed() => Task.FromResult(0);
         public Task<int> ClearQueued() => Task.FromResult(0);
+        public Task<bool> ApproveTask(int? taskId)
+        {
+            LastApprovedTaskId = taskId;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RejectTask(int? taskId, string? reason)
+        {
+            LastRejectedTaskId = taskId;
+            LastRejectedReason = reason;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RequeueTask(int? taskId, string? reason)
+        {
+            LastRequeuedTaskId = taskId;
+            LastRequeuedReason = reason;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RepromptTask(int? taskId, string instructions, string? reason)
+        {
+            LastRepromptedTaskId = taskId;
+            LastRepromptedInstructions = instructions;
+            LastRepromptedReason = reason;
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int? taskId)
+        {
+            LastReviewTaskId = taskId;
+            return Task.FromResult(ReviewHistoryResult);
+        }
         public Task ResetState() => Task.CompletedTask;
     }
 }

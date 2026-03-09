@@ -1,0 +1,83 @@
+using TaskViewer.SonarQube;
+
+namespace TaskViewer.Server.Infrastructure.Orchestration;
+
+internal sealed class FakeSonarQubeService : ISonarQubeService
+{
+    static readonly Dictionary<string, string> Rules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["javascript:S1126"] = "Assignments should not be redundant",
+        ["javascript:S3776"] = "Cognitive Complexity of functions should not be too high",
+        ["javascript:S5144"] = "Constructing URLs from user input is security-sensitive",
+        ["javascript:S1481"] = "Unused local variables should be removed"
+    };
+
+    static readonly IReadOnlyList<SonarIssueTransport> Issues =
+    [
+        new("sq-gamma-001", null, "CODE_SMELL", null, "MAJOR", "javascript:S1126", "Remove this redundant assignment.", "gamma-key:src/worker.js", null, "42", "OPEN"),
+        new("sq-gamma-002", null, "CODE_SMELL", null, "CRITICAL", "javascript:S3776", "Refactor this function to reduce Cognitive Complexity.", "gamma-key:src/server.js", null, "17", "CONFIRMED"),
+        new("sq-gamma-003", null, "VULNERABILITY", null, "BLOCKER", "javascript:S5144", "Review this URL construction for SSRF risk.", "gamma-key:src/auth.js", null, "10", "OPEN"),
+        new("sq-gamma-004", null, "CODE_SMELL", null, "MAJOR", "javascript:S3776", "Reduce the Cognitive Complexity of this function.", "gamma-key:src/jobs.js", null, "91", "OPEN"),
+        new("sq-alpha-001", null, "CODE_SMELL", null, "MINOR", "javascript:S1481", "Remove this unused local variable.", "alpha-key:src/index.js", null, "7", "OPEN")
+    ];
+
+    public Task<SonarIssuesSearchResponse> SearchIssuesAsync(Dictionary<string, string?> query, int fallbackPageIndex, int fallbackPageSize)
+    {
+        var componentKeys = NormalizeSet(Get(query, "componentKeys"));
+        var types = NormalizeSet(Get(query, "types"));
+        var severities = NormalizeSet(Get(query, "severities"));
+        var statuses = NormalizeSet(Get(query, "statuses"));
+        var rules = NormalizeSet(Get(query, "rules"), preserveCase: true);
+        var pageIndex = ParseBoundedInt(Get(query, "p"), fallbackPageIndex, 1);
+        var pageSize = ParseBoundedInt(Get(query, "ps"), fallbackPageSize, 1);
+
+        var filtered = Issues
+            .Where(issue => componentKeys.Count == 0 || componentKeys.Contains(ParseProjectKey(issue.Component)))
+            .Where(issue => types.Count == 0 || types.Contains((issue.Type ?? string.Empty).Trim().ToUpperInvariant()))
+            .Where(issue => severities.Count == 0 || severities.Contains((issue.Severity ?? string.Empty).Trim().ToUpperInvariant()))
+            .Where(issue => statuses.Count == 0 || statuses.Contains((issue.Status ?? string.Empty).Trim().ToUpperInvariant()))
+            .Where(issue => rules.Count == 0 || rules.Contains((issue.Rule ?? string.Empty).Trim()))
+            .ToList();
+
+        var total = filtered.Count;
+        var paged = filtered
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return Task.FromResult(new SonarIssuesSearchResponse(pageIndex, pageSize, total, paged));
+    }
+
+    public Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey)
+    {
+        Rules.TryGetValue(ruleKey.Trim(), out var name);
+        return Task.FromResult(new SonarRuleDetailsResponse(name));
+    }
+
+    static string? Get(Dictionary<string, string?> query, string key)
+        => query.TryGetValue(key, out var value) ? value : null;
+
+    static HashSet<string> NormalizeSet(string? raw, bool preserveCase = false)
+    {
+        var comparer = preserveCase ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        var values = new HashSet<string>(comparer);
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return values;
+
+        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            values.Add(preserveCase ? part : part.ToUpperInvariant());
+
+        return values;
+    }
+
+    static int ParseBoundedInt(string? raw, int fallback, int min)
+        => int.TryParse(raw, out var parsed) && parsed >= min ? parsed : fallback;
+
+    static string ParseProjectKey(string? component)
+    {
+        var raw = component ?? string.Empty;
+        var separator = raw.IndexOf(':');
+        return separator >= 0 ? raw[..separator] : raw;
+    }
+}

@@ -114,10 +114,10 @@ static class OrchestrationResponseMapper
             Done = stats.Done,
             Failed = stats.Failed,
             Cancelled = stats.Cancelled,
-            Leased = stats.Dispatching,
-            Running = stats.SessionCreated,
-            AwaitingReview = stats.SessionCreated,
-            Approved = stats.Done
+            Leased = stats.Leased,
+            Running = stats.Running,
+            AwaitingReview = stats.AwaitingReview,
+            Rejected = stats.Rejected
         };
     }
 

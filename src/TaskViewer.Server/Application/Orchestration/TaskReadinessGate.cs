@@ -64,3 +64,9 @@ sealed class TaskReadinessGate : ITaskReadinessGate
                || Directory.Exists(Path.Combine(gitDir, "rebase-apply"));
     }
 }
+
+sealed class AlwaysReadyGate : ITaskReadinessGate
+{
+    public Task<TaskReadinessDecision> EvaluateAsync(QueueItemRecord task, IReadOnlyList<NormalizedIssue> issues)
+        => Task.FromResult(new TaskReadinessDecision(true, null));
+}

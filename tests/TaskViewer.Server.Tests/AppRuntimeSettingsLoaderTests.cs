@@ -53,6 +53,7 @@ public sealed class AppRuntimeSettingsLoaderTests
         Assert.Equal("env-password", settings.OpenCode.Password);
         Assert.Equal("http://env-sonar:9001", settings.SonarQube.Url);
         Assert.Equal("env-token", settings.SonarQube.Token);
+        Assert.Equal(SonarQubeMode.Real, settings.SonarQube.Mode);
         Assert.Equal(Path.GetFullPath(Path.Combine(contentRoot, "data/env.sqlite")), settings.Orchestration.DbPath);
         Assert.Equal(9, settings.Orchestration.MaxActive);
         Assert.Equal(1200, settings.Orchestration.PollMs);
@@ -92,6 +93,7 @@ public sealed class AppRuntimeSettingsLoaderTests
         Assert.Equal(string.Empty, settings.OpenCode.Password);
         Assert.Equal("http://config-sonar:9000", settings.SonarQube.Url);
         Assert.Equal(string.Empty, settings.SonarQube.Token);
+        Assert.Equal(SonarQubeMode.Real, settings.SonarQube.Mode);
         Assert.Equal(Path.GetFullPath(Path.Combine(contentRoot, "data/config.sqlite")), settings.Orchestration.DbPath);
         Assert.Equal(2, settings.Orchestration.MaxActive);
         Assert.Equal(3000, settings.Orchestration.PollMs);
@@ -148,7 +150,29 @@ public sealed class AppRuntimeSettingsLoaderTests
         Assert.Equal("hierarchical-env-host", settings.Viewer.Host);
         Assert.Equal("http://hierarchical-env-opencode:4096", settings.OpenCode.Url);
         Assert.Equal("env-token", settings.SonarQube.Token);
+        Assert.Equal(SonarQubeMode.Real, settings.SonarQube.Mode);
         Assert.Equal(Path.GetFullPath(Path.Combine(contentRoot, "data/hierarchical-env.sqlite")), settings.Orchestration.DbPath);
+    }
+
+    [Fact]
+    public void Load_AllowsFakeSonarModeWithoutRealUrl()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["OpenCode:Url"] = "http://config-opencode:4444",
+                    ["SONARQUBE_MODE"] = "fake"
+                })
+            .Build();
+
+        var settings = AppRuntimeSettingsLoader.Load(
+            configuration,
+            new TestHostEnvironment(Path.GetTempPath()));
+
+        Assert.Equal(SonarQubeMode.Fake, settings.SonarQube.Mode);
+        Assert.Equal(string.Empty, settings.SonarQube.Url);
+        Assert.Equal(string.Empty, settings.SonarQube.Token);
     }
 
     sealed class TestHostEnvironment(string contentRootPath) : IHostEnvironment

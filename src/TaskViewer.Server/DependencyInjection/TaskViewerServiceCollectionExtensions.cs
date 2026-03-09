@@ -30,6 +30,16 @@ internal static class TaskViewerServiceCollectionExtensions
                 var runtimeSettings = sp.GetRequiredService<AppRuntimeSettings>();
                 return new SonarQubeClientOptions(runtimeSettings.SonarQube.Url, runtimeSettings.SonarQube.Token);
             });
+        services.AddSingleton<FakeSonarQubeService>();
+        services.AddSingleton<ISonarQubeService>(
+            sp =>
+            {
+                var runtimeSettings = sp.GetRequiredService<AppRuntimeSettings>();
+
+                return string.Equals(runtimeSettings.SonarQube.Mode, SonarQubeMode.Fake, StringComparison.Ordinal)
+                    ? sp.GetRequiredService<FakeSonarQubeService>()
+                    : sp.GetRequiredService<SonarQubeApiClient>();
+            });
         services.AddSingleton<SseHub>();
         services.AddSingleton<SessionTodoViewService>();
         services.AddSingleton<OpenCodeViewerState>();
@@ -72,6 +82,7 @@ internal static class TaskViewerServiceCollectionExtensions
                         MaxWorkingGlobal = runtimeSettings.Orchestration.MaxWorkingGlobal,
                         WorkingResumeBelow = runtimeSettings.Orchestration.WorkingResumeBelow,
                         OpenCodeStatusReader = sp.GetRequiredService<IOpenCodeStatusReader>(),
+                        TaskReadinessGate = new AlwaysReadyGate(),
                         OpenCodeDispatchClient = sp.GetRequiredService<IOpenCodeDispatchClient>(),
                         NormalizeDirectory = DirectoryPath.Normalize,
                         BuildOpenCodeSessionUrl = sp.GetRequiredService<OpenCodeSessionSearchService>().BuildOpenCodeSessionUrl,

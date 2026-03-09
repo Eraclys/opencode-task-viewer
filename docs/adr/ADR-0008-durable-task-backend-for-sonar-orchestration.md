@@ -47,7 +47,7 @@ This ADR does not yet require:
 
 - a task-native frontend rewrite
 - replacing SSE with SignalR
-- a full review UI for approve/reject/split/merge actions
+- a full review UI for approve/reject/requeue actions
 - changing away from SQLite for phase 1
 
 ## Durable Task Model
@@ -111,6 +111,30 @@ Phase 1 intentionally keeps old contracts alive where possible.
 
 This is deliberate technical debt to make the backend migration safe and incremental.
 
+## Review-State Phase
+
+After the backend-only durable task slice is stable, the next phase introduces task-native review actions while still preserving compatibility projections.
+
+Phase goals:
+
+- add explicit task review transitions such as `awaiting_review`, `done`, `rejected`, and `queued` requeue
+- keep compatibility queue/session reads functioning for the current UI
+- add backend/API support first before attempting a full task-native review UI
+- persist lightweight review history so the dashboard can explain why a task was rejected, requeued, or completed
+
+Initial review actions:
+
+- approve task
+- reject task
+- requeue task
+
+Phase constraints:
+
+- preserve existing `/api/orch/queue*` routes for now
+- avoid a full kanban rewrite in the same slice
+- keep current compatibility stats available while also exposing task-native metadata
+- prefer append-only review history records over repeatedly overloading `last_error` for review intent
+
 ## Plan
 
 1. Introduce durable grouped task persistence over SQLite/Dapper.
@@ -118,9 +142,13 @@ This is deliberate technical debt to make the backend migration safe and increme
 3. Add scheduler service for lease acquisition, fairness, and lock-aware selection.
 4. Add runner flow for one leased task and OpenCode execution.
 5. Add reconciler flow for stale lease recovery and runtime reconciliation.
-6. Preserve compatibility-shaped queue/session contracts for the current UI and tests.
+6. Preserve compatibility-shaped queue/session contracts only as a temporary migration aid.
 7. Add or update tests to cover grouped-task creation, leasing, retries, and compatibility projections.
-8. In a later ADR slice, migrate the UI/API to task-native states and review workflow.
+8. Add backend/API review-state transitions with compatibility preserved.
+9. Persist review history and surface latest review metadata in task reads.
+10. Add mapping deletion through the orchestration management surface.
+11. Make the main kanban task-native and stop showing non-orchestrated OpenCode sessions in the main board.
+12. In a later ADR slice, clean up route naming and remaining session-centric compatibility artifacts.
 
 ## Consequences
 
@@ -138,6 +166,7 @@ This is deliberate technical debt to make the backend migration safe and increme
 - old queue terminology remains visible for a while even though internals are task-based
 - some tests must explicitly override readiness instead of using fake paths directly
 - grouped-task semantics change counts and state timing compared with issue-level queue rows
+- route naming may temporarily lag behind semantics while `/api/sessions` becomes task-backed
 
 ## Progress Snapshot (2026-03-08)
 
@@ -147,11 +176,19 @@ This is deliberate technical debt to make the backend migration safe and increme
   - scheduler / runner / reconciler separation in orchestration services
   - lease and task metadata added to queue records for backend-only phase
 - Current phase focus:
-  - restore full compatibility for existing tests and API/UI contracts while durable internals remain in place
-  - keep readiness strict in production but overridable in tests
+  - expose task-native review actions in the current UI
+  - persist lightweight review history and latest review metadata for task detail rendering
+  - keep review actions lightweight: reject, requeue, reprompt, and complete/approve
+  - remove Sonar project mappings from the orchestration settings flow
+  - make the main kanban task-native and remove raw non-orchestrated OpenCode sessions from it
+  - move the main board toward task-native route naming instead of session-centric route naming
+  - move task detail fetches toward task-native routes where the UI is already task-backed
+  - make approval mean task completion plus OpenCode session cleanup, with the task disappearing from the main board
+- Next phase focus:
+  - keep route compatibility where practical while board semantics are task-native
 - Next:
-  - finish compatibility pass and get full solution tests green
-  - document the later task-native UI/API cutover as a subsequent slice rather than forcing it into phase 1
+  - add richer review-history presentation in the UI if lightweight metadata is no longer sufficient
+  - clean up leftover session-centric route naming after the task-native board settles
 
 ## Acceptance Criteria
 
@@ -160,4 +197,6 @@ This is deliberate technical debt to make the backend migration safe and increme
 - runner processes one leased task at a time
 - reconciler can recover stale leased/running work
 - compatibility APIs remain functional for the current UI and tests
+- approve / reject / requeue review actions are supported on durable tasks
+- latest review metadata is queryable for task detail rendering
 - full build and test verification passes for the backend-only slice

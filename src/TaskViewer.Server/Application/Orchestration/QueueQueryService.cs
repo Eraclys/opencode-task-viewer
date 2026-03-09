@@ -32,6 +32,10 @@ sealed class QueueQueryService : IQueueQueryService
         {
             "queued",
             "dispatching",
+            "leased",
+            "running",
+            "awaiting_review",
+            "rejected",
             "session_created",
             "done",
             "failed",

@@ -43,6 +43,7 @@ OPENCODE_URL=http://localhost:4096 dotnet run --project src/TaskViewer.Server/Ta
 
 # SonarQube orchestration (optional)
 SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+SONARQUBE_MODE=fake dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
 ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
@@ -55,7 +56,9 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... dotnet run --project src/TaskVi
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/sessions` | GET | List sessions with derived kanban status + runtime status |
+| `/api/tasks/board` | GET | List task board items for the main kanban |
+| `/api/tasks/board/:taskId/last-assistant-message` | GET | Fetch latest assistant message text for a queue-backed task |
+| `/api/sessions` | GET | Legacy compatibility route for task board items |
 | `/api/health` | GET | Lightweight health check for the viewer host |
 | `/api/sessions/:sessionId/last-assistant-message` | GET | Fetch latest assistant message text for a session |
 | `/api/orch/config` | GET | SonarQube orchestration runtime config/status |
@@ -73,9 +76,10 @@ OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... dotnet run --project src/TaskVi
 
 ## Notes
 
-- The UI currently ignores OpenCode todos and focuses on sessions only.
-- Session archive actions are supported (single and bulk archive).
-- When SonarQube orchestration is configured, queued jobs appear as synthetic Pending cards until an OpenCode session is created.
+- The main UI is task-native and is driven by orchestration queue/task state.
+- `/api/sessions` is retained temporarily as a compatibility route while task-native route cleanup continues.
+- When SonarQube orchestration is configured, main board cards represent durable tasks rather than raw OpenCode sessions.
+- For local UI exploration without SonarQube, run with `SONARQUBE_MODE=fake` to use a built-in fake dataset (`gamma-key`, `alpha-key`) without starting the mock Sonar server.
 - Dispatcher backpressure: dequeue pauses when active OpenCode working sessions reach `ORCH_MAX_WORKING_GLOBAL`, and resumes when below `ORCH_WORKING_RESUME_BELOW`.
 
 ## Tests

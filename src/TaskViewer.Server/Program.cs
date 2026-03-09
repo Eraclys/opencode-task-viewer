@@ -13,6 +13,7 @@ var runtimeSettings = builder.AddTaskViewerRuntimeSettings();
 var viewerHost = runtimeSettings.Viewer.Host;
 var viewerPort = runtimeSettings.Viewer.Port;
 var opencodeUrl = runtimeSettings.OpenCode.Url;
+var sonarMode = runtimeSettings.SonarQube.Mode;
 
 builder.WebHost.UseUrls($"http://{viewerHost}:{viewerPort}");
 
@@ -33,6 +34,11 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine($"OpenCode Task Viewer running at {actual}");
     Console.WriteLine($"VIEWER_URL={actual}");
     Console.WriteLine($"Using OpenCode server: {opencodeUrl}");
+    Console.WriteLine($"Using SonarQube mode: {sonarMode}");
+    if (string.Equals(sonarMode, "fake", StringComparison.Ordinal))
+        Console.WriteLine("Using built-in fake SonarQube dataset for local UI exploration");
+    else if (!string.IsNullOrWhiteSpace(runtimeSettings.SonarQube.Url))
+        Console.WriteLine($"Using SonarQube server: {runtimeSettings.SonarQube.Url}");
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>

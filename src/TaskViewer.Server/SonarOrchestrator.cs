@@ -79,7 +79,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         _orchestratorRuntime = _options.OrchestratorRuntime ?? new OrchestratorRuntime();
         _workloadBackpressureStateService = _options.WorkloadBackpressureStateService ?? new WorkloadBackpressureStateService(workingSessionsReadService, workloadBackpressurePolicy);
         _queueEnqueueService = _options.QueueEnqueueService ?? new QueueEnqueueService(_queueRepository, _options.MaxAttempts, NowUtc);
-        _queueCommandsService = _options.QueueCommandsService ?? new QueueCommandsService(_queueRepository, NowUtc);
+        _queueCommandsService = _options.QueueCommandsService ?? new QueueCommandsService(_queueRepository, ArchiveSessionAsync, NowUtc);
         _queueQueryService = _options.QueueQueryService ?? new QueueQueryService(_queueRepository);
 
         QueueDispatchService = queueDispatchService;
@@ -193,12 +193,75 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         UNIQUE(task_id, issue_key)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_queue_state_next_attempt ON queue_items(state, next_attempt_at, created_at);
-      CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue_items(state, priority_score DESC, created_at ASC);
-      CREATE INDEX IF NOT EXISTS idx_queue_project_state ON queue_items(sonar_project_key, branch, state);
-      CREATE INDEX IF NOT EXISTS idx_queue_lock_state ON queue_items(lock_key, state);
+      CREATE TABLE IF NOT EXISTS task_review_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_task_issue_task ON task_issue_links(task_id);
+      CREATE INDEX IF NOT EXISTS idx_task_review_history_task ON task_review_history(task_id, created_at DESC);
     ");
+
+        EnsureColumnExists(conn, "queue_items", "task_key", "TEXT");
+        EnsureColumnExists(conn, "queue_items", "task_unit", "TEXT NOT NULL DEFAULT 'project+file+rule'");
+        EnsureColumnExists(conn, "queue_items", "issue_count", "INTEGER NOT NULL DEFAULT 1");
+        EnsureColumnExists(conn, "queue_items", "lock_key", "TEXT");
+        EnsureColumnExists(conn, "queue_items", "instructions_snapshot", "TEXT");
+        EnsureColumnExists(conn, "queue_items", "priority_score", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumnExists(conn, "queue_items", "lease_owner", "TEXT");
+        EnsureColumnExists(conn, "queue_items", "lease_heartbeat_at", "TEXT");
+        EnsureColumnExists(conn, "queue_items", "lease_expires_at", "TEXT");
+
+        BackfillQueueTaskColumns(conn);
+
+        conn.Execute(@"
+CREATE INDEX IF NOT EXISTS idx_queue_state_next_attempt ON queue_items(state, next_attempt_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue_items(state, priority_score DESC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_queue_project_state ON queue_items(sonar_project_key, branch, state);
+CREATE INDEX IF NOT EXISTS idx_queue_lock_state ON queue_items(lock_key, state);
+");
+    }
+
+    static void EnsureColumnExists(SqliteConnection conn, string tableName, string columnName, string columnType)
+    {
+        var columns = conn.Query<TableInfoRow>($"PRAGMA table_info({tableName})").ToList();
+
+        if (columns.Any(column => string.Equals(column.Name, columnName, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        conn.Execute($"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}");
+    }
+
+    static void BackfillQueueTaskColumns(SqliteConnection conn)
+    {
+        conn.Execute(@"
+UPDATE queue_items
+SET task_key = COALESCE(NULLIF(task_key, ''), 'legacy-task-' || id)
+WHERE task_key IS NULL OR task_key = '';
+
+UPDATE queue_items
+SET task_unit = COALESCE(NULLIF(task_unit, ''), 'project+file+rule')
+WHERE task_unit IS NULL OR task_unit = '';
+
+UPDATE queue_items
+SET lock_key = COALESCE(NULLIF(lock_key, ''), sonar_project_key || '|' || COALESCE(branch, '') || '|' || COALESCE(relative_path, absolute_path, issue_key, id) || '|' || COALESCE(rule, ''))
+WHERE lock_key IS NULL OR lock_key = '';
+
+UPDATE queue_items
+SET issue_count = COALESCE(issue_count, 1)
+WHERE issue_count IS NULL;
+
+UPDATE queue_items
+SET priority_score = COALESCE(priority_score, 0)
+WHERE priority_score IS NULL;
+
+UPDATE queue_items
+SET instructions_snapshot = COALESCE(instructions_snapshot, '')
+WHERE instructions_snapshot IS NULL;
+        ");
     }
 
     public bool IsConfigured()
@@ -221,6 +284,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
     public async Task<List<MappingRecord>> ListMappings() => await _orchestrationMappingService.ListMappingsAsync();
     public async Task<MappingRecord?> GetMappingById(int? mappingId) => await _orchestrationMappingService.GetMappingByIdAsync(mappingId);
+    public async Task<bool> DeleteMapping(int? mappingId) => await _orchestrationMappingService.DeleteMappingAsync(mappingId);
     public async Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => await _orchestrationMappingService.UpsertMappingAsync(request);
     public async Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType);
     public async Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request) => await _orchestrationMappingService.UpsertInstructionProfileAsync(request);
@@ -324,6 +388,27 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     public async Task<bool> CancelQueueItem(int? queueId) => await _queueCommandsService.CancelQueueItemAsync(queueId);
     public async Task<int> RetryFailed() => await _queueCommandsService.RetryFailedAsync();
     public async Task<int> ClearQueued() => await _queueCommandsService.ClearQueuedAsync();
+    public async Task<bool> ApproveTask(int? taskId) => await _queueCommandsService.ApproveTaskAsync(taskId);
+    public async Task<bool> RejectTask(int? taskId, string? reason) => await _queueCommandsService.RejectTaskAsync(taskId, reason);
+    public async Task<bool> RequeueTask(int? taskId, string? reason) => await _queueCommandsService.RequeueTaskAsync(taskId, reason);
+    public async Task<bool> RepromptTask(int? taskId, string instructions, string? reason) => await _queueCommandsService.RepromptTaskAsync(taskId, instructions, reason);
+    public async Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int? taskId)
+    {
+        var id = taskId.GetValueOrDefault(-1);
+
+        if (id <= 0)
+            throw new InvalidOperationException("Invalid task id");
+
+        var history = await _queueRepository.GetTaskReviewHistory(id);
+        return history
+            .Select(entry => new TaskReviewHistoryDto
+            {
+                Action = entry.Action,
+                Reason = entry.Reason,
+                CreatedAt = entry.CreatedAt
+            })
+            .ToList();
+    }
 
     public async Task ResetState()
     {
@@ -333,6 +418,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         {
             using var conn = OpenConnection();
             await conn.ExecuteAsync("DELETE FROM task_issue_links");
+            await conn.ExecuteAsync("DELETE FROM task_review_history");
             await conn.ExecuteAsync("DELETE FROM queue_items");
             await conn.ExecuteAsync("DELETE FROM instruction_profiles");
             await conn.ExecuteAsync("DELETE FROM project_mappings");
@@ -353,6 +439,14 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
             _options.WorkingResumeBelow,
             _options.PollMs,
             _options.OnChange);
+    }
+
+    async Task<DateTimeOffset?> ArchiveSessionAsync(string sessionId, string? directory)
+    {
+        if (_options.OpenCodeApiClient is null)
+            return null;
+
+        return await _options.OpenCodeApiClient.ArchiveSessionAsync(sessionId, directory);
     }
 
     async Task ProcessNextTaskAsync()
@@ -423,4 +517,9 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     }
 
     public void Start(CancellationToken stoppingToken) => _orchestratorRuntime.Start(_options.PollMs, stoppingToken, Tick);
+
+    sealed class TableInfoRow
+    {
+        public string Name { get; init; } = string.Empty;
+    }
 }

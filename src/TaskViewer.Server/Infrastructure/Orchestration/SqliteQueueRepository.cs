@@ -26,10 +26,10 @@ sealed class SqliteQueueRepository : IQueueRepository
             var sql = states.Count > 0
                 ? SelectTaskSql + @"
 WHERE state IN @States
-ORDER BY priority_score DESC, datetime(created_at) ASC, id ASC
+ORDER BY queue_items.priority_score DESC, datetime(queue_items.created_at) ASC, queue_items.id ASC
 LIMIT @Limit"
                 : SelectTaskSql + @"
-ORDER BY priority_score DESC, datetime(created_at) ASC, id ASC
+ORDER BY queue_items.priority_score DESC, datetime(queue_items.created_at) ASC, queue_items.id ASC
 LIMIT @Limit";
 
             var parameters = new DynamicParameters();
@@ -186,7 +186,7 @@ INSERT INTO task_issue_links (
             ["leased"] = 0,
             ["running"] = 0,
             ["awaiting_review"] = 0,
-            ["approved"] = 0,
+            ["rejected"] = 0,
             ["done"] = 0,
             ["failed"] = 0,
             ["cancelled"] = 0
@@ -216,10 +216,14 @@ GROUP BY state");
         return new QueueStats(
             stats["queued"],
             stats["leased"] + stats["running"],
-            stats["awaiting_review"] + stats["approved"],
+            stats["awaiting_review"],
             stats["done"],
             stats["failed"],
-            stats["cancelled"]);
+            stats["cancelled"],
+            stats["leased"],
+            stats["running"],
+            stats["awaiting_review"],
+            stats["rejected"]);
     }
 
     public async Task<bool> CancelQueueItem(int id, DateTimeOffset now)
@@ -408,6 +412,30 @@ ORDER BY issue_key ASC", new { TaskId = id });
         }
     }
 
+    public async Task<IReadOnlyList<TaskReviewHistoryRecord>> GetTaskReviewHistory(int id)
+    {
+        await _dbLock.WaitAsync();
+
+        try
+        {
+            using var conn = _openConnection();
+            var rows = await conn.QueryAsync<TaskReviewHistoryRow>(@"
+SELECT
+    action AS Action,
+    reason AS Reason,
+    created_at AS CreatedAt
+FROM task_review_history
+WHERE task_id = @TaskId
+ORDER BY datetime(created_at) DESC, id DESC", new { TaskId = id });
+
+            return rows.Select(MapReviewHistory).ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     public async Task<bool> MarkTaskRunning(
         int id,
         string sessionId,
@@ -474,6 +502,101 @@ WHERE id = @Id AND state = 'running'", new { Id = id, Timestamp = timestamp.ToSt
 
             if (changed > 0)
                 _onChange();
+
+            return changed > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<bool> ApproveTask(int id, DateTimeOffset timestamp)
+    {
+        return await UpdateTerminalReviewState(id, "done", null, timestamp, ["awaiting_review"]);
+    }
+
+    public async Task<bool> RejectTask(int id, string? reason, DateTimeOffset timestamp)
+    {
+        return await UpdateTerminalReviewState(id, "rejected", reason, timestamp, ["awaiting_review"]);
+    }
+
+    public async Task<bool> RequeueTask(int id, string? reason, DateTimeOffset timestamp)
+    {
+        await _dbLock.WaitAsync();
+
+        try
+        {
+            using var conn = _openConnection();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'queued',
+    next_attempt_at = @Timestamp,
+    updated_at = @Timestamp,
+    last_error = @Reason,
+    completed_at = NULL,
+    cancelled_at = NULL,
+    lease_owner = NULL,
+    lease_heartbeat_at = NULL,
+    lease_expires_at = NULL,
+    session_id = NULL,
+    open_code_url = NULL
+WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
+            {
+                Id = id,
+                Timestamp = timestamp.ToString("O"),
+                Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason)
+            });
+
+            if (changed > 0)
+            {
+                await AppendReviewHistoryAsync(conn, id, "requeue", reason, timestamp);
+                _onChange();
+            }
+
+            return changed > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<bool> RepromptTask(int id, string instructions, string? reason, DateTimeOffset timestamp)
+    {
+        await _dbLock.WaitAsync();
+
+        try
+        {
+            using var conn = _openConnection();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = 'queued',
+    instructions_snapshot = @Instructions,
+    next_attempt_at = @Timestamp,
+    updated_at = @Timestamp,
+    last_error = @Reason,
+    completed_at = NULL,
+    cancelled_at = NULL,
+    session_id = NULL,
+    open_code_url = NULL,
+    lease_owner = NULL,
+    lease_heartbeat_at = NULL,
+    lease_expires_at = NULL,
+    attempt_count = 0
+WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
+            {
+                Id = id,
+                Instructions = instructions,
+                Timestamp = timestamp.ToString("O"),
+                Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason)
+            });
+
+            if (changed > 0)
+            {
+                await AppendReviewHistoryAsync(conn, id, "reprompt", reason, timestamp);
+                _onChange();
+            }
 
             return changed > 0;
         }
@@ -582,6 +705,9 @@ WHERE id = @Id AND state IN ('leased', 'running')", new
             SessionId = row.SessionId,
             OpenCodeUrl = row.OpenCodeUrl,
             LastError = row.LastError,
+            LastReviewAction = row.LastReviewAction,
+            LastReviewReason = row.LastReviewReason,
+            LastReviewedAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.LastReviewedAt),
             CreatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.CreatedAt),
             UpdatedAt = SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.UpdatedAt),
             DispatchedAt = SqliteOrchestrationDataMapper.ParseOptionalDateTime(row.DispatchedAt),
@@ -592,46 +718,58 @@ WHERE id = @Id AND state IN ('leased', 'running')", new
 
     const string SelectTaskSql = @"
 SELECT
-    id AS Id,
-    task_key AS TaskKey,
-    task_unit AS TaskUnit,
-    issue_key AS IssueKey,
-    issue_count AS IssueCount,
-    mapping_id AS MappingId,
-    sonar_project_key AS SonarProjectKey,
-    directory AS Directory,
-    branch AS Branch,
-    issue_type AS IssueType,
-    severity AS Severity,
-    rule AS Rule,
-    message AS Message,
-    component AS Component,
-    relative_path AS RelativePath,
-    absolute_path AS AbsolutePath,
-    lock_key AS LockKey,
-    line AS Line,
-    issue_status AS IssueStatus,
-    instructions_snapshot AS Instructions,
-    state AS State,
-    priority_score AS PriorityScore,
-    attempt_count AS AttemptCount,
-    max_attempts AS MaxAttempts,
-    lease_owner AS LeaseOwner,
-    lease_heartbeat_at AS LeaseHeartbeatAt,
-    lease_expires_at AS LeaseExpiresAt,
-    next_attempt_at AS NextAttemptAt,
-    session_id AS SessionId,
-    open_code_url AS OpenCodeUrl,
-    last_error AS LastError,
-    created_at AS CreatedAt,
-    updated_at AS UpdatedAt,
-    dispatched_at AS DispatchedAt,
-    completed_at AS CompletedAt,
-    cancelled_at AS CancelledAt
-FROM queue_items";
+    queue_items.id AS Id,
+    queue_items.task_key AS TaskKey,
+    queue_items.task_unit AS TaskUnit,
+    queue_items.issue_key AS IssueKey,
+    queue_items.issue_count AS IssueCount,
+    queue_items.mapping_id AS MappingId,
+    queue_items.sonar_project_key AS SonarProjectKey,
+    queue_items.directory AS Directory,
+    queue_items.branch AS Branch,
+    queue_items.issue_type AS IssueType,
+    queue_items.severity AS Severity,
+    queue_items.rule AS Rule,
+    queue_items.message AS Message,
+    queue_items.component AS Component,
+    queue_items.relative_path AS RelativePath,
+    queue_items.absolute_path AS AbsolutePath,
+    queue_items.lock_key AS LockKey,
+    queue_items.line AS Line,
+    queue_items.issue_status AS IssueStatus,
+    queue_items.instructions_snapshot AS Instructions,
+    queue_items.state AS State,
+    queue_items.priority_score AS PriorityScore,
+    queue_items.attempt_count AS AttemptCount,
+    queue_items.max_attempts AS MaxAttempts,
+    queue_items.lease_owner AS LeaseOwner,
+    queue_items.lease_heartbeat_at AS LeaseHeartbeatAt,
+    queue_items.lease_expires_at AS LeaseExpiresAt,
+    queue_items.next_attempt_at AS NextAttemptAt,
+    queue_items.session_id AS SessionId,
+    queue_items.open_code_url AS OpenCodeUrl,
+    queue_items.last_error AS LastError,
+    queue_items.created_at AS CreatedAt,
+    queue_items.updated_at AS UpdatedAt,
+    queue_items.dispatched_at AS DispatchedAt,
+    queue_items.completed_at AS CompletedAt,
+    queue_items.cancelled_at AS CancelledAt,
+    review.action AS LastReviewAction,
+    review.reason AS LastReviewReason,
+    review.created_at AS LastReviewedAt
+FROM queue_items
+LEFT JOIN (
+    SELECT history.task_id, history.action, history.reason, history.created_at, history.id
+    FROM task_review_history history
+    INNER JOIN (
+        SELECT task_id, MAX(id) AS max_id
+        FROM task_review_history
+        GROUP BY task_id
+    ) latest ON latest.task_id = history.task_id AND latest.max_id = history.id
+) review ON review.task_id = queue_items.id";
 
     const string SelectTaskByIdSql = SelectTaskSql + @"
-WHERE id = @Id";
+WHERE queue_items.id = @Id";
 
     sealed class QueueItemRow
     {
@@ -666,6 +804,9 @@ WHERE id = @Id";
         public string? SessionId { get; init; }
         public string? OpenCodeUrl { get; init; }
         public string? LastError { get; init; }
+        public string? LastReviewAction { get; init; }
+        public string? LastReviewReason { get; init; }
+        public string? LastReviewedAt { get; init; }
         public string CreatedAt { get; init; } = string.Empty;
         public string UpdatedAt { get; init; } = string.Empty;
         public string? DispatchedAt { get; init; }
@@ -703,5 +844,72 @@ WHERE id = @Id";
         public string? AbsolutePath { get; init; }
         public int? Line { get; init; }
         public string? IssueStatus { get; init; }
+    }
+
+    sealed class TaskReviewHistoryRow
+    {
+        public string Action { get; init; } = string.Empty;
+        public string? Reason { get; init; }
+        public string CreatedAt { get; init; } = string.Empty;
+    }
+
+    async Task<bool> UpdateTerminalReviewState(int id, string state, string? reason, DateTimeOffset timestamp, IReadOnlyList<string> allowedStates)
+    {
+        await _dbLock.WaitAsync();
+
+        try
+        {
+            using var conn = _openConnection();
+            var changed = await conn.ExecuteAsync(@"
+UPDATE queue_items
+SET state = @State,
+    updated_at = @Timestamp,
+    completed_at = COALESCE(completed_at, @Timestamp),
+    last_error = CASE WHEN @Reason IS NULL OR @Reason = '' THEN last_error ELSE @Reason END,
+    lease_owner = NULL,
+    lease_heartbeat_at = NULL,
+    lease_expires_at = NULL
+WHERE id = @Id AND state IN @AllowedStates", new
+            {
+                Id = id,
+                State = state,
+                Timestamp = timestamp.ToString("O"),
+                Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
+                AllowedStates = allowedStates.ToArray()
+            });
+
+            if (changed > 0)
+            {
+                await AppendReviewHistoryAsync(conn, id, state, reason, timestamp);
+                _onChange();
+            }
+
+            return changed > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    async Task AppendReviewHistoryAsync(SqliteConnection conn, int taskId, string action, string? reason, DateTimeOffset timestamp)
+    {
+        await conn.ExecuteAsync(@"
+INSERT INTO task_review_history (task_id, action, reason, created_at)
+VALUES (@TaskId, @Action, @Reason, @CreatedAt)", new
+        {
+            TaskId = taskId,
+            Action = action,
+            Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
+            CreatedAt = timestamp.ToString("O")
+        });
+    }
+
+    static TaskReviewHistoryRecord MapReviewHistory(TaskReviewHistoryRow row)
+    {
+        return new TaskReviewHistoryRecord(
+            row.Action,
+            row.Reason,
+            SqliteOrchestrationDataMapper.ParseRequiredDateTime(row.CreatedAt));
     }
 }

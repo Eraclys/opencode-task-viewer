@@ -76,6 +76,31 @@ public sealed class ApiContractSerializationTests
     }
 
     [Fact]
+    public async Task TaskLastAssistantMessage_UsesStableFieldNames()
+    {
+        var useCases = new FakeSessionsUseCases(
+            taskLastAssistantMessageResult: new LastAssistantMessageResult(
+                true,
+                "sess-1",
+                "done",
+                DateTimeOffset.Parse("2026-01-01T00:00:00+00:00")));
+
+        using var host = await CreateHost(
+            endpoints => endpoints.MapSessionsEndpoints(useCases));
+
+        using var client = host.GetTestClient();
+        using var response = await client.GetAsync("/api/tasks/board/queue-12/last-assistant-message");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("sess-1", json.RootElement.GetProperty("sessionId").GetString());
+        Assert.Equal("done", json.RootElement.GetProperty("message").GetString());
+        Assert.True(json.RootElement.TryGetProperty("createdAt", out _));
+    }
+
+    [Fact]
     public async Task QueueRetry_UsesStableRetriedFieldName()
     {
         var useCases = new FakeOrchestrationUseCases(retried: 3);
@@ -162,6 +187,135 @@ public sealed class ApiContractSerializationTests
 
         using var json = JsonDocument.Parse(body);
         Assert.Equal(7, json.RootElement.GetProperty("cleared").GetInt32());
+    }
+
+    [Fact]
+    public async Task TaskApproveEndpoint_UsesStableOkFieldName()
+    {
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+
+        using var client = host.GetTestClient();
+        using var response = await client.PostAsync("/api/orch/tasks/12/approve", null);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task TaskRejectEndpoint_UsesStableOkFieldName()
+    {
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+
+        using var client = host.GetTestClient();
+        using var response = await client.PostAsync("/api/orch/tasks/12/reject", JsonContent("{\"reason\":\"bad patch\"}"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task TaskReviewEndpoints_AcceptReasonOnlyPayloads()
+    {
+        var useCases = new FakeOrchestrationUseCases();
+
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+
+        using var client = host.GetTestClient();
+
+        using var approveResponse = await client.PostAsync("/api/orch/tasks/12/approve", JsonContent("{}"));
+        approveResponse.EnsureSuccessStatusCode();
+
+        using var rejectResponse = await client.PostAsync("/api/orch/tasks/12/reject", JsonContent("{\"reason\":\"bad patch\"}"));
+        rejectResponse.EnsureSuccessStatusCode();
+
+        using var requeueResponse = await client.PostAsync("/api/orch/tasks/12/requeue", JsonContent("{\"reason\":\"retry\"}"));
+        requeueResponse.EnsureSuccessStatusCode();
+
+        Assert.Equal("bad patch", useCases.LastRejectedReason);
+        Assert.Equal("retry", useCases.LastRequeuedReason);
+    }
+
+    [Fact]
+    public async Task TaskRepromptEndpoint_AcceptsInstructionsAndReason()
+    {
+        var useCases = new FakeOrchestrationUseCases();
+
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+
+        using var client = host.GetTestClient();
+        using var response = await client.PostAsync(
+            "/api/orch/tasks/12/reprompt",
+            JsonContent("{\"instructions\":\"Retry with a smaller patch\",\"reason\":\"First pass touched too much\"}"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("Retry with a smaller patch", useCases.LastRepromptedInstructions);
+        Assert.Equal("First pass touched too much", useCases.LastRepromptedReason);
+    }
+
+    [Fact]
+    public async Task DeleteMappingEndpoint_UsesStableOkFieldName()
+    {
+        var useCases = new FakeOrchestrationUseCases();
+
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+
+        using var client = host.GetTestClient();
+        using var response = await client.DeleteAsync("/api/orch/mappings/12");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("12", useCases.LastDeletedMappingId);
+    }
+
+    [Fact]
+    public async Task TaskRequeueEndpoint_UsesStableOkFieldName()
+    {
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+
+        using var client = host.GetTestClient();
+        using var response = await client.PostAsync("/api/orch/tasks/12/requeue", JsonContent("{\"reason\":\"retry with edited prompt\"}"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task TaskReviewHistoryEndpoint_UsesStableItemsFieldName()
+    {
+        using var host = await CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+
+        using var client = host.GetTestClient();
+        using var response = await client.GetAsync("/api/orch/tasks/12/review-history");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.TryGetProperty("items", out var items));
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
     }
 
     [Fact]
@@ -598,10 +752,12 @@ public sealed class ApiContractSerializationTests
     sealed class FakeSessionsUseCases(
         SessionTasksResult? sessionTasksResult = null,
         LastAssistantMessageResult? lastAssistantMessageResult = null,
+        LastAssistantMessageResult? taskLastAssistantMessageResult = null,
         ArchiveSessionResult? archiveSessionResult = null) : ISessionsUseCases
     {
         readonly SessionTasksResult _sessionTasksResult = sessionTasksResult ?? new SessionTasksResult(false, []);
         readonly LastAssistantMessageResult _lastAssistantMessageResult = lastAssistantMessageResult ?? new LastAssistantMessageResult(false, "missing-session", null, null);
+        readonly LastAssistantMessageResult _taskLastAssistantMessageResult = taskLastAssistantMessageResult ?? new LastAssistantMessageResult(false, "missing-task", null, null);
         readonly ArchiveSessionResult _archiveSessionResult = archiveSessionResult ?? new ArchiveSessionResult(false, null);
 
         public Task<IReadOnlyList<SessionSummaryDto>> ListSessionsAsync(string? limitParam)
@@ -609,6 +765,9 @@ public sealed class ApiContractSerializationTests
 
         public Task<SessionTasksResult> GetSessionTasksAsync(string sessionId)
             => Task.FromResult(_sessionTasksResult);
+
+        public Task<LastAssistantMessageResult> GetTaskLastAssistantMessageAsync(string taskId)
+            => Task.FromResult(_taskLastAssistantMessageResult);
 
         public Task<LastAssistantMessageResult> GetLastAssistantMessageAsync(string sessionId)
             => Task.FromResult(_lastAssistantMessageResult);
@@ -632,6 +791,12 @@ public sealed class ApiContractSerializationTests
         EnqueueAllResultDto? enqueueAllResult = null,
         QueueOverviewDto? queueResult = null) : IOrchestrationUseCases
     {
+        public string? LastRejectedReason { get; private set; }
+        public string? LastRequeuedReason { get; private set; }
+        public string? LastRepromptedInstructions { get; private set; }
+        public string? LastRepromptedReason { get; private set; }
+        public string? LastDeletedMappingId { get; private set; }
+
         public OrchestrationConfigDto GetPublicConfig() => new()
         {
             Configured = true,
@@ -646,6 +811,11 @@ public sealed class ApiContractSerializationTests
             => listMappingsException is null
                 ? Task.FromResult(new List<MappingRecord>())
                 : Task.FromException<List<MappingRecord>>(listMappingsException);
+        public Task<bool> DeleteMappingAsync(string mappingId)
+        {
+            LastDeletedMappingId = mappingId;
+            return Task.FromResult(true);
+        }
         public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => throw new NotSupportedException();
         public Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType) => throw new NotSupportedException();
         public Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request) => throw new NotSupportedException();
@@ -712,6 +882,39 @@ public sealed class ApiContractSerializationTests
         public Task<bool> CancelQueueItemAsync(string queueId) => Task.FromResult(cancelQueueItemResult);
         public Task<int> RetryFailedAsync() => Task.FromResult(retried);
         public Task<int> ClearQueuedAsync() => Task.FromResult(cleared);
+        public Task<bool> ApproveTaskAsync(string taskId)
+        {
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RejectTaskAsync(string taskId, string? reason)
+        {
+            LastRejectedReason = reason;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RequeueTaskAsync(string taskId, string? reason)
+        {
+            LastRequeuedReason = reason;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason)
+        {
+            LastRepromptedInstructions = instructions;
+            LastRepromptedReason = reason;
+            return Task.FromResult(true);
+        }
+        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId)
+            => Task.FromResult<IReadOnlyList<TaskReviewHistoryDto>>(
+            [
+                new TaskReviewHistoryDto
+                {
+                    Action = "rejected",
+                    Reason = "Needs prompt tuning",
+                    CreatedAt = DateTimeOffset.Parse("2026-03-08T10:04:00Z")
+                }
+            ]);
         public Task ResetStateAsync() => Task.CompletedTask;
     }
 }

@@ -1,3 +1,5 @@
+using TaskViewer.Server.Application.Orchestration;
+
 namespace TaskViewer.Server.Application.Sessions;
 
 public sealed class SessionSummaryDto
@@ -21,6 +23,7 @@ public sealed class SessionSummaryDto
     public string? TaskState { get; init; }
     public string? TaskKey { get; init; }
     public string? TaskUnit { get; init; }
+    public string? TaskInstructions { get; init; }
     public int? TaskIssueCount { get; init; }
     public string? IssueKey { get; init; }
     public string? IssueType { get; init; }
@@ -29,4 +32,8 @@ public sealed class SessionSummaryDto
     public string? IssuePath { get; init; }
     public int? IssueLine { get; init; }
     public string? LastError { get; init; }
+    public string? LastReviewAction { get; init; }
+    public string? LastReviewReason { get; init; }
+    public DateTimeOffset? LastReviewedAt { get; init; }
+    public IReadOnlyList<TaskReviewHistoryDto>? ReviewHistory { get; init; }
 }

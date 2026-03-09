@@ -4,6 +4,7 @@ public interface IMappingRepository
 {
     Task<List<MappingRecord>> ListMappings();
     Task<MappingRecord?> GetMappingById(int id);
+    Task<bool> DeleteMapping(int id);
 
     Task<MappingRecord> UpsertMapping(
         int? id,

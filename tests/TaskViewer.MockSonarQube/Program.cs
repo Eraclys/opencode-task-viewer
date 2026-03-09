@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TaskViewer.MockSonarQube;
 
 var host = Environment.GetEnvironmentVariable("HOST") ?? "127.0.0.1";
@@ -36,6 +37,38 @@ app.MapPost(
             new
             {
                 ok = true
+            });
+    });
+
+app.MapPost(
+    "/__test__/setIssues",
+    async (HttpRequest request) =>
+    {
+        var body = await JsonNode.ParseAsync(request.Body);
+        var issuesNode = body?["issues"] as JsonArray;
+
+        if (issuesNode is null)
+            return Results.Json(
+                new
+                {
+                    error = "Expected { issues: [] }"
+                },
+                statusCode: 400);
+
+        var issues = issuesNode
+            .Select(ParseIssue)
+            .Where(issue => issue is not null)
+            .Cast<SonarIssueRecord>()
+            .ToList();
+
+        lock (gate)
+            state.Issues = issues;
+
+        return Results.Json(
+            new
+            {
+                ok = true,
+                count = issues.Count
             });
     });
 
@@ -194,6 +227,28 @@ static int ParseBoundedInt(
         return max;
 
     return parsed;
+}
+
+static SonarIssueRecord? ParseIssue(JsonNode? node)
+{
+    var key = node?["key"]?.GetValue<string>()?.Trim();
+    var component = node?["component"]?.GetValue<string>()?.Trim();
+    var rule = node?["rule"]?.GetValue<string>()?.Trim();
+
+    if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(component) || string.IsNullOrWhiteSpace(rule))
+        return null;
+
+    return new SonarIssueRecord
+    {
+        Key = key,
+        Component = component,
+        Line = int.TryParse(node?["line"]?.ToString(), out var line) ? line : 1,
+        Rule = rule,
+        Severity = node?["severity"]?.GetValue<string>()?.Trim() ?? "MAJOR",
+        Type = node?["type"]?.GetValue<string>()?.Trim() ?? "CODE_SMELL",
+        Status = node?["status"]?.GetValue<string>()?.Trim() ?? "OPEN",
+        Message = node?["message"]?.GetValue<string>()?.Trim() ?? $"Issue {key}"
+    };
 }
 
 namespace TaskViewer.MockSonarQube

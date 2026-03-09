@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Infrastructure.Orchestration;
@@ -47,6 +48,34 @@ public static class OrchestrationEndpoints
                     var message = error.Message;
                     var status = message.Contains("Missing", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
                     Console.Error.WriteLine($"Error saving orchestrator mapping: {error}");
+
+                    return Results.Json(
+                        new ErrorResponseDto
+                        {
+                            Error = message
+                        },
+                        statusCode: status);
+                }
+            });
+
+        app.MapDelete(
+            "/api/orch/mappings/{mappingId}",
+            async (string mappingId) =>
+            {
+                try
+                {
+                    var ok = await useCases.DeleteMappingAsync(mappingId);
+
+                    if (!ok)
+                        return Results.Json(new ErrorResponseDto { Error = "Mapping not found" }, statusCode: 404);
+
+                    return Results.Json(new HealthResponseDto { Ok = true });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error deleting orchestrator mapping: {error}");
 
                     return Results.Json(
                         new ErrorResponseDto
@@ -376,6 +405,126 @@ public static class OrchestrationEndpoints
             });
 
         app.MapPost(
+            "/api/orch/tasks/{taskId}/approve",
+            async (string taskId, HttpContext ctx) =>
+            {
+                try
+                {
+                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var ok = await useCases.ApproveTaskAsync(taskId);
+
+                    if (!ok)
+                        return Results.Json(new ErrorResponseDto { Error = "Task not found or not awaiting review" }, statusCode: 404);
+
+                    return Results.Json(new HealthResponseDto { Ok = true });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid task id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error approving task: {error}");
+                    return Results.Json(new ErrorResponseDto { Error = message }, statusCode: status);
+                }
+            });
+
+        app.MapPost(
+            "/api/orch/tasks/{taskId}/reject",
+            async (string taskId, HttpContext ctx) =>
+            {
+                try
+                {
+                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
+                    var ok = await useCases.RejectTaskAsync(taskId, review.Reason);
+
+                    if (!ok)
+                        return Results.Json(new ErrorResponseDto { Error = "Task not found or not awaiting review" }, statusCode: 404);
+
+                    return Results.Json(new HealthResponseDto { Ok = true });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid task id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error rejecting task: {error}");
+                    return Results.Json(new ErrorResponseDto { Error = message }, statusCode: status);
+                }
+            });
+
+        app.MapPost(
+            "/api/orch/tasks/{taskId}/requeue",
+            async (string taskId, HttpContext ctx) =>
+            {
+                try
+                {
+                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
+                    var ok = await useCases.RequeueTaskAsync(taskId, review.Reason);
+
+                    if (!ok)
+                        return Results.Json(new ErrorResponseDto { Error = "Task not found or not requeueable" }, statusCode: 404);
+
+                    return Results.Json(new HealthResponseDto { Ok = true });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid task id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error requeueing task: {error}");
+                    return Results.Json(new ErrorResponseDto { Error = message }, statusCode: status);
+                }
+            });
+
+        app.MapPost(
+            "/api/orch/tasks/{taskId}/reprompt",
+            async (string taskId, HttpContext ctx) =>
+            {
+                try
+                {
+                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
+                    var ok = await useCases.RepromptTaskAsync(taskId, review.Instructions ?? string.Empty, review.Reason);
+
+                    if (!ok)
+                        return Results.Json(new ErrorResponseDto { Error = "Task not found or not repromptable" }, statusCode: 404);
+
+                    return Results.Json(new HealthResponseDto { Ok = true });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid task id", StringComparison.OrdinalIgnoreCase) || message.Contains("Missing instructions", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error reprompting task: {error}");
+                    return Results.Json(new ErrorResponseDto { Error = message }, statusCode: status);
+                }
+            });
+
+        app.MapGet(
+            "/api/orch/tasks/{taskId}/review-history",
+            async (string taskId, HttpContext ctx) =>
+            {
+                SetNoStore(ctx.Response);
+
+                try
+                {
+                    var items = await useCases.GetTaskReviewHistoryAsync(taskId);
+
+                    return Results.Json(
+                        new TaskReviewHistoryListDto
+                        {
+                            Items = items
+                        });
+                }
+                catch (Exception error)
+                {
+                    var message = error.Message;
+                    var status = message.Contains("Invalid task id", StringComparison.OrdinalIgnoreCase) ? 400 : 502;
+                    Console.Error.WriteLine($"Error loading task review history: {error}");
+                    return Results.Json(new ErrorResponseDto { Error = message }, statusCode: status);
+                }
+            });
+
+        app.MapPost(
             "/api/test/orch/reset",
             async () =>
             {
@@ -410,5 +559,19 @@ public static class OrchestrationEndpoints
         response.Headers.CacheControl = "no-store, no-cache, must-revalidate, private";
         response.Headers.Pragma = "no-cache";
         response.Headers.Expires = "0";
+    }
+
+    static async Task<JsonNode?> ParseOptionalJsonBodyAsync(HttpRequest request)
+    {
+        request.EnableBuffering();
+
+        using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        request.Body.Position = 0;
+
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+
+        return JsonNode.Parse(body);
     }
 }

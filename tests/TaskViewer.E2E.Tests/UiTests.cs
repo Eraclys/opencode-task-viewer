@@ -1,3 +1,5 @@
+using System.IO;
+using System.Text.Json.Nodes;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -14,158 +16,17 @@ public sealed class UiTests
     }
 
     [Fact]
-    public async Task LoadsWithNoSidebarAndShowsAllSessionsBoard()
+    public async Task LoadsTaskNativeBoardAndShowsEmptyStateWhenNoQueueItemsExist()
     {
-        await _fixture.ResetOpenCodeAsync();
+        await _fixture.ResetMocksAsync();
 
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
 
             await Expect(page.Locator("aside.sidebar")).ToHaveCountAsync(0);
-            await Expect(page.GetByTestId("connection-status")).ToContainTextAsync("Connected");
-            await Expect(page.GetByText("All Sessions")).ToBeVisibleAsync();
-
-            await Expect(page.GetByTestId("count-pending")).ToHaveTextAsync("1");
-            await Expect(page.GetByTestId("count-in-progress")).ToHaveTextAsync("2");
-            await Expect(page.GetByTestId("count-completed")).ToHaveTextAsync("1");
-            await Expect(page.GetByTestId("count-cancelled")).ToHaveTextAsync("0");
-
-            await Expect(page.GetByTestId("column-in-progress")).ToContainTextAsync("Busy Session");
-            await Expect(page.GetByTestId("column-in-progress")).ToContainTextAsync("Retrying Session");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("Recently Updated");
-            await Expect(page.GetByTestId("column-completed")).ToContainTextAsync("Stale Session");
-
-            var titles = await page
-                .GetByTestId("column-in-progress")
-                .Locator("[data-testid=\"session-card\"] .task-title")
-                .AllTextContentsAsync();
-
-            Assert.Equal(
-                [
-                    "Retrying Session",
-                    "Busy Session"
-                ],
-                titles.Select(x => x.Trim()).ToArray());
-
-            await Expect(page.GetByText("Archived Session (Should Not Show)")).ToHaveCountAsync(0);
-        });
-    }
-
-    [Fact]
-    public async Task IncludesSessionsDiscoveredViaProjectSandboxes()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await _fixture.PostJsonAsync(
-            $"{_fixture.MockUrl}/__test__/addSandboxSession",
-            new
-            {
-                projectWorktree = @"C:\Work\Alpha",
-                sandboxPath = @"C:\Work\Alpha\SandboxOnly",
-                directory = @"C:\Work\Alpha\SandboxOnly",
-                sessionId = "sess-sandbox-only",
-                title = "Sandbox Only Session"
-            });
-
-        await WithPage(async page =>
-        {
-            await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("Sandbox Only Session");
-
-            await page.GetByTestId("project-filter").SelectOptionAsync("C:/Work/Alpha");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("Sandbox Only Session");
-        });
-    }
-
-    [Fact]
-    public async Task ProjectFilterAppliesAndPersistsViaLocalStorage()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            await page.GotoAsync(_fixture.ViewerUrl);
-
-            await page.GetByTestId("project-filter").SelectOptionAsync("C:/Work/Gamma");
-            await Expect(page.GetByTestId("count-pending")).ToHaveTextAsync("1");
-            await Expect(page.GetByTestId("count-in-progress")).ToHaveTextAsync("0");
-            await Expect(page.GetByTestId("count-completed")).ToHaveTextAsync("1");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("Recently Updated");
-            await Expect(page.GetByTestId("column-completed")).ToContainTextAsync("Stale Session");
-            await Expect(page.GetByTestId("column-in-progress")).Not.ToContainTextAsync("Busy Session");
-
-            await page.ReloadAsync();
-            await Expect(page.GetByTestId("project-filter")).ToHaveValueAsync("C:/Work/Gamma");
-            await Expect(page.GetByTestId("count-pending")).ToHaveTextAsync("1");
-            await Expect(page.GetByTestId("count-completed")).ToHaveTextAsync("1");
-        });
-    }
-
-    [Fact]
-    public async Task RefreshesBoardAfterSessionStatusSse()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("Recently Updated");
-
-            await _fixture.PostJsonAsync(
-                $"{_fixture.MockUrl}/__test__/setStatus",
-                new
-                {
-                    directory = @"C:\Work\Gamma",
-                    sessionId = "sess-recent",
-                    type = "busy"
-                });
-
-            await _fixture.PostJsonAsync(
-                $"{_fixture.MockUrl}/__test__/emit",
-                new
-                {
-                    directory = @"C:\Work\Gamma",
-                    type = "session.status",
-                    properties = new
-                    {
-                        sessionID = "sess-recent",
-                        status = new
-                        {
-                            type = "busy"
-                        }
-                    }
-                });
-
-            await Expect(page.GetByTestId("column-in-progress")).ToContainTextAsync("Recently Updated");
-            await Expect(page.GetByTestId("count-in-progress")).ToHaveTextAsync("3");
-            await Expect(page.GetByTestId("count-pending")).ToHaveTextAsync("0");
-        });
-    }
-
-    [Fact]
-    public async Task DoesNotCrashIfSessionsApiFails()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            await page.RouteAsync(
-                "**/api/sessions**",
-                async route =>
-                {
-                    await route.FulfillAsync(
-                        new RouteFulfillOptions
-                        {
-                            Status = 500,
-                            ContentType = "application/json",
-                            Body = "{\"error\":\"Injected failure\"}"
-                        });
-                });
-
-            await page.GotoAsync(_fixture.ViewerUrl);
-
-            await Expect(page.GetByText("No sessions found")).ToBeVisibleAsync();
+            await Expect(page.GetByText("All Tasks")).ToBeVisibleAsync();
+            await Expect(page.GetByText("No tasks found")).ToBeVisibleAsync();
             await Expect(page.GetByTestId("count-pending")).ToHaveTextAsync("0");
             await Expect(page.GetByTestId("count-in-progress")).ToHaveTextAsync("0");
             await Expect(page.GetByTestId("count-completed")).ToHaveTextAsync("0");
@@ -174,145 +35,121 @@ public sealed class UiTests
     }
 
     [Fact]
-    public async Task CanArchiveSingleSelectedSessionViaBulkAction()
+    public async Task ProjectFilterAppliesToTaskBackedBoard()
     {
-        await _fixture.ResetOpenCodeAsync();
+        await _fixture.ResetMocksAsync();
+
+        var gammaMapping = await _fixture.PostJsonAndReadAsync(
+            $"{_fixture.ViewerUrl}/api/orch/mappings",
+            new
+            {
+                sonarProjectKey = "gamma-key",
+                directory = _fixture.GammaDirectory,
+                enabled = true
+            });
+
+        var alphaMapping = await _fixture.PostJsonAndReadAsync(
+            $"{_fixture.ViewerUrl}/api/orch/mappings",
+            new
+            {
+                sonarProjectKey = "alpha-key",
+                directory = _fixture.AlphaDirectory,
+                enabled = true
+            });
+
+        var gammaMappingId = AsInt(gammaMapping["id"]);
+        var alphaMappingId = AsInt(alphaMapping["id"]);
+
+        await _fixture.PostJsonAsync(
+            $"{_fixture.ViewerUrl}/api/orch/enqueue",
+            new
+            {
+                mappingId = gammaMappingId,
+                issueType = "CODE_SMELL",
+                instructions = "Fix safely",
+                issues = new object[]
+                {
+                    new
+                    {
+                        key = "sq-gamma-001",
+                        type = "CODE_SMELL",
+                        severity = "MAJOR",
+                        rule = "javascript:S1126",
+                        message = "Remove this redundant assignment.",
+                        component = "gamma-key:src/worker.js",
+                        line = 42,
+                        status = "OPEN",
+                        relativePath = "src/worker.js",
+                        absolutePath = $"{_fixture.GammaDirectory}/src/worker.js"
+                    }
+                }
+            });
+
+        await _fixture.PostJsonAsync(
+            $"{_fixture.ViewerUrl}/api/orch/enqueue",
+            new
+            {
+                mappingId = alphaMappingId,
+                issueType = "CODE_SMELL",
+                instructions = "Fix safely",
+                issues = new object[]
+                {
+                    new
+                    {
+                        key = "sq-alpha-001",
+                        type = "CODE_SMELL",
+                        severity = "MINOR",
+                        rule = "javascript:S1481",
+                        message = "Remove this unused local variable.",
+                        component = "alpha-key:src/index.js",
+                        line = 7,
+                        status = "OPEN",
+                        relativePath = "src/index.js",
+                        absolutePath = $"{_fixture.AlphaDirectory}/src/index.js"
+                    }
+                }
+            });
 
         await WithPage(async page =>
         {
+            await page.GotoAsync(_fixture.ViewerUrl);
+
+            await Expect(page.Locator("[data-testid=\"session-card\"]")).ToHaveCountAsync(2);
+            await Expect(page.Locator("[data-testid=\"session-card\"]").Nth(0)).ToContainTextAsync("sq-alpha-001");
+            await Expect(page.Locator("[data-testid=\"session-card\"]").Nth(1)).ToContainTextAsync("sq-gamma-001");
+            var gammaOption = page.GetByTestId("project-filter").Locator("option").Filter(new() { HasTextString = Path.GetFileName(_fixture.GammaDirectory) }).First;
+            var gammaValue = await gammaOption.GetAttributeAsync("value");
+            Assert.False(string.IsNullOrWhiteSpace(gammaValue));
+
+            await page.GetByTestId("project-filter").SelectOptionAsync(gammaValue!);
+            await Expect(page.Locator("[data-testid=\"session-card\"]")).ToHaveCountAsync(1);
+            await Expect(page.Locator("[data-testid=\"session-card\"]").First).ToContainTextAsync("sq-gamma-001");
+        });
+    }
+
+    [Fact]
+    public async Task OrchestrationSettingsCanRemoveMapping()
+    {
+        await _fixture.ResetMocksAsync();
+
+        await WithPage(async page =>
+        {
+            await page.GotoAsync(_fixture.ViewerUrl);
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
+
+            await page.GetByTestId("orch-settings-toggle").ClickAsync();
+            await page.GetByTestId("orch-new-project-key").FillAsync("gamma-key");
+            await page.GetByTestId("orch-new-directory").FillAsync(_fixture.GammaDirectory);
+            await page.GetByTestId("orch-save-mapping-btn").ClickAsync();
+
+            await page.GetByTestId("orch-settings-toggle").ClickAsync();
+            await Expect(page.GetByTestId("orch-delete-mapping-select")).ToBeVisibleAsync();
+            await page.GetByTestId("orch-delete-mapping-select").SelectOptionAsync(new[] { "1" });
             page.Dialog += (_, dialog) => _ = dialog.AcceptAsync();
+            await page.GetByTestId("orch-delete-mapping-btn").ClickAsync();
 
-            await page.GotoAsync(_fixture.ViewerUrl);
-
-            var card = page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Recently Updated"
-                    })
-                .First;
-
-            await card.HoverAsync();
-            await card.Locator("input.card-select").CheckAsync();
-            await Expect(page.GetByTestId("bulk-archive-btn")).ToHaveTextAsync("Archive selected (1)");
-            await page.GetByTestId("bulk-archive-btn").ClickAsync();
-
-            await Expect(page.GetByText("Recently Updated")).ToHaveCountAsync(0);
-        });
-    }
-
-    [Fact]
-    public async Task CanClearSelectedSessions()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            await page.GotoAsync(_fixture.ViewerUrl);
-
-            var recentCard = page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Recently Updated"
-                    })
-                .First;
-
-            var staleCard = page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Stale Session"
-                    })
-                .First;
-
-            await recentCard.HoverAsync();
-            await recentCard.Locator("input.card-select").CheckAsync();
-            await staleCard.HoverAsync();
-            await staleCard.Locator("input.card-select").CheckAsync();
-
-            await Expect(page.GetByTestId("bulk-archive-btn")).ToHaveTextAsync("Archive selected (2)");
-            await Expect(page.GetByTestId("clear-selection-btn")).ToBeEnabledAsync();
-
-            await page.GetByTestId("clear-selection-btn").ClickAsync();
-
-            await Expect(page.GetByTestId("bulk-archive-btn")).ToHaveTextAsync("Archive selected (0)");
-            await Expect(page.GetByTestId("bulk-archive-btn")).ToBeDisabledAsync();
-            await Expect(page.GetByTestId("clear-selection-btn")).ToBeDisabledAsync();
-            await Expect(page.Locator("input.card-select:checked")).ToHaveCountAsync(0);
-        });
-    }
-
-    [Fact]
-    public async Task CanBulkArchiveSelectedSessions()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            page.Dialog += (_, dialog) => _ = dialog.AcceptAsync();
-
-            await page.GotoAsync(_fixture.ViewerUrl);
-            await page.GetByTestId("project-filter").SelectOptionAsync("C:/Work/Gamma");
-
-            var recentCard = page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Recently Updated"
-                    })
-                .First;
-
-            var staleCard = page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Stale Session"
-                    })
-                .First;
-
-            await recentCard.HoverAsync();
-            await recentCard.Locator("input.card-select").CheckAsync();
-            await staleCard.HoverAsync();
-            await staleCard.Locator("input.card-select").CheckAsync();
-
-            await Expect(page.GetByTestId("bulk-archive-btn")).ToHaveTextAsync("Archive selected (2)");
-            await page.GetByTestId("bulk-archive-btn").ClickAsync();
-
-            await Expect(page.GetByText("Recently Updated")).ToHaveCountAsync(0);
-            await Expect(page.GetByText("Stale Session")).ToHaveCountAsync(0);
-        });
-    }
-
-    [Fact]
-    public async Task DetailsShowLastAgentMessageAndOpenCodeLink()
-    {
-        await _fixture.ResetOpenCodeAsync();
-
-        await WithPage(async page =>
-        {
-            await page.GotoAsync(_fixture.ViewerUrl);
-
-            await page
-                .GetByTestId("session-card")
-                .Filter(
-                    new LocatorFilterOptions
-                    {
-                        HasTextString = "Stale Session"
-                    })
-                .First.ClickAsync();
-
-            await Expect(page.GetByTestId("detail-last-agent-message")).ToContainTextAsync("Diagnostics complete; all checks passed.");
-
-            await Expect(page.GetByTestId("detail-opencode-link"))
-                .ToHaveAttributeAsync(
-                    "href",
-                    $"{_fixture.MockUrl}/QzovV29yay9HYW1tYQ/session/sess-stale");
+            await page.GetByTestId("orch-settings-toggle").ClickAsync();
+            await Expect(page.GetByTestId("orch-delete-mapping-select")).ToHaveValueAsync(string.Empty);
         });
     }
 
@@ -329,5 +166,16 @@ public sealed class UiTests
         await using var context = await browser.NewContextAsync();
         var page = await context.NewPageAsync();
         await test(page);
+    }
+
+    static int AsInt(object? value)
+    {
+        if (value is null)
+            return 0;
+
+        if (value is JsonNode node)
+            return int.TryParse(node.ToString(), out var parsedNode) ? parsedNode : 0;
+
+        return int.TryParse(value.ToString(), out var parsed) ? parsed : 0;
     }
 }

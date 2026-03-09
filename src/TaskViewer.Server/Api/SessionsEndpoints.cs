@@ -1,3 +1,4 @@
+using System;
 using TaskViewer.Server.Application.Sessions;
 
 namespace TaskViewer.Server.Api;
@@ -6,6 +7,31 @@ public static class SessionsEndpoints
 {
     public static IEndpointRouteBuilder MapSessionsEndpoints(this IEndpointRouteBuilder app, ISessionsUseCases useCases)
     {
+        app.MapGet(
+            "/api/tasks/board",
+            async (HttpContext ctx) =>
+            {
+                SetNoStore(ctx.Response);
+
+                try
+                {
+                    var items = await useCases.ListSessionsAsync(ctx.Request.Query["limit"].ToString());
+
+                    return Results.Json(items);
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine($"Error listing task board items: {error}");
+
+                    return Results.Json(
+                        new ErrorResponseDto
+                        {
+                            Error = "Failed to list tasks from orchestration"
+                        },
+                        statusCode: 502);
+                }
+            });
+
         app.MapGet(
             "/api/sessions",
             async (HttpContext ctx) =>
@@ -25,7 +51,7 @@ public static class SessionsEndpoints
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to list sessions from OpenCode"
+                            Error = "Failed to list tasks from orchestration"
                         },
                         statusCode: 502);
                 }
@@ -94,6 +120,43 @@ public static class SessionsEndpoints
                         new ErrorResponseDto
                         {
                             Error = "Failed to load session messages from OpenCode"
+                        },
+                        statusCode: 502);
+                }
+            });
+
+        app.MapGet(
+            "/api/tasks/board/{taskId}/last-assistant-message",
+            async (string taskId) =>
+            {
+                try
+                {
+                    var result = await useCases.GetTaskLastAssistantMessageAsync(taskId);
+
+                    if (!result.Found)
+                        return Results.Json(
+                            new ErrorResponseDto
+                            {
+                                Error = "Task not found"
+                            },
+                            statusCode: 404);
+
+                    return Results.Json(
+                        new LastAssistantMessageResponseDto
+                        {
+                            SessionId = result.SessionId,
+                            Message = result.Message,
+                            CreatedAt = result.CreatedAt
+                        });
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine($"Error getting task last assistant message: {error}");
+
+                    return Results.Json(
+                        new ErrorResponseDto
+                        {
+                            Error = "Failed to load task messages from OpenCode"
                         },
                         statusCode: 502);
                 }

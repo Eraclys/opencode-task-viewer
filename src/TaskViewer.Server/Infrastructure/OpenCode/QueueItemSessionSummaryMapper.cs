@@ -1,4 +1,5 @@
 using TaskViewer.Server.Application.Sessions;
+using TaskViewer.Server.Application.Orchestration;
 
 namespace TaskViewer.Server.Infrastructure.OpenCode;
 
@@ -8,7 +9,7 @@ sealed class QueueItemSessionSummaryMapper
     {
         var taskState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
 
-        if (taskState is not ("queued" or "dispatching" or "leased" or "running"))
+        if (taskState is not ("queued" or "dispatching" or "leased" or "running" or "awaiting_review" or "rejected" or "failed" or "cancelled"))
             return null;
 
         var titleParts = new List<string>();
@@ -26,7 +27,20 @@ sealed class QueueItemSessionSummaryMapper
         {
             "leased" => "Leased",
             "running" => "Running",
+            "awaiting_review" => "Review",
+            "rejected" => "Rejected",
+            "failed" => "Failed",
+            "cancelled" => "Cancelled",
             _ => "Task"
+        };
+
+        var boardStatus = taskState switch
+        {
+            "dispatching" or "leased" or "running" => "in_progress",
+            "awaiting_review" => "completed",
+            "rejected" => "cancelled",
+            "failed" or "cancelled" => "cancelled",
+            _ => "pending"
         };
 
         var name = titleParts.Count > 0
@@ -42,10 +56,10 @@ sealed class QueueItemSessionSummaryMapper
             GitBranch = null,
             CreatedAt = item.CreatedAt,
             ModifiedAt = item.UpdatedAt,
-            RuntimeStatus = new SessionRuntimeStatus(taskState is "dispatching" or "leased" or "running" ? "busy" : "queued"),
-            Status = "pending",
-            HasAssistantResponse = false,
-            OpenCodeUrl = null,
+            RuntimeStatus = new SessionRuntimeStatus(taskState),
+            Status = boardStatus,
+            HasAssistantResponse = item.SessionId is { Length: > 0 },
+            OpenCodeUrl = item.OpenCodeUrl,
             IsQueueItem = true,
             QueueItemId = item.Id,
             QueueState = taskState,
@@ -53,6 +67,7 @@ sealed class QueueItemSessionSummaryMapper
             TaskState = taskState,
             TaskKey = item.TaskKey,
             TaskUnit = item.TaskUnit,
+            TaskInstructions = item.Instructions,
             TaskIssueCount = item.IssueCount,
             IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
             IssueType = item.IssueType,
@@ -60,7 +75,10 @@ sealed class QueueItemSessionSummaryMapper
             IssueRule = item.Rule,
             IssuePath = item.RelativePath ?? item.AbsolutePath,
             IssueLine = item.Line,
-            LastError = item.LastError
+            LastError = item.LastError,
+            LastReviewAction = item.LastReviewAction,
+            LastReviewReason = item.LastReviewReason,
+            LastReviewedAt = item.LastReviewedAt
         };
     }
 }

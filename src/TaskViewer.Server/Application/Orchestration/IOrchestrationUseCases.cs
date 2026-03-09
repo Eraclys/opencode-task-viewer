@@ -6,6 +6,7 @@ public interface IOrchestrationUseCases
 {
     OrchestrationConfigDto GetPublicConfig();
     Task<List<MappingRecord>> ListMappingsAsync();
+    Task<bool> DeleteMappingAsync(string mappingId);
     Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request);
     Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType);
     Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request);
@@ -26,5 +27,10 @@ public interface IOrchestrationUseCases
     Task<bool> CancelQueueItemAsync(string queueId);
     Task<int> RetryFailedAsync();
     Task<int> ClearQueuedAsync();
+    Task<bool> ApproveTaskAsync(string taskId);
+    Task<bool> RejectTaskAsync(string taskId, string? reason);
+    Task<bool> RequeueTaskAsync(string taskId, string? reason);
+    Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason);
+    Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId);
     Task ResetStateAsync();
 }

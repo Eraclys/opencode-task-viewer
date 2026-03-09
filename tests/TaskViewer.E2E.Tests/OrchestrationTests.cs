@@ -24,7 +24,7 @@ public sealed class OrchestrationTests
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("orchestrator-panel")).ToBeVisibleAsync();
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
 
             await SetupGammaMappingAsync(page);
             await LoadCodeSmellIssuesAsync(page);
@@ -36,12 +36,12 @@ public sealed class OrchestrationTests
             await page.GetByTestId("orch-enqueue-btn").ClickAsync();
 
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Queued 1 issue");
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("[CODE_SMELL]");
+            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("sq-gamma-001");
             await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("javascript:S1126");
 
             await Expect(page.GetByTestId("column-pending"))
                 .Not.ToContainTextAsync(
-                    "[Queued]",
+                    "[CODE_SMELL]",
                     new LocatorAssertionsToContainTextOptions
                     {
                         Timeout = 15_000
@@ -58,7 +58,7 @@ public sealed class OrchestrationTests
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("orchestrator-panel")).ToBeVisibleAsync();
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
 
             await SetupGammaMappingAsync(page);
             await page.GetByTestId("orch-issue-type").SelectOptionAsync("CODE_SMELL");
@@ -90,7 +90,7 @@ public sealed class OrchestrationTests
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("orchestrator-panel")).ToBeVisibleAsync();
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
 
             await SetupGammaMappingAsync(page);
             await page.GetByTestId("orch-issue-type").SelectOptionAsync("CODE_SMELL");
@@ -125,7 +125,7 @@ public sealed class OrchestrationTests
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("orchestrator-panel")).ToBeVisibleAsync();
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
 
             await SetupGammaMappingAsync(page);
             await page.GetByTestId("orch-issue-type").SelectOptionAsync("CODE_SMELL");
@@ -195,7 +195,7 @@ public sealed class OrchestrationTests
             Assert.Contains("/session/", sessionCreated["openCodeUrl"]?.ToString());
 
             await page.ReloadAsync();
-            await Expect(page.GetByTestId("column-pending")).ToContainTextAsync("javascript:S1126");
+            await Expect(page.GetByTestId("column-in-progress")).ToContainTextAsync("javascript:S1126");
         });
     }
 
@@ -217,7 +217,7 @@ public sealed class OrchestrationTests
         await WithPage(async page =>
         {
             await page.GotoAsync(_fixture.ViewerUrl);
-            await Expect(page.GetByTestId("orchestrator-panel")).ToBeVisibleAsync();
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
 
             await SetupGammaMappingAsync(page);
             await LoadCodeSmellIssuesAsync(page);
@@ -247,10 +247,175 @@ public sealed class OrchestrationTests
             Assert.NotNull(latest);
             Assert.Equal("cancelled", latest!["state"]?.ToString());
 
-            var sessions = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/sessions?limit=all");
+            var sessions = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/tasks/board?limit=all");
             var array = sessions as JsonArray ?? [];
             var queueCard = array.FirstOrDefault(item => item?["id"]?.ToString() == $"queue-{queueId}");
-            Assert.Null(queueCard);
+            Assert.NotNull(queueCard);
+            Assert.Equal("cancelled", queueCard!["status"]?.ToString());
+        });
+    }
+
+    [Fact]
+    public async Task AwaitingReviewTaskCanBeApprovedRejectedAndRequeued()
+    {
+        await _fixture.ResetMocksAsync();
+        await WaitForNoActiveQueueAsync();
+
+        await _fixture.PostJsonAsync(
+            $"{_fixture.MockUrl}/__test__/setFailures",
+            new
+            {
+                sessionCreateCount = 0,
+                promptAsyncCount = 0,
+                promptDelayMs = 0
+            });
+
+        await WithPage(async page =>
+        {
+            await page.GotoAsync(_fixture.ViewerUrl);
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
+
+            await SetupGammaMappingAsync(page);
+            await LoadCodeSmellIssuesAsync(page);
+
+            var firstIssue = page.Locator(".orch-issue-row").First;
+            await firstIssue.Locator("input[type=\"checkbox\"]").CheckAsync();
+            await page.GetByTestId("orch-enqueue-btn").ClickAsync();
+
+            var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
+            Assert.NotNull(awaitingReview);
+            var taskId = AsInt(awaitingReview!["id"]);
+
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",
+                new
+                {
+                    reason = "Needs prompt tuning"
+                });
+
+            var rejected = await WaitForQueueItemStateByIdAsync(taskId, "rejected", TimeSpan.FromSeconds(10));
+            Assert.Equal("rejected", rejected["state"]?.ToString());
+
+            var historyAfterReject = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
+            var rejectItems = historyAfterReject["items"] as JsonArray ?? [];
+            Assert.NotEmpty(rejectItems);
+            Assert.Equal("rejected", rejectItems[0]?["action"]?.ToString());
+
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/requeue",
+                new
+                {
+                    reason = "Retry with updated instructions"
+                });
+
+            var requeued = await WaitForQueueItemStateByIdAsync(taskId, "queued", TimeSpan.FromSeconds(10));
+            Assert.Equal("queued", requeued["state"]?.ToString());
+
+            var historyAfterRequeue = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
+            var requeueItems = historyAfterRequeue["items"] as JsonArray ?? [];
+            Assert.NotEmpty(requeueItems);
+            Assert.Equal("requeue", requeueItems[0]?["action"]?.ToString());
+
+            await WaitForQueueItemStateByIdAsync(taskId, "awaiting_review", TimeSpan.FromSeconds(20));
+
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/approve",
+                new
+                {
+                });
+
+            var queueData = await GetQueueResponseAsync();
+            Assert.True(AsInt(queueData["review"]?["rejected"]) >= 0);
+        });
+    }
+
+    [Fact]
+    public async Task RejectedTaskCanBeRepromptedWithUpdatedInstructions()
+    {
+        await _fixture.ResetMocksAsync();
+        await WaitForNoActiveQueueAsync();
+
+        await _fixture.PostJsonAsync(
+            $"{_fixture.MockUrl}/__test__/setFailures",
+            new
+            {
+                sessionCreateCount = 0,
+                promptAsyncCount = 0,
+                promptDelayMs = 0
+            });
+
+        await WithPage(async page =>
+        {
+            await page.GotoAsync(_fixture.ViewerUrl);
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
+
+            await SetupGammaMappingAsync(page);
+            await LoadCodeSmellIssuesAsync(page);
+
+            var firstIssue = page.Locator(".orch-issue-row").First;
+            await firstIssue.Locator("input[type=\"checkbox\"]").CheckAsync();
+            await page.GetByTestId("orch-instructions").FillAsync("Initial task instructions for reprompt flow.");
+            await page.GetByTestId("orch-enqueue-btn").ClickAsync();
+
+            var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
+            Assert.NotNull(awaitingReview);
+            var taskId = AsInt(awaitingReview!["id"]);
+
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",
+                new
+                {
+                    reason = "Need tighter instructions before retry"
+                });
+
+            await WaitForQueueItemStateByIdAsync(taskId, "rejected", TimeSpan.FromSeconds(10));
+
+            await _fixture.PostJsonAsync(
+                $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reprompt",
+                new
+                {
+                    instructions = "Retry with a smaller patch and only change the target file.",
+                    reason = "Previous pass was too broad"
+                });
+
+            var requeued = await WaitForQueueItemStateByIdAsync(taskId, "queued", TimeSpan.FromSeconds(10));
+            Assert.Equal("Retry with a smaller patch and only change the target file.", requeued["instructions"]?.ToString());
+            Assert.Equal("reprompt", requeued["lastReviewAction"]?.ToString());
+
+            var historyAfterReprompt = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
+            var repromptItems = historyAfterReprompt["items"] as JsonArray ?? [];
+            Assert.NotEmpty(repromptItems);
+            Assert.Equal("reprompt", repromptItems[0]?["action"]?.ToString());
+        });
+    }
+
+    [Fact]
+    public async Task TaskDetailLoadsLastAssistantMessageViaTaskRoute()
+    {
+        await _fixture.ResetMocksAsync();
+        await WaitForNoActiveQueueAsync();
+
+        await WithPage(async page =>
+        {
+            await page.GotoAsync(_fixture.ViewerUrl);
+            await Expect(page.Locator("#orchestrator-panel.visible")).ToBeVisibleAsync();
+
+            await SetupGammaMappingAsync(page);
+            await LoadCodeSmellIssuesAsync(page);
+
+            var firstIssue = page.Locator(".orch-issue-row").First;
+            await firstIssue.Locator("input[type=\"checkbox\"]").CheckAsync();
+            await page.GetByTestId("orch-instructions").FillAsync("Keep changes minimal and only address this single Sonar warning.");
+            await page.GetByTestId("orch-enqueue-btn").ClickAsync();
+
+            await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "running", TimeSpan.FromSeconds(20));
+            await page.ReloadAsync();
+
+            await page.GetByTestId("session-card").Filter(new() { HasTextString = "javascript:S1126" }).First.ClickAsync();
+            await Expect(page.GetByTestId("detail-opencode-link")).ToBeVisibleAsync();
+            var href = await page.GetByTestId("detail-opencode-link").GetAttributeAsync("href");
+            Assert.Contains("/session/", href ?? string.Empty, StringComparison.Ordinal);
+            await Expect(page.GetByTestId("detail-last-agent-message")).Not.ToContainTextAsync("Unable to load the last agent message.");
         });
     }
 
@@ -266,11 +431,11 @@ public sealed class OrchestrationTests
         await Expect(page.GetByTestId("orch-mapping-select")).ToHaveValueAsync(new Regex("\\d+"));
     }
 
-    static async Task LoadCodeSmellIssuesAsync(IPage page)
+    static async Task LoadCodeSmellIssuesAsync(IPage page, int expectedCount = 3)
     {
         await page.GetByTestId("orch-issue-type").SelectOptionAsync("CODE_SMELL");
         await page.GetByTestId("orch-load-issues-btn").ClickAsync();
-        await Expect(page.Locator(".orch-issue-row")).ToHaveCountAsync(3);
+        await Expect(page.Locator(".orch-issue-row")).ToHaveCountAsync(expectedCount);
     }
 
     async Task<JsonNode> GetQueueResponseAsync() => await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
@@ -293,6 +458,24 @@ public sealed class OrchestrationTests
         var data = await GetQueueResponseAsync();
         var items = data["items"] as JsonArray ?? [];
         return items.FirstOrDefault(item => AsInt(item?["id"]) == queueId);
+    }
+
+    async Task<JsonNode?> WaitForLatestTaskStateByRuleAsync(string rule, string expectedState, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var candidate = await GetLatestQueueItemForRuleAsync(rule);
+
+            if (candidate is not null &&
+                string.Equals(candidate["state"]?.ToString(), expectedState, StringComparison.Ordinal))
+                return candidate;
+
+            await Task.Delay(250);
+        }
+
+        return null;
     }
 
     async Task<JsonNode> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)

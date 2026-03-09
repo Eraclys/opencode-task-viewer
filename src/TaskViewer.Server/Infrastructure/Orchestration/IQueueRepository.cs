@@ -18,6 +18,7 @@ interface IQueueRepository
     Task<QueueItemRecord?> TryLeaseTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt);
     Task<bool> HeartbeatTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt);
     Task<List<NormalizedIssue>> GetTaskIssues(int id);
+    Task<IReadOnlyList<TaskReviewHistoryRecord>> GetTaskReviewHistory(int id);
 
     Task<bool> MarkTaskRunning(
         int id,
@@ -28,6 +29,10 @@ interface IQueueRepository
         DateTimeOffset leaseExpiresAt);
 
     Task<bool> MarkTaskAwaitingReview(int id, DateTimeOffset timestamp);
+    Task<bool> ApproveTask(int id, DateTimeOffset timestamp);
+    Task<bool> RejectTask(int id, string? reason, DateTimeOffset timestamp);
+    Task<bool> RequeueTask(int id, string? reason, DateTimeOffset timestamp);
+    Task<bool> RepromptTask(int id, string instructions, string? reason, DateTimeOffset timestamp);
 
     Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts);
 

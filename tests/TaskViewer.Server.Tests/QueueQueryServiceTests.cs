@@ -42,6 +42,25 @@ public sealed class QueueQueryServiceTests
     }
 
     [Fact]
+    public async Task ListQueueAsync_AllowsDurableReviewStates()
+    {
+        var repo = new FakeQueueRepository();
+        var sut = new QueueQueryService(repo);
+
+        await sut.ListQueueAsync("awaiting_review,rejected,done,running,leased", "25");
+
+        Assert.Equal(
+            [
+                "awaiting_review",
+                "rejected",
+                "done",
+                "running",
+                "leased"
+            ],
+            repo.LastStates);
+    }
+
+    [Fact]
     public async Task GetQueueStatsAsync_ReturnsRepositoryStats()
     {
         var repo = new FakeQueueRepository
@@ -100,8 +119,13 @@ public sealed class QueueQueryServiceTests
         public Task<QueueItemRecord?> TryLeaseTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt) => throw new NotSupportedException();
         public Task<bool> HeartbeatTask(int id, string leaseOwner, DateTimeOffset heartbeatAt, DateTimeOffset expiresAt) => throw new NotSupportedException();
         public Task<List<NormalizedIssue>> GetTaskIssues(int id) => throw new NotSupportedException();
+        public Task<IReadOnlyList<TaskReviewHistoryRecord>> GetTaskReviewHistory(int id) => throw new NotSupportedException();
         public Task<bool> MarkTaskRunning(int id, string sessionId, string? openCodeUrl, string leaseOwner, DateTimeOffset timestamp, DateTimeOffset leaseExpiresAt) => throw new NotSupportedException();
         public Task<bool> MarkTaskAwaitingReview(int id, DateTimeOffset timestamp) => throw new NotSupportedException();
+        public Task<bool> ApproveTask(int id, DateTimeOffset timestamp) => throw new NotSupportedException();
+        public Task<bool> RejectTask(int id, string? reason, DateTimeOffset timestamp) => throw new NotSupportedException();
+        public Task<bool> RequeueTask(int id, string? reason, DateTimeOffset timestamp) => throw new NotSupportedException();
+        public Task<bool> RepromptTask(int id, string instructions, string? reason, DateTimeOffset timestamp) => throw new NotSupportedException();
 
         public Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts) => throw new NotSupportedException();
 

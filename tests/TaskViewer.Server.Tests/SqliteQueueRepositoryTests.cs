@@ -191,6 +191,104 @@ public sealed class SqliteQueueRepositoryTests
         Assert.Equal(2, stats.Cancelled);
     }
 
+    [Fact]
+    public async Task ReviewActions_RecordLatestReviewMetadata()
+    {
+        var dbPath = await InitializeSchemaAsync();
+        var repository = CreateRepository(dbPath);
+        var mapping = CreateMapping();
+
+        var created = await repository.EnqueueIssuesBatch(
+            mapping,
+            "CODE_SMELL",
+            "Keep the fix focused",
+            [CreateIssue("sq-review")],
+            3,
+            DateTimeOffset.Parse("2026-03-08T10:00:00Z"));
+
+        var taskId = Assert.Single(created.CreatedItems).Id;
+
+        var leased = await repository.TryLeaseTask(
+            taskId,
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:01:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:04:00Z"));
+        Assert.NotNull(leased);
+
+        Assert.True(await repository.MarkTaskRunning(
+            taskId,
+            "sess-review",
+            "http://opencode.local/session/sess-review",
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:02:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:05:00Z")));
+
+        Assert.True(await repository.MarkTaskAwaitingReview(taskId, DateTimeOffset.Parse("2026-03-08T10:03:00Z")));
+        Assert.True(await repository.RejectTask(taskId, "Needs manual follow-up", DateTimeOffset.Parse("2026-03-08T10:04:00Z")));
+
+        var rejected = Assert.Single(await repository.ListQueue(["rejected"], 10));
+        Assert.Equal("rejected", rejected.LastReviewAction);
+        Assert.Equal("Needs manual follow-up", rejected.LastReviewReason);
+        Assert.NotNull(rejected.LastReviewedAt);
+
+        Assert.True(await repository.RequeueTask(taskId, "Retry with tuned prompt", DateTimeOffset.Parse("2026-03-08T10:05:00Z")));
+
+        var queuedAgain = Assert.Single(await repository.ListQueue(["queued"], 10));
+        Assert.Equal("requeue", queuedAgain.LastReviewAction);
+        Assert.Equal("Retry with tuned prompt", queuedAgain.LastReviewReason);
+        Assert.NotNull(queuedAgain.LastReviewedAt);
+
+        var history = await repository.GetTaskReviewHistory(taskId);
+        Assert.True(history.Count >= 2);
+        Assert.Equal("requeue", history[0].Action);
+    }
+
+    [Fact]
+    public async Task RepromptTask_UpdatesInstructionsAndRequeuesTask()
+    {
+        var dbPath = await InitializeSchemaAsync();
+        var repository = CreateRepository(dbPath);
+        var mapping = CreateMapping();
+
+        var created = await repository.EnqueueIssuesBatch(
+            mapping,
+            "CODE_SMELL",
+            "Keep the fix focused",
+            [CreateIssue("sq-reprompt")],
+            3,
+            DateTimeOffset.Parse("2026-03-08T10:00:00Z"));
+
+        var taskId = Assert.Single(created.CreatedItems).Id;
+
+        var leased = await repository.TryLeaseTask(
+            taskId,
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:01:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:04:00Z"));
+        Assert.NotNull(leased);
+
+        Assert.True(await repository.MarkTaskRunning(
+            taskId,
+            "sess-reprompt",
+            "http://opencode.local/session/sess-reprompt",
+            "worker-1",
+            DateTimeOffset.Parse("2026-03-08T10:02:00Z"),
+            DateTimeOffset.Parse("2026-03-08T10:05:00Z")));
+
+        Assert.True(await repository.MarkTaskAwaitingReview(taskId, DateTimeOffset.Parse("2026-03-08T10:03:00Z")));
+        Assert.True(await repository.RepromptTask(taskId, "Retry with a narrower patch", "Previous patch was too broad", DateTimeOffset.Parse("2026-03-08T10:04:00Z")));
+
+        var queuedAgain = Assert.Single(await repository.ListQueue(["queued"], 10));
+        Assert.Equal("Retry with a narrower patch", queuedAgain.Instructions);
+        Assert.Equal("reprompt", queuedAgain.LastReviewAction);
+        Assert.Equal("Previous patch was too broad", queuedAgain.LastReviewReason);
+        Assert.Null(queuedAgain.SessionId);
+        Assert.Equal(0, queuedAgain.AttemptCount);
+
+        var history = await repository.GetTaskReviewHistory(taskId);
+        Assert.Equal("reprompt", history[0].Action);
+    }
+
     static SqliteQueueRepository CreateRepository(string dbPath)
     {
         var dbLock = new SemaphoreSlim(1, 1);

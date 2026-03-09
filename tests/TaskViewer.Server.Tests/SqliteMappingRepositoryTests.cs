@@ -91,6 +91,31 @@ public sealed class SqliteMappingRepositoryTests
         Assert.Single(dirs);
     }
 
+    [Fact]
+    public async Task DeleteMapping_RemovesMappingAndInstructionProfiles()
+    {
+        var dbPath = await InitializeSchemaAsync();
+        var repository = CreateRepository(dbPath);
+
+        var mapping = await repository.UpsertMapping(
+            null,
+            "gamma-key",
+            "C:/Work/Gamma",
+            null,
+            true,
+            DateTimeOffset.UtcNow);
+
+        await repository.UpsertInstructionProfile(
+            mapping.Id,
+            "CODE_SMELL",
+            "Fix only this issue",
+            DateTimeOffset.UtcNow);
+
+        Assert.True(await repository.DeleteMapping(mapping.Id));
+        Assert.Null(await repository.GetMappingById(mapping.Id));
+        Assert.Null(await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL"));
+    }
+
     static SqliteMappingRepository CreateRepository(string dbPath)
     {
         var dbLock = new SemaphoreSlim(1, 1);

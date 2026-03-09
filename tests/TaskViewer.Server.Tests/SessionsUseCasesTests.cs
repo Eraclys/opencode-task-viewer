@@ -1,5 +1,8 @@
 using TaskViewer.OpenCode;
+using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Application.Sessions;
+using TaskViewer.Server.Infrastructure.OpenCode;
+using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 
@@ -69,50 +72,35 @@ public sealed class SessionsUseCasesTests
     }
 
     [Fact]
-    public async Task ListSessionsAsync_UsesDefaultLimitAndReturnsItems()
+    public async Task ListSessionsAsync_ReturnsQueueBackedTasksOnly()
     {
         await using var orchestrator = CreateOrchestrator();
-        string? capturedLimit = null;
 
-        var session = new OpenCodeSessionDto(
-            "sess-1",
-            "Session One",
-            "C:/Work/Alpha",
-            "C:/Work/Alpha",
-            DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"),
-            DateTimeOffset.Parse("2026-01-01T00:00:01.0000000+00:00"));
+        var mapping = await orchestrator.UpsertMapping(new UpsertMappingRequest(null, "gamma-key", "C:/Work/Gamma", null, true));
+
+        var created = await orchestrator.EnqueueIssues(
+            new EnqueueIssuesRequest(
+                mapping.Id,
+                "CODE_SMELL",
+                "Fix safely",
+                [new TaskViewer.SonarQube.SonarIssueTransport("sq-1", null, "CODE_SMELL", null, "MAJOR", "javascript:S1126", "Remove this redundant assignment.", "gamma-key:src/worker.js", null, "42", "OPEN")]));
+
+        Assert.Single(created.Items);
 
         var sut = CreateUseCases(
-            orchestrator,
-            limit =>
-            {
-                capturedLimit = limit;
-
-                return Task.FromResult(
-                    new List<OpenCodeSessionDto>
-                    {
-                        session
-                    });
-            },
-            getHasAssistantResponse: _ => Task.FromResult<bool?>(false));
+            orchestrator);
 
         var result = await sut.ListSessionsAsync(null);
 
-        Assert.Equal("20", capturedLimit);
         var item = Assert.Single(result);
-        Assert.Equal("sess-1", item.Id);
-        Assert.Equal("Session One", item.Name);
-        Assert.Equal("idle", item.RuntimeStatus.Type);
+        Assert.Equal($"queue-{created.Items[0].Id}", item.Id);
+        Assert.Equal("queued", item.RuntimeStatus.Type);
         Assert.Equal("pending", item.Status);
+        Assert.True(item.IsQueueItem);
     }
 
     static SessionsUseCases CreateUseCases(
         SonarOrchestrator orchestrator,
-        Func<string, Task<List<OpenCodeSessionDto>>>? listGlobalSessions = null,
-        Func<string?, Task<Dictionary<string, SessionRuntimeStatus>>>? getStatusMapForDirectory = null,
-        Func<string?, string, Dictionary<string, SessionRuntimeStatus>, string>? normalizeRuntimeStatus = null,
-        Func<string, Task<bool?>>? getHasAssistantResponse = null,
-        Func<string, DateTimeOffset, bool?, string>? deriveSessionKanbanStatus = null,
         Func<string, string?, string?>? buildOpenCodeSessionUrl = null,
         Func<QueueItemRecord, SessionSummaryDto?>? mapQueueItemToSessionSummary = null,
         Func<string, Task<OpenCodeSessionDto?>>? findSessionInfo = null,
@@ -124,14 +112,9 @@ public sealed class SessionsUseCasesTests
         Func<Task>? broadcastUpdate = null)
     {
         return new SessionsUseCases(
-            listGlobalSessions ?? (_ => Task.FromResult(new List<OpenCodeSessionDto>())),
-            getStatusMapForDirectory ?? (_ => Task.FromResult(new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal))),
-            normalizeRuntimeStatus ?? ((_, _, _) => "idle"),
-            getHasAssistantResponse ?? (_ => Task.FromResult<bool?>(false)),
-            deriveSessionKanbanStatus ?? ((_, _, _) => "pending"),
             buildOpenCodeSessionUrl ?? ((sessionId, _) => $"http://localhost:4096/session/{sessionId}"),
             orchestrator,
-            mapQueueItemToSessionSummary ?? (_ => null),
+            mapQueueItemToSessionSummary ?? (new QueueItemSessionSummaryMapper().Map),
             findSessionInfo ??
             (_ => Task.FromResult<OpenCodeSessionDto?>(new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null))),
             getTodosForSession ?? ((_, _) => Task.FromResult(new List<SessionTodoDto>())),

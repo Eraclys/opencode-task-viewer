@@ -101,6 +101,8 @@ public sealed class EnqueueContextResolverTests
 
         public Task<MappingRecord?> GetMappingById(int id) => Task.FromResult(Mapping is not null && Mapping.Id == id ? Mapping : null);
 
+        public Task<bool> DeleteMapping(int id) => throw new NotSupportedException();
+
         public Task<MappingRecord> UpsertMapping(
             int? id,
             string sonarProjectKey,
