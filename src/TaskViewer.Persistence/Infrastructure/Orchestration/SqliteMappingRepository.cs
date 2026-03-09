@@ -18,12 +18,8 @@ public sealed class SqliteMappingRepository : IMappingRepository
 
     public async Task<List<MappingRecord>> ListMappings()
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var rows = await conn.QueryAsync<MappingRow>(@"
+        using var conn = _openConnection();
+        var rows = await conn.QueryAsync<MappingRow>(@"
 SELECT
     id AS Id,
     sonar_project_key AS SonarProjectKey,
@@ -35,22 +31,13 @@ SELECT
 FROM project_mappings
 ORDER BY sonar_project_key COLLATE NOCASE ASC");
 
-            return rows.Select(MapMapping).ToList();
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return rows.Select(MapMapping).ToList();
     }
 
     public async Task<MappingRecord?> GetMappingById(int id)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var row = await conn.QuerySingleOrDefaultAsync<MappingRow>(@"
+        using var conn = _openConnection();
+        var row = await conn.QuerySingleOrDefaultAsync<MappingRow>(@"
 SELECT
     id AS Id,
     sonar_project_key AS SonarProjectKey,
@@ -63,12 +50,7 @@ FROM project_mappings
 WHERE id = @Id
 LIMIT 1", new { Id = id });
 
-            return row is null ? null : MapMapping(row);
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return row is null ? null : MapMapping(row);
     }
 
     public async Task<bool> DeleteMapping(int id)
@@ -78,16 +60,15 @@ LIMIT 1", new { Id = id });
         try
         {
             using var conn = _openConnection();
-
-            var deletedProfiles = await conn.ExecuteAsync(@"
-DELETE FROM instruction_profiles
-WHERE mapping_id = @Id", new { Id = id });
+            using var tx = conn.BeginTransaction();
 
             var deleted = await conn.ExecuteAsync(@"
 DELETE FROM project_mappings
-WHERE id = @Id", new { Id = id });
+WHERE id = @Id", new { Id = id }, tx);
 
-            if (deleted > 0 || deletedProfiles > 0)
+            tx.Commit();
+
+            if (deleted > 0)
                 _onChange();
 
             return deleted > 0;
@@ -204,12 +185,8 @@ LIMIT 1", new { SonarProjectKey = sonarProjectKey });
 
     public async Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var row = await conn.QuerySingleOrDefaultAsync<InstructionProfileRow>(@"
+        using var conn = _openConnection();
+        var row = await conn.QuerySingleOrDefaultAsync<InstructionProfileRow>(@"
 SELECT
     id AS Id,
     mapping_id AS MappingId,
@@ -221,12 +198,7 @@ FROM instruction_profiles
 WHERE mapping_id = @MappingId AND issue_type = @IssueType
 LIMIT 1", new { MappingId = mappingId, IssueType = issueType });
 
-            return row is null ? null : MapInstructionProfile(row);
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return row is null ? null : MapInstructionProfile(row);
     }
 
     public async Task<InstructionProfileRecord> UpsertInstructionProfile(
@@ -283,37 +255,29 @@ LIMIT 1", new { MappingId = mappingId, IssueType = issueType });
 
     public async Task<List<string>> ListEnabledMappingDirectories()
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var directories = await conn.QueryAsync<string>(@"
+        using var conn = _openConnection();
+        var directories = await conn.QueryAsync<string>(@"
 SELECT directory
 FROM project_mappings
 WHERE enabled = 1");
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var result = new List<string>();
 
-            foreach (var directory in directories)
-            {
-                var trimmed = directory?.Trim() ?? string.Empty;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
 
-                if (string.IsNullOrWhiteSpace(trimmed))
-                    continue;
-
-                var key = trimmed.Replace('\\', '/');
-
-                if (seen.Add(key))
-                    result.Add(trimmed);
-            }
-
-            return result;
-        }
-        finally
+        foreach (var directory in directories)
         {
-            _dbLock.Release();
+            var trimmed = directory?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(trimmed))
+                continue;
+
+            var key = trimmed.Replace('\\', '/');
+
+            if (seen.Add(key))
+                result.Add(trimmed);
         }
+
+        return result;
     }
 
     static MappingRecord MapMapping(MappingRow row)

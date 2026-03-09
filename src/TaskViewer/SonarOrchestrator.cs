@@ -16,7 +16,6 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     readonly IOrchestrationInputNormalizer _orchestrationInputNormalizer;
     readonly IOrchestrationMappingService _orchestrationMappingService;
     readonly IOrchestrationStatusService _orchestrationStatusService;
-    readonly IOrchestratorRuntime _orchestratorRuntime;
     readonly IQueueCommandsService _queueCommandsService;
     readonly IQueueEnqueueService _queueEnqueueService;
     readonly IQueueQueryService _queueQueryService;
@@ -28,6 +27,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     readonly ISonarRulesReadService _rulesReadService;
     readonly IWorkloadBackpressureStateService _workloadBackpressureStateService;
     readonly string _leaseOwner;
+    int _tickRunning;
     volatile bool _disposed;
 
     public SonarOrchestrator(SonarOrchestratorOptions options)
@@ -71,7 +71,6 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         _taskSchedulerService = _options.TaskSchedulerService ?? new TaskSchedulerService(_queueRepository, NowUtc);
         _taskReadinessGate = _options.TaskReadinessGate ?? new TaskReadinessGate(_options.SonarQubeService);
         _taskReconcilerService = _options.TaskReconcilerService ?? new TaskReconcilerService(_queueRepository, openCodeService, dispatchFailurePolicy, NowUtc);
-        _orchestratorRuntime = _options.OrchestratorRuntime ?? new OrchestratorRuntime();
         _workloadBackpressureStateService = _options.WorkloadBackpressureStateService ?? new WorkloadBackpressureStateService(workingSessionsReadService, workloadBackpressurePolicy);
         _queueEnqueueService = _options.QueueEnqueueService ?? new QueueEnqueueService(_queueRepository, _options.MaxAttempts, NowUtc);
         _queueCommandsService = _options.QueueCommandsService ?? new QueueCommandsService(_queueRepository, ArchiveSessionAsync, NowUtc);
@@ -88,8 +87,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
             return;
 
         _disposed = true;
-        await _orchestratorRuntime.DisposeAsync();
-        await _persistence.DisposeAsync();
+        await Task.CompletedTask;
     }
 
     static DateTimeOffset NowUtc() => DateTimeOffset.UtcNow;
@@ -114,12 +112,12 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
     public async Task<List<MappingRecord>> ListMappings() => await _orchestrationMappingService.ListMappingsAsync();
     public async Task<MappingRecord?> GetMappingById(int? mappingId) => await _orchestrationMappingService.GetMappingByIdAsync(mappingId);
-    public async Task<bool> DeleteMapping(int? mappingId) => await _orchestrationMappingService.DeleteMappingAsync(mappingId);
+    public async Task<bool> DeleteMapping(int mappingId) => await _orchestrationMappingService.DeleteMappingAsync(mappingId);
     public async Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => await _orchestrationMappingService.UpsertMappingAsync(request);
     public async Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType);
     public async Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request) => await _orchestrationMappingService.UpsertInstructionProfileAsync(request);
 
-    public async Task<RulesListDto> ListRules(int? mappingId, string? issueType, string? issueStatus)
+    public async Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus)
     {
         var mapping = await GetMappingById(mappingId);
 
@@ -130,7 +128,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return OrchestrationResponseMapper.BuildRulesList(mapping, summary);
     }
 
-    public async Task<IssuesListDto> ListIssues(int? mappingId, string? issueType, string? severity, string? issueStatus, string? page, string? pageSize, string? ruleKeys)
+    public async Task<IssuesListDto> ListIssues(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys)
     {
         var mapping = await GetMappingById(mappingId);
 
@@ -191,7 +189,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return result;
     }
 
-    public async Task<List<QueueItemRecord>> ListQueue(string? states, string? limit) => await _queueQueryService.ListQueueAsync(states, limit);
+    public async Task<List<QueueItemRecord>> ListQueue(string? states, int? limit) => await _queueQueryService.ListQueueAsync(states, limit);
 
     public async Task<QueueStatsDto> GetQueueStats()
     {
@@ -215,21 +213,19 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
             backpressure);
     }
 
-    public async Task<bool> CancelQueueItem(int? queueId) => await _queueCommandsService.CancelQueueItemAsync(queueId);
+    public async Task<bool> CancelQueueItem(int queueId) => await _queueCommandsService.CancelQueueItemAsync(queueId);
     public async Task<int> RetryFailed() => await _queueCommandsService.RetryFailedAsync();
     public async Task<int> ClearQueued() => await _queueCommandsService.ClearQueuedAsync();
-    public async Task<bool> ApproveTask(int? taskId) => await _queueCommandsService.ApproveTaskAsync(taskId);
-    public async Task<bool> RejectTask(int? taskId, string? reason) => await _queueCommandsService.RejectTaskAsync(taskId, reason);
-    public async Task<bool> RequeueTask(int? taskId, string? reason) => await _queueCommandsService.RequeueTaskAsync(taskId, reason);
-    public async Task<bool> RepromptTask(int? taskId, string instructions, string? reason) => await _queueCommandsService.RepromptTaskAsync(taskId, instructions, reason);
-    public async Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int? taskId)
+    public async Task<bool> ApproveTask(int taskId) => await _queueCommandsService.ApproveTaskAsync(taskId);
+    public async Task<bool> RejectTask(int taskId, string? reason) => await _queueCommandsService.RejectTaskAsync(taskId, reason);
+    public async Task<bool> RequeueTask(int taskId, string? reason) => await _queueCommandsService.RequeueTaskAsync(taskId, reason);
+    public async Task<bool> RepromptTask(int taskId, string instructions, string? reason) => await _queueCommandsService.RepromptTaskAsync(taskId, instructions, reason);
+    public async Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int taskId)
     {
-        var id = taskId.GetValueOrDefault(-1);
-
-        if (id <= 0)
+        if (taskId <= 0)
             throw new InvalidOperationException("Invalid task id");
 
-        var history = await _queueRepository.GetTaskReviewHistory(id);
+        var history = await _queueRepository.GetTaskReviewHistory(taskId);
         return history
             .Select(entry => new TaskReviewHistoryDto
             {
@@ -314,7 +310,10 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
     public async Task Tick()
     {
-        await _orchestratorRuntime.RunOnceAsync(async () =>
+        if (Interlocked.CompareExchange(ref _tickRunning, 1, 0) != 0)
+            return;
+
+        try
         {
             if (_disposed || !IsConfigured())
                 return;
@@ -327,12 +326,12 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
             await _taskReconcilerService.ReconcileAsync(_options.LeaseSeconds);
 
             for (var i = 0; i < _options.MaxActive; i++)
-            {
                 await ProcessNextTaskAsync();
-            }
-        });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _tickRunning, 0);
+        }
     }
-
-    public void Start(CancellationToken stoppingToken) => _orchestratorRuntime.Start(_options.PollMs, stoppingToken, Tick);
 
 }

@@ -11,7 +11,7 @@ public sealed class QueueQueryServiceTests
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync("queued,FAILED,ignored,queued", "10000");
+        await sut.ListQueueAsync("queued,FAILED,ignored,queued", 10000);
 
         Assert.Equal(
             [
@@ -29,7 +29,7 @@ public sealed class QueueQueryServiceTests
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync("done,cancelled,bogus", "-2");
+        await sut.ListQueueAsync("done,cancelled,bogus", -2);
 
         Assert.Equal(
             [
@@ -47,7 +47,7 @@ public sealed class QueueQueryServiceTests
         var repo = new FakeQueueRepository();
         var sut = new QueueQueryService(repo);
 
-        await sut.ListQueueAsync("awaiting_review,rejected,done,running,leased", "25");
+        await sut.ListQueueAsync("awaiting_review,rejected,done,running,leased", 25);
 
         Assert.Equal(
             [

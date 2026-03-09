@@ -14,9 +14,10 @@ public static class OrchestrationRequestParsers
     };
 
     public static UpsertMappingRequest ParseUpsertMapping(string? payload)
-    {
-        var request = Deserialize<UpsertMappingPayload>(payload);
+        => ParseUpsertMapping(Deserialize<UpsertMappingPayload>(payload));
 
+    public static UpsertMappingRequest ParseUpsertMapping(UpsertMappingPayload? request)
+    {
         return new UpsertMappingRequest(
             request?.Id,
             NormalizeOptionalString(request?.SonarProjectKey) ?? NormalizeOptionalString(request?.LegacySonarProjectKey),
@@ -26,9 +27,10 @@ public static class OrchestrationRequestParsers
     }
 
     public static UpsertInstructionProfileRequest ParseUpsertInstructionProfile(string? payload)
-    {
-        var request = Deserialize<UpsertInstructionProfilePayload>(payload);
+        => ParseUpsertInstructionProfile(Deserialize<UpsertInstructionProfilePayload>(payload));
 
+    public static UpsertInstructionProfileRequest ParseUpsertInstructionProfile(UpsertInstructionProfilePayload? request)
+    {
         return new UpsertInstructionProfileRequest(
             request?.MappingId,
             request?.IssueType,
@@ -36,9 +38,10 @@ public static class OrchestrationRequestParsers
     }
 
     public static EnqueueIssuesRequest ParseEnqueueIssues(string? payload)
-    {
-        var request = Deserialize<EnqueueIssuesPayload>(payload);
+        => ParseEnqueueIssues(Deserialize<EnqueueIssuesPayload>(payload));
 
+    public static EnqueueIssuesRequest ParseEnqueueIssues(EnqueueIssuesPayload? request)
+    {
         return new EnqueueIssuesRequest(
             request?.MappingId,
             request?.IssueType,
@@ -47,8 +50,10 @@ public static class OrchestrationRequestParsers
     }
 
     public static EnqueueAllRequest ParseEnqueueAll(string? payload)
+        => ParseEnqueueAll(Deserialize<EnqueueAllPayload>(payload));
+
+    public static EnqueueAllRequest ParseEnqueueAll(EnqueueAllPayload? request)
     {
-        var request = Deserialize<EnqueueAllPayload>(payload);
         var ruleKeys = NormalizeOptionalString(request?.RuleKeys) ?? NormalizeOptionalString(request?.Rules) ?? NormalizeOptionalString(request?.Rule);
 
         return new EnqueueAllRequest(
@@ -61,9 +66,10 @@ public static class OrchestrationRequestParsers
     }
 
     public static TaskReviewRequestDto ParseTaskReviewRequest(string? payload)
-    {
-        var request = Deserialize<TaskReviewPayload>(payload);
+        => ParseTaskReviewRequest(Deserialize<TaskReviewPayload>(payload));
 
+    public static TaskReviewRequestDto ParseTaskReviewRequest(TaskReviewPayload? request)
+    {
         return new TaskReviewRequestDto
         {
             Instructions = NormalizeOptionalString(request?.Instructions),
@@ -92,7 +98,7 @@ public static class OrchestrationRequestParsers
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 
-    sealed class UpsertMappingPayload
+    public sealed class UpsertMappingPayload
     {
         [JsonPropertyName("id")]
         public int? Id { get; init; }
@@ -113,7 +119,7 @@ public static class OrchestrationRequestParsers
         public bool? Enabled { get; init; }
     }
 
-    sealed class UpsertInstructionProfilePayload
+    public sealed class UpsertInstructionProfilePayload
     {
         [JsonPropertyName("mappingId")]
         public int? MappingId { get; init; }
@@ -125,7 +131,7 @@ public static class OrchestrationRequestParsers
         public string? Instructions { get; init; }
     }
 
-    sealed class EnqueueIssuesPayload
+    public sealed class EnqueueIssuesPayload
     {
         [JsonPropertyName("mappingId")]
         public int? MappingId { get; init; }
@@ -140,7 +146,7 @@ public static class OrchestrationRequestParsers
         public List<EnqueueIssuePayload>? Issues { get; init; }
     }
 
-    sealed class EnqueueIssuePayload
+    public sealed class EnqueueIssuePayload
     {
         [JsonPropertyName("key")]
         public string? Key { get; init; }
@@ -169,6 +175,12 @@ public static class OrchestrationRequestParsers
         [JsonPropertyName("file")]
         public string? File { get; init; }
 
+        [JsonPropertyName("relativePath")]
+        public string? RelativePath { get; init; }
+
+        [JsonPropertyName("absolutePath")]
+        public string? AbsolutePath { get; init; }
+
         [JsonPropertyName("line")]
         public JsonElement? Line { get; init; }
 
@@ -176,7 +188,7 @@ public static class OrchestrationRequestParsers
         public string? Status { get; init; }
     }
 
-    sealed class EnqueueAllPayload
+    public sealed class EnqueueAllPayload
     {
         [JsonPropertyName("mappingId")]
         public int? MappingId { get; init; }
@@ -203,7 +215,7 @@ public static class OrchestrationRequestParsers
         public string? Instructions { get; init; }
     }
 
-    sealed class TaskReviewPayload
+    public sealed class TaskReviewPayload
     {
         [JsonPropertyName("instructions")]
         public string? Instructions { get; init; }
@@ -226,7 +238,7 @@ public static class OrchestrationRequestParsers
             issue.Rule,
             issue.Message,
             issue.Component,
-            issue.File,
+            issue.RelativePath ?? issue.AbsolutePath ?? issue.File,
             issue.Line?.ToString(),
             issue.Status);
     }

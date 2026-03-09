@@ -60,7 +60,11 @@ public sealed class SessionsUseCases : ISessionsUseCases
 
     public async Task<IReadOnlyList<SessionSummaryDto>> ListSessionsAsync(string? limitParam)
     {
-        var requestedLimit = string.IsNullOrWhiteSpace(limitParam) ? "1000" : limitParam;
+        var requestedLimit = string.Equals(limitParam, "all", StringComparison.OrdinalIgnoreCase)
+            ? 5000
+            : int.TryParse(limitParam, out var parsedLimit)
+                ? parsedLimit
+                : 1000;
         var summaries = new List<SessionSummaryDto>();
 
         try

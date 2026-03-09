@@ -15,6 +15,7 @@ internal static class TaskViewerServiceCollectionExtensions
     internal static IServiceCollection AddTaskViewerServerInfrastructure(
         this IServiceCollection services)
     {
+        services.AddMemoryCache();
         services.AddTaskViewerOpenCode(
             sp =>
             {
@@ -96,6 +97,8 @@ internal static class TaskViewerServiceCollectionExtensions
                         OnChange = () => _ = sp.GetRequiredService<OpenCodeViewerUpdateNotifier>().InvalidateAllAndBroadcastAsync()
                     });
             });
+        services.AddHostedService<SonarOrchestratorHostedService>();
+        services.AddHostedService<OpenCodeUpstreamSseHostedService>();
         return services;
     }
 

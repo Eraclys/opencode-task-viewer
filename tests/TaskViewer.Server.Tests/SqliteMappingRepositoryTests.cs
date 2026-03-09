@@ -115,12 +115,90 @@ public sealed class SqliteMappingRepositoryTests
         Assert.Null(await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL"));
     }
 
+    [Fact]
+    public async Task DeleteMapping_CascadesQueueItemsAndReviewArtifacts()
+    {
+        var dbPath = await InitializeSchemaAsync();
+        var mappingRepository = CreateRepository(dbPath);
+        var queueRepository = CreateQueueRepository(dbPath);
+
+        var mapping = await mappingRepository.UpsertMapping(
+            null,
+            "gamma-key",
+            "C:/Work/Gamma",
+            "main",
+            true,
+            DateTimeOffset.UtcNow);
+
+        var created = await queueRepository.EnqueueIssuesBatch(
+            new MappingRecord
+            {
+                Id = mapping.Id,
+                SonarProjectKey = mapping.SonarProjectKey,
+                Directory = mapping.Directory,
+                Branch = mapping.Branch,
+                Enabled = mapping.Enabled,
+                CreatedAt = mapping.CreatedAt,
+                UpdatedAt = mapping.UpdatedAt
+            },
+            "CODE_SMELL",
+            "Fix only this issue",
+            [new NormalizedIssue
+            {
+                Key = "sq-1",
+                Type = "CODE_SMELL",
+                Severity = "MAJOR",
+                Rule = "javascript:S1126",
+                Message = "Remove redundant boolean literal",
+                Line = 42,
+                Status = "OPEN",
+                Component = "gamma-key:src/file.js",
+                RelativePath = "src/file.js",
+                AbsolutePath = "C:/Work/Gamma/src/file.js"
+            }],
+            3,
+            DateTimeOffset.UtcNow);
+
+        var taskId = Assert.Single(created.CreatedItems).Id;
+        Assert.True(await queueRepository.TryLeaseTask(taskId, "worker-1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(1)) is not null);
+        Assert.True(await queueRepository.MarkTaskRunning(taskId, "sess-1", null, "worker-1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(1)));
+        Assert.True(await queueRepository.MarkTaskAwaitingReview(taskId, DateTimeOffset.UtcNow));
+        Assert.True(await queueRepository.RejectTask(taskId, "Needs follow-up", DateTimeOffset.UtcNow));
+
+        Assert.True(await mappingRepository.DeleteMapping(mapping.Id));
+        Assert.Empty(await queueRepository.ListQueue([], 10));
+        Assert.Empty(await queueRepository.GetTaskIssues(taskId));
+        Assert.Empty(await queueRepository.GetTaskReviewHistory(taskId));
+    }
+
+    [Fact]
+    public async Task Schema_EnablesForeignKeys()
+    {
+        var dbPath = await InitializeSchemaAsync();
+
+        await using var conn = OpenConnection(dbPath);
+        await using var command = conn.CreateCommand();
+        command.CommandText = "PRAGMA foreign_key_list(task_issue_links)";
+
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("queue_items", reader.GetString(2));
+    }
+
     static SqliteMappingRepository CreateRepository(string dbPath)
     {
         var dbLock = new SemaphoreSlim(1, 1);
         var onChange = () => { };
 
         return new SqliteMappingRepository(dbLock, () => OpenConnection(dbPath), onChange);
+    }
+
+    static SqliteQueueRepository CreateQueueRepository(string dbPath)
+    {
+        var dbLock = new SemaphoreSlim(1, 1);
+        var onChange = () => { };
+
+        return new SqliteQueueRepository(dbLock, () => OpenConnection(dbPath), onChange);
     }
 
     static SqliteConnection OpenConnection(string dbPath)
@@ -134,6 +212,11 @@ public sealed class SqliteMappingRepositoryTests
 
         var connection = new SqliteConnection(builder.ConnectionString);
         connection.Open();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA foreign_keys = ON;";
+            command.ExecuteNonQuery();
+        }
 
         return connection;
     }

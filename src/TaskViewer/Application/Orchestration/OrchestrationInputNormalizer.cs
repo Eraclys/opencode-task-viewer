@@ -16,20 +16,15 @@ public sealed class OrchestrationInputNormalizer : IOrchestrationInputNormalizer
         return [.. set];
     }
 
-    public (int PageIndex, int PageSize) ParseIssuePaging(string? page, string? pageSize)
+    public (int PageIndex, int PageSize) ParseIssuePaging(int? page, int? pageSize)
     {
-        var p = Math.Clamp(ParseIntSafe(page, 1), 1, int.MaxValue);
-        var ps = Math.Clamp(ParseIntSafe(pageSize, 100), 1, 500);
+        var p = Math.Clamp(page.GetValueOrDefault(1), 1, int.MaxValue);
+        var ps = Math.Clamp(pageSize.GetValueOrDefault(100), 1, 500);
         return (p, ps);
     }
 
     public bool HasSingleSpecificRule(IReadOnlyList<string> ruleKeys)
     {
         return ruleKeys.Count == 1 && !string.Equals(ruleKeys[0], "all", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int ParseIntSafe(string? value, int fallback)
-    {
-        return int.TryParse(value, out var parsed) ? parsed : fallback;
     }
 }

@@ -11,20 +11,15 @@ sealed class QueueQueryService : IQueueQueryService
         _queueRepository = queueRepository;
     }
 
-    public async Task<List<QueueItemRecord>> ListQueueAsync(string? statesCsv, string? limit)
+    public async Task<List<QueueItemRecord>> ListQueueAsync(string? statesCsv, int? limit)
     {
         var selectedStates = NormalizeQueueStateList(statesCsv);
-        var n = Math.Clamp(ParseIntSafe(limit, 250), 1, 5000);
+        var n = Math.Clamp(limit.GetValueOrDefault(250), 1, 5000);
 
         return await _queueRepository.ListQueue(selectedStates, n);
     }
 
     public Task<QueueStats> GetQueueStatsAsync() => _queueRepository.GetQueueStats();
-
-    static int ParseIntSafe(string? value, int fallback)
-    {
-        return int.TryParse(value, out var parsed) ? parsed : fallback;
-    }
 
     static List<string> NormalizeQueueStateList(string? statesCsv)
     {

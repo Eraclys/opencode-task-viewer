@@ -39,11 +39,10 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         try
         {
             using var conn = OpenConnection();
-            await conn.ExecuteAsync("DELETE FROM task_issue_links");
-            await conn.ExecuteAsync("DELETE FROM task_review_history");
-            await conn.ExecuteAsync("DELETE FROM queue_items");
-            await conn.ExecuteAsync("DELETE FROM instruction_profiles");
-            await conn.ExecuteAsync("DELETE FROM project_mappings");
+            using var tx = conn.BeginTransaction();
+            await conn.ExecuteAsync("DELETE FROM queue_items", transaction: tx);
+            await conn.ExecuteAsync("DELETE FROM project_mappings", transaction: tx);
+            tx.Commit();
         }
         finally
         {
@@ -62,6 +61,7 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
 
         var conn = new SqliteConnection(builder.ConnectionString);
         conn.Open();
+        conn.Execute("PRAGMA foreign_keys = ON;");
         return conn;
     }
 
@@ -86,7 +86,8 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         instructions TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        UNIQUE(mapping_id, issue_type)
+        UNIQUE(mapping_id, issue_type),
+        FOREIGN KEY(mapping_id) REFERENCES project_mappings(id) ON DELETE CASCADE
       );
 
       CREATE TABLE IF NOT EXISTS queue_items (
@@ -125,7 +126,8 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         updated_at TEXT NOT NULL,
         dispatched_at TEXT,
         completed_at TEXT,
-        cancelled_at TEXT
+        cancelled_at TEXT,
+        FOREIGN KEY(mapping_id) REFERENCES project_mappings(id) ON DELETE CASCADE
       );
 
       CREATE TABLE IF NOT EXISTS task_issue_links (
@@ -142,7 +144,8 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         line INTEGER,
         issue_status TEXT,
         created_at TEXT NOT NULL,
-        UNIQUE(task_id, issue_key)
+        UNIQUE(task_id, issue_key),
+        FOREIGN KEY(task_id) REFERENCES queue_items(id) ON DELETE CASCADE
       );
 
       CREATE TABLE IF NOT EXISTS task_review_history (
@@ -150,7 +153,8 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         task_id INTEGER NOT NULL,
         action TEXT NOT NULL,
         reason TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(task_id) REFERENCES queue_items(id) ON DELETE CASCADE
       );
 
       CREATE INDEX IF NOT EXISTS idx_task_issue_task ON task_issue_links(task_id);
@@ -168,6 +172,7 @@ public sealed class SqliteOrchestrationPersistence : IOrchestrationPersistence
         EnsureColumnExists(conn, "queue_items", "lease_expires_at", "TEXT");
 
         BackfillQueueTaskColumns(conn);
+        EnsureForeignKeys(conn);
 
         conn.Execute(@"
 CREATE INDEX IF NOT EXISTS idx_queue_state_next_attempt ON queue_items(state, next_attempt_at, created_at);
@@ -216,8 +221,208 @@ WHERE instructions_snapshot IS NULL;
         ");
     }
 
+    static void EnsureForeignKeys(SqliteConnection conn)
+    {
+        CleanupOrphanedRows(conn);
+
+        if (!HasForeignKey(conn, "instruction_profiles", "mapping_id", "project_mappings"))
+            RebuildInstructionProfilesTable(conn);
+
+        if (!HasForeignKey(conn, "queue_items", "mapping_id", "project_mappings"))
+            RebuildQueueItemsTable(conn);
+
+        if (!HasForeignKey(conn, "task_issue_links", "task_id", "queue_items"))
+            RebuildTaskIssueLinksTable(conn);
+
+        if (!HasForeignKey(conn, "task_review_history", "task_id", "queue_items"))
+            RebuildTaskReviewHistoryTable(conn);
+    }
+
+    static void CleanupOrphanedRows(SqliteConnection conn)
+    {
+        conn.Execute(@"
+DELETE FROM task_issue_links
+WHERE task_id NOT IN (SELECT id FROM queue_items);
+
+DELETE FROM task_review_history
+WHERE task_id NOT IN (SELECT id FROM queue_items);
+
+DELETE FROM instruction_profiles
+WHERE mapping_id NOT IN (SELECT id FROM project_mappings);
+
+DELETE FROM queue_items
+WHERE mapping_id NOT IN (SELECT id FROM project_mappings);
+        ");
+    }
+
+    static bool HasForeignKey(SqliteConnection conn, string tableName, string fromColumn, string referencedTable)
+    {
+        var rows = conn.Query<ForeignKeyRow>($"PRAGMA foreign_key_list({tableName})").ToList();
+        return rows.Any(row =>
+            string.Equals(row.From, fromColumn, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(row.Table, referencedTable, StringComparison.OrdinalIgnoreCase));
+    }
+
+    static void RebuildInstructionProfilesTable(SqliteConnection conn)
+    {
+        conn.Execute(@"
+ALTER TABLE instruction_profiles RENAME TO instruction_profiles_old;
+
+CREATE TABLE instruction_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mapping_id INTEGER NOT NULL,
+  issue_type TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(mapping_id, issue_type),
+  FOREIGN KEY(mapping_id) REFERENCES project_mappings(id) ON DELETE CASCADE
+);
+
+INSERT INTO instruction_profiles (id, mapping_id, issue_type, instructions, created_at, updated_at)
+SELECT id, mapping_id, issue_type, instructions, created_at, updated_at
+FROM instruction_profiles_old;
+
+DROP TABLE instruction_profiles_old;
+        ");
+    }
+
+    static void RebuildQueueItemsTable(SqliteConnection conn)
+    {
+        conn.Execute(@"
+ALTER TABLE queue_items RENAME TO queue_items_old;
+
+CREATE TABLE queue_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_key TEXT NOT NULL UNIQUE,
+  task_unit TEXT NOT NULL,
+  issue_key TEXT NOT NULL,
+  issue_count INTEGER NOT NULL DEFAULT 1,
+  mapping_id INTEGER NOT NULL,
+  sonar_project_key TEXT NOT NULL,
+  directory TEXT NOT NULL,
+  branch TEXT,
+  issue_type TEXT,
+  severity TEXT,
+  rule TEXT,
+  message TEXT,
+  component TEXT,
+  relative_path TEXT,
+  absolute_path TEXT,
+  lock_key TEXT,
+  line INTEGER,
+  issue_status TEXT,
+  instructions_snapshot TEXT,
+  state TEXT NOT NULL,
+  priority_score INTEGER NOT NULL DEFAULT 0,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  lease_owner TEXT,
+  lease_heartbeat_at TEXT,
+  lease_expires_at TEXT,
+  next_attempt_at TEXT,
+  session_id TEXT,
+  open_code_url TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  dispatched_at TEXT,
+  completed_at TEXT,
+  cancelled_at TEXT,
+  FOREIGN KEY(mapping_id) REFERENCES project_mappings(id) ON DELETE CASCADE
+);
+
+INSERT INTO queue_items (
+  id, task_key, task_unit, issue_key, issue_count, mapping_id, sonar_project_key, directory, branch,
+  issue_type, severity, rule, message, component, relative_path, absolute_path, lock_key,
+  line, issue_status, instructions_snapshot, state, priority_score,
+  attempt_count, max_attempts, lease_owner, lease_heartbeat_at, lease_expires_at,
+  next_attempt_at, session_id, open_code_url, last_error, created_at, updated_at,
+  dispatched_at, completed_at, cancelled_at
+)
+SELECT
+  id, task_key, task_unit, issue_key, issue_count, mapping_id, sonar_project_key, directory, branch,
+  issue_type, severity, rule, message, component, relative_path, absolute_path, lock_key,
+  line, issue_status, instructions_snapshot, state, priority_score,
+  attempt_count, max_attempts, lease_owner, lease_heartbeat_at, lease_expires_at,
+  next_attempt_at, session_id, open_code_url, last_error, created_at, updated_at,
+  dispatched_at, completed_at, cancelled_at
+FROM queue_items_old;
+
+DROP TABLE queue_items_old;
+        ");
+    }
+
+    static void RebuildTaskIssueLinksTable(SqliteConnection conn)
+    {
+        conn.Execute(@"
+ALTER TABLE task_issue_links RENAME TO task_issue_links_old;
+
+CREATE TABLE task_issue_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL,
+  issue_key TEXT NOT NULL,
+  issue_type TEXT NOT NULL,
+  severity TEXT,
+  rule TEXT,
+  message TEXT,
+  component TEXT,
+  relative_path TEXT,
+  absolute_path TEXT,
+  line INTEGER,
+  issue_status TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(task_id, issue_key),
+  FOREIGN KEY(task_id) REFERENCES queue_items(id) ON DELETE CASCADE
+);
+
+INSERT INTO task_issue_links (
+  id, task_id, issue_key, issue_type, severity, rule, message, component,
+  relative_path, absolute_path, line, issue_status, created_at
+)
+SELECT
+  id, task_id, issue_key, issue_type, severity, rule, message, component,
+  relative_path, absolute_path, line, issue_status, created_at
+FROM task_issue_links_old;
+
+DROP TABLE task_issue_links_old;
+
+CREATE INDEX IF NOT EXISTS idx_task_issue_task ON task_issue_links(task_id);
+        ");
+    }
+
+    static void RebuildTaskReviewHistoryTable(SqliteConnection conn)
+    {
+        conn.Execute(@"
+ALTER TABLE task_review_history RENAME TO task_review_history_old;
+
+CREATE TABLE task_review_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(task_id) REFERENCES queue_items(id) ON DELETE CASCADE
+);
+
+INSERT INTO task_review_history (id, task_id, action, reason, created_at)
+SELECT id, task_id, action, reason, created_at
+FROM task_review_history_old;
+
+DROP TABLE task_review_history_old;
+
+CREATE INDEX IF NOT EXISTS idx_task_review_history_task ON task_review_history(task_id, created_at DESC);
+        ");
+    }
+
     sealed class TableInfoRow
     {
         public string Name { get; init; } = string.Empty;
+    }
+
+    sealed class ForeignKeyRow
+    {
+        public string Table { get; init; } = string.Empty;
+        public string From { get; init; } = string.Empty;
     }
 }

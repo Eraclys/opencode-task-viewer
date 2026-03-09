@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Data.Sqlite;
 using TaskViewer.Infrastructure.Orchestration;
 
@@ -116,6 +117,12 @@ public sealed class SqliteQueueRepositoryTests
             DateTimeOffset.Parse("2026-03-08T10:02:00Z"));
 
         Assert.True(failed);
+
+        await using (var conn = OpenConnection(dbPath))
+        {
+            var state = await conn.QuerySingleAsync<string>("SELECT state FROM queue_items WHERE id = @Id", new { Id = claimed.Id });
+            Assert.Equal("failed", state);
+        }
 
         var failedItems = await repository.ListQueue(["failed"], 10);
         var failedItem = Assert.Single(failedItems);
@@ -340,6 +347,11 @@ public sealed class SqliteQueueRepositoryTests
 
         var connection = new SqliteConnection(builder.ConnectionString);
         connection.Open();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA foreign_keys = ON;";
+            command.ExecuteNonQuery();
+        }
 
         return connection;
     }
@@ -349,6 +361,12 @@ public sealed class SqliteQueueRepositoryTests
         var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-queue-repo-{Guid.NewGuid():N}.sqlite");
 
         await using var persistence = new SqliteOrchestrationPersistence(dbPath, () => { });
+
+        await using var conn = OpenConnection(dbPath);
+        await conn.ExecuteAsync(@"
+INSERT INTO project_mappings (id, sonar_project_key, directory, branch, enabled, created_at, updated_at)
+VALUES (1, 'gamma-key', 'C:/Work/Gamma', 'main', 1, '2026-03-08T09:00:00Z', '2026-03-08T09:00:00Z')
+ON CONFLICT(id) DO NOTHING;");
 
         return dbPath;
     }

@@ -18,33 +18,24 @@ public sealed class SqliteQueueRepository : IQueueRepository
 
     public async Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var sql = states.Count > 0
-                ? SelectTaskSql + @"
+        using var conn = _openConnection();
+        var sql = states.Count > 0
+            ? SelectTaskSql + @"
 WHERE state IN @States
 ORDER BY queue_items.priority_score DESC, datetime(queue_items.created_at) ASC, queue_items.id ASC
 LIMIT @Limit"
-                : SelectTaskSql + @"
+            : SelectTaskSql + @"
 ORDER BY queue_items.priority_score DESC, datetime(queue_items.created_at) ASC, queue_items.id ASC
 LIMIT @Limit";
 
-            var parameters = new DynamicParameters();
-            parameters.Add("Limit", limit);
+        var parameters = new DynamicParameters();
+        parameters.Add("Limit", limit);
 
-            if (states.Count > 0)
-                parameters.Add("States", states.ToArray());
+        if (states.Count > 0)
+            parameters.Add("States", states.ToArray());
 
-            var rows = await conn.QueryAsync<QueueItemRow>(sql, parameters);
-            return rows.Select(MapTask).ToList();
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        var rows = await conn.QueryAsync<QueueItemRow>(sql, parameters);
+        return rows.Select(MapTask).ToList();
     }
 
     public async Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
@@ -66,6 +57,7 @@ LIMIT @Limit";
         try
         {
             using var conn = _openConnection();
+            using var tx = conn.BeginTransaction();
 
             foreach (var group in grouped)
             {
@@ -81,7 +73,7 @@ SELECT
 FROM queue_items
 WHERE task_key = @TaskKey
   AND state IN ('queued', 'leased', 'running', 'awaiting_review')
-LIMIT 1", new { TaskKey = taskKey });
+ LIMIT 1", new { TaskKey = taskKey }, tx);
 
                 if (existing is not null)
                 {
@@ -133,7 +125,7 @@ SELECT last_insert_rowid();", new
                     NextAttemptAt = nowIso,
                     CreatedAt = nowIso,
                     UpdatedAt = nowIso
-                });
+                }, tx);
 
                 foreach (var issue in groupedIssues)
                 {
@@ -158,14 +150,16 @@ INSERT INTO task_issue_links (
                         issue.Line,
                         IssueStatus = issue.Status,
                         CreatedAt = nowIso
-                    });
+                    }, tx);
                 }
 
-                var inserted = await conn.QuerySingleOrDefaultAsync<QueueItemRow>(SelectTaskByIdSql, new { Id = taskId });
+                var inserted = await conn.QuerySingleOrDefaultAsync<QueueItemRow>(SelectTaskByIdSql, new { Id = taskId }, tx);
 
                 if (inserted is not null)
                     createdItems.Add(MapTask(inserted));
             }
+
+            tx.Commit();
 
             if (createdItems.Count > 0)
                 _onChange();
@@ -192,25 +186,16 @@ INSERT INTO task_issue_links (
             ["cancelled"] = 0
         };
 
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var rows = await conn.QueryAsync<QueueStateCountRow>(@"
+        using var conn = _openConnection();
+        var rows = await conn.QueryAsync<QueueStateCountRow>(@"
 SELECT state AS State, COUNT(*) AS Count
 FROM queue_items
 GROUP BY state");
 
-            foreach (var row in rows)
-            {
-                if (stats.ContainsKey(row.State))
-                    stats[row.State] = row.Count;
-            }
-        }
-        finally
+        foreach (var row in rows)
         {
-            _dbLock.Release();
+            if (stats.ContainsKey(row.State))
+                stats[row.State] = row.Count;
         }
 
         return new QueueStats(
@@ -369,12 +354,8 @@ WHERE id = @Id AND lease_owner = @LeaseOwner AND state IN ('leased', 'running')"
 
     public async Task<List<NormalizedIssue>> GetTaskIssues(int id)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var rows = await conn.QueryAsync<TaskIssueRow>(@"
+        using var conn = _openConnection();
+        var rows = await conn.QueryAsync<TaskIssueRow>(@"
 SELECT
     issue_key AS IssueKey,
     issue_type AS IssueType,
@@ -390,36 +371,27 @@ FROM task_issue_links
 WHERE task_id = @TaskId
 ORDER BY issue_key ASC", new { TaskId = id });
 
-            return rows.Select(
-                    row => new NormalizedIssue
-                    {
-                        Key = row.IssueKey,
-                        Type = row.IssueType,
-                        Severity = row.Severity,
-                        Rule = row.Rule,
-                        Message = row.Message,
-                        Component = row.Component,
-                        RelativePath = row.RelativePath,
-                        AbsolutePath = row.AbsolutePath,
-                        Line = row.Line,
-                        Status = row.IssueStatus
-                    })
-                .ToList();
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return rows.Select(
+                row => new NormalizedIssue
+                {
+                    Key = row.IssueKey,
+                    Type = row.IssueType,
+                    Severity = row.Severity,
+                    Rule = row.Rule,
+                    Message = row.Message,
+                    Component = row.Component,
+                    RelativePath = row.RelativePath,
+                    AbsolutePath = row.AbsolutePath,
+                    Line = row.Line,
+                    Status = row.IssueStatus
+                })
+            .ToList();
     }
 
     public async Task<IReadOnlyList<TaskReviewHistoryRecord>> GetTaskReviewHistory(int id)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var rows = await conn.QueryAsync<TaskReviewHistoryRow>(@"
+        using var conn = _openConnection();
+        var rows = await conn.QueryAsync<TaskReviewHistoryRow>(@"
 SELECT
     action AS Action,
     reason AS Reason,
@@ -428,12 +400,7 @@ FROM task_review_history
 WHERE task_id = @TaskId
 ORDER BY datetime(created_at) DESC, id DESC", new { TaskId = id });
 
-            return rows.Select(MapReviewHistory).ToList();
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return rows.Select(MapReviewHistory).ToList();
     }
 
     public async Task<bool> MarkTaskRunning(
@@ -528,6 +495,7 @@ WHERE id = @Id AND state = 'running'", new { Id = id, Timestamp = timestamp.ToSt
         try
         {
             using var conn = _openConnection();
+            using var tx = conn.BeginTransaction();
             var changed = await conn.ExecuteAsync(@"
 UPDATE queue_items
 SET state = 'queued',
@@ -546,13 +514,16 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
                 Id = id,
                 Timestamp = timestamp.ToString("O"),
                 Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason)
-            });
+            }, tx);
 
             if (changed > 0)
             {
-                await AppendReviewHistoryAsync(conn, id, "requeue", reason, timestamp);
+                await AppendReviewHistoryAsync(conn, tx, id, "requeue", reason, timestamp);
+                tx.Commit();
                 _onChange();
             }
+            else
+                tx.Rollback();
 
             return changed > 0;
         }
@@ -569,6 +540,7 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
         try
         {
             using var conn = _openConnection();
+            using var tx = conn.BeginTransaction();
             var changed = await conn.ExecuteAsync(@"
 UPDATE queue_items
 SET state = 'queued',
@@ -590,13 +562,16 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
                 Instructions = instructions,
                 Timestamp = timestamp.ToString("O"),
                 Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason)
-            });
+            }, tx);
 
             if (changed > 0)
             {
-                await AppendReviewHistoryAsync(conn, id, "reprompt", reason, timestamp);
+                await AppendReviewHistoryAsync(conn, tx, id, "reprompt", reason, timestamp);
+                tx.Commit();
                 _onChange();
             }
+            else
+                tx.Rollback();
 
             return changed > 0;
         }
@@ -608,25 +583,16 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
 
     public async Task<(int AttemptCount, int MaxAttempts)> GetAttemptInfo(int id, int fallbackAttemptCount, int fallbackMaxAttempts)
     {
-        await _dbLock.WaitAsync();
-
-        try
-        {
-            using var conn = _openConnection();
-            var row = await conn.QuerySingleOrDefaultAsync<AttemptInfoRow>(@"
+        using var conn = _openConnection();
+        var row = await conn.QuerySingleOrDefaultAsync<AttemptInfoRow>(@"
 SELECT attempt_count AS AttemptCount, max_attempts AS MaxAttempts
 FROM queue_items
 WHERE id = @Id", new { Id = id });
 
-            if (row is null)
-                return (fallbackAttemptCount, fallbackMaxAttempts);
+        if (row is null)
+            return (fallbackAttemptCount, fallbackMaxAttempts);
 
-            return (row.AttemptCount ?? fallbackAttemptCount, row.MaxAttempts ?? fallbackMaxAttempts);
-        }
-        finally
-        {
-            _dbLock.Release();
-        }
+        return (row.AttemptCount ?? fallbackAttemptCount, row.MaxAttempts ?? fallbackMaxAttempts);
     }
 
     public async Task<bool> MarkDispatchFailure(
@@ -641,6 +607,7 @@ WHERE id = @Id", new { Id = id });
         try
         {
             using var conn = _openConnection();
+            using var tx = conn.BeginTransaction();
             var changed = await conn.ExecuteAsync(@"
 UPDATE queue_items
 SET state = @State,
@@ -657,10 +624,15 @@ WHERE id = @Id AND state IN ('leased', 'running')", new
                 NextAttemptAt = nextAttemptAt?.ToString("O"),
                 LastError = lastError,
                 UpdatedAt = updatedAt.ToString("O")
-            });
+            }, tx);
 
             if (changed > 0)
+            {
+                tx.Commit();
                 _onChange();
+            }
+            else
+                tx.Rollback();
 
             return changed > 0;
         }
@@ -860,6 +832,7 @@ WHERE queue_items.id = @Id";
         try
         {
             using var conn = _openConnection();
+            using var tx = conn.BeginTransaction();
             var changed = await conn.ExecuteAsync(@"
 UPDATE queue_items
 SET state = @State,
@@ -876,13 +849,16 @@ WHERE id = @Id AND state IN @AllowedStates", new
                 Timestamp = timestamp.ToString("O"),
                 Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
                 AllowedStates = allowedStates.ToArray()
-            });
+            }, tx);
 
             if (changed > 0)
             {
-                await AppendReviewHistoryAsync(conn, id, state, reason, timestamp);
+                await AppendReviewHistoryAsync(conn, tx, id, state, reason, timestamp);
+                tx.Commit();
                 _onChange();
             }
+            else
+                tx.Rollback();
 
             return changed > 0;
         }
@@ -892,7 +868,7 @@ WHERE id = @Id AND state IN @AllowedStates", new
         }
     }
 
-    async Task AppendReviewHistoryAsync(SqliteConnection conn, int taskId, string action, string? reason, DateTimeOffset timestamp)
+    async Task AppendReviewHistoryAsync(SqliteConnection conn, SqliteTransaction tx, int taskId, string action, string? reason, DateTimeOffset timestamp)
     {
         await conn.ExecuteAsync(@"
 INSERT INTO task_review_history (task_id, action, reason, created_at)
@@ -902,7 +878,7 @@ VALUES (@TaskId, @Action, @Reason, @CreatedAt)", new
             Action = action,
             Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
             CreatedAt = timestamp.ToString("O")
-        });
+        }, tx);
     }
 
     static TaskReviewHistoryRecord MapReviewHistory(TaskReviewHistoryRow row)

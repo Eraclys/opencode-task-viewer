@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Data.Sqlite;
 using TaskViewer.Application.Orchestration;
 using TaskViewer.OpenCode;
@@ -41,12 +42,15 @@ public sealed class TaskViewerServiceCollectionExtensionsTests
         var orchestrator = provider.GetRequiredService<SonarOrchestrator>();
         var orchestrationUseCases = provider.GetRequiredService<IOrchestrationUseCases>();
         var orchestrationGateway = provider.GetService<IOrchestrationGateway>();
+        var hostedServices = provider.GetServices<IHostedService>().ToList();
 
         Assert.NotNull(openCodeApiClient);
         Assert.Same(sonarQubeApiClient, sonarQubeService);
         Assert.IsType<OrchestrationUseCases>(orchestrationUseCases);
         Assert.Null(orchestrationGateway);
         Assert.NotNull(orchestrator);
+        Assert.Contains(hostedServices, service => service.GetType() == typeof(SonarOrchestratorHostedService));
+        Assert.Contains(hostedServices, service => service.GetType() == typeof(OpenCodeUpstreamSseHostedService));
     }
 
     [Fact]
@@ -150,6 +154,16 @@ public sealed class TaskViewerServiceCollectionExtensionsTests
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
+CREATE TABLE project_mappings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sonar_project_key TEXT NOT NULL UNIQUE,
+  directory TEXT NOT NULL,
+  branch TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE queue_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   issue_key TEXT NOT NULL,
@@ -191,6 +205,12 @@ INSERT INTO queue_items (
   'CODE_SMELL', 'MAJOR', 'javascript:S1126', 'Legacy row', 'gamma-key:src/file.js', 'src/file.js', 'C:/Work/Gamma/src/file.js',
   'gamma-key|main|src/file.js|javascript:S1126', 42, 'OPEN', 'queued', 0, 3,
   '2026-03-01T00:00:00Z', '2026-03-01T00:00:00Z'
+);
+
+INSERT INTO project_mappings (
+  id, sonar_project_key, directory, branch, enabled, created_at, updated_at
+) VALUES (
+  1, 'gamma-key', 'C:/Work/Gamma', 'main', 1, '2026-03-01T00:00:00Z', '2026-03-01T00:00:00Z'
 );";
         await cmd.ExecuteNonQueryAsync();
     }

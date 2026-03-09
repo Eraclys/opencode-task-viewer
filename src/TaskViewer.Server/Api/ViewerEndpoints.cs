@@ -21,23 +21,12 @@ public static class ViewerEndpoints
             {
                 SetNoStore(ctx.Response);
 
-                try
-                {
-                    var allTasks = await openCodeTasksOverview.GetAllTasksAsync();
-                    return Results.Json(allTasks);
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error getting all tasks: {error}");
-
-                    return Results.Json(
-                        new ErrorResponseDto
-                        {
-                            Error = "Failed to load tasks from OpenCode"
-                        },
-                        statusCode: 502);
-                }
-            });
+                var allTasks = await openCodeTasksOverview.GetAllTasksAsync();
+                return Results.Json(allTasks);
+            })
+            .WithApiExceptionHandling(
+                "Error getting all tasks",
+                _ => ApiErrorResult.BadGateway("Failed to load tasks from OpenCode"));
 
         app.MapPost(
             "/api/tasks/{sessionId}/{taskId}/note",

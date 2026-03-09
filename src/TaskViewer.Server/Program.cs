@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using System.Text.Json.Serialization;
 using TaskViewer;
 using TaskViewer.Application.Orchestration;
 using TaskViewer.Application.Sessions;
@@ -17,15 +18,14 @@ var opencodeUrl = runtimeSettings.OpenCode.Url;
 var sonarMode = runtimeSettings.SonarQube.Mode;
 
 builder.WebHost.UseUrls($"http://{viewerHost}:{viewerPort}");
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.AllowReadingFromString);
 
 builder.Services
     .AddTaskViewerServerInfrastructure()
     .AddTaskViewerServerApplication();
 
 var app = builder.Build();
-var orchestrator = app.Services.GetRequiredService<SonarOrchestrator>();
-var openCodeEventHandler = app.Services.GetRequiredService<OpenCodeEventHandler>();
-var upstreamSseService = app.Services.GetRequiredService<OpenCodeUpstreamSseService>();
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
@@ -42,19 +42,11 @@ app.Lifetime.ApplicationStarted.Register(() =>
         Console.WriteLine($"Using SonarQube server: {runtimeSettings.SonarQube.Url}");
 });
 
-app.Lifetime.ApplicationStopping.Register(() =>
-{
-    _ = orchestrator.DisposeAsync();
-});
-
-orchestrator.Start(app.Lifetime.ApplicationStopping);
-_ = Task.Run(() => upstreamSseService.RunAsync(openCodeEventHandler.HandleAsync, app.Lifetime.ApplicationStopping));
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapSessionsEndpoints(app.Services.GetRequiredService<ISessionsUseCases>());
-app.MapOrchestrationEndpoints(app.Services.GetRequiredService<IOrchestrationUseCases>());
+app.MapSessionsEndpoints();
+app.MapOrchestrationEndpoints();
 app.MapViewerEndpoints();
 app.MapFallbackToFile("index.html");
 

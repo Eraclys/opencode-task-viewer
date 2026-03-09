@@ -20,22 +20,17 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 
     public Task<List<MappingRecord>> ListMappingsAsync() => _gateway.ListMappings();
 
-    public Task<bool> DeleteMappingAsync(string mappingId)
-    {
-        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
-        return _gateway.DeleteMapping(parsedMappingId);
-    }
+    public Task<bool> DeleteMappingAsync(int mappingId) => _gateway.DeleteMapping(mappingId);
 
     public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => _gateway.UpsertMapping(request);
 
-    public async Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType)
+    public async Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType)
     {
-        var parsedMappingId = int.TryParse(mappingId, out var parsed) ? parsed : (int?)null;
-        var profile = await _gateway.GetInstructionProfile(parsedMappingId, issueType);
+        var profile = await _gateway.GetInstructionProfile(mappingId, issueType);
 
         return new InstructionProfileDto
         {
-            MappingId = parsedMappingId,
+            MappingId = mappingId,
             IssueType = string.IsNullOrWhiteSpace(issueType) ? null : issueType.ToUpperInvariant(),
             Instructions = profile?.Instructions
         };
@@ -55,37 +50,30 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
     }
 
     public Task<IssuesListDto> ListIssuesAsync(
-        string mappingId,
+        int mappingId,
         string? issueType,
         string? severity,
         string? issueStatus,
-        string? page,
-        string? pageSize,
+        int? page,
+        int? pageSize,
         string? ruleKeys)
-    {
-        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
-
-        return _gateway.ListIssues(
-            parsedMappingId,
+        => _gateway.ListIssues(
+            mappingId,
             issueType,
             severity,
             issueStatus,
             page,
             pageSize,
             ruleKeys);
-    }
 
-    public Task<RulesListDto> ListRulesAsync(string mappingId, string? issueType, string? issueStatus)
-    {
-        var parsedMappingId = int.TryParse(mappingId, out var id) ? id : (int?)null;
-        return _gateway.ListRules(parsedMappingId, issueType, issueStatus);
-    }
+    public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus)
+        => _gateway.ListRules(mappingId, issueType, issueStatus);
 
     public Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request) => _gateway.EnqueueIssues(request);
 
     public Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request) => _gateway.EnqueueAllMatching(request);
 
-    public async Task<QueueOverviewDto> GetQueueAsync(string? states, string? limit)
+    public async Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit)
     {
         var items = await _gateway.ListQueue(states, limit);
         var stats = await _gateway.GetQueueStats();
@@ -104,45 +92,23 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         };
     }
 
-    public Task<bool> CancelQueueItemAsync(string queueId)
-    {
-        var parsedQueueId = int.TryParse(queueId, out var id) ? id : (int?)null;
-        return _gateway.CancelQueueItem(parsedQueueId);
-    }
+    public Task<bool> CancelQueueItemAsync(int queueId) => _gateway.CancelQueueItem(queueId);
 
     public Task<int> RetryFailedAsync() => _gateway.RetryFailed();
 
     public Task<int> ClearQueuedAsync() => _gateway.ClearQueued();
 
-    public Task<bool> ApproveTaskAsync(string taskId)
-    {
-        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
-        return _gateway.ApproveTask(parsedTaskId);
-    }
+    public Task<bool> ApproveTaskAsync(int taskId) => _gateway.ApproveTask(taskId);
 
-    public Task<bool> RejectTaskAsync(string taskId, string? reason)
-    {
-        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
-        return _gateway.RejectTask(parsedTaskId, reason);
-    }
+    public Task<bool> RejectTaskAsync(int taskId, string? reason) => _gateway.RejectTask(taskId, reason);
 
-    public Task<bool> RequeueTaskAsync(string taskId, string? reason)
-    {
-        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
-        return _gateway.RequeueTask(parsedTaskId, reason);
-    }
+    public Task<bool> RequeueTaskAsync(int taskId, string? reason) => _gateway.RequeueTask(taskId, reason);
 
-    public Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason)
-    {
-        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
-        return _gateway.RepromptTask(parsedTaskId, instructions, reason);
-    }
+    public Task<bool> RepromptTaskAsync(int taskId, string instructions, string? reason)
+        => _gateway.RepromptTask(taskId, instructions, reason);
 
-    public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId)
-    {
-        var parsedTaskId = int.TryParse(taskId, out var id) ? id : (int?)null;
-        return _gateway.GetTaskReviewHistory(parsedTaskId);
-    }
+    public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(int taskId)
+        => _gateway.GetTaskReviewHistory(taskId);
 
     public Task ResetStateAsync() => _gateway.ResetState();
 }

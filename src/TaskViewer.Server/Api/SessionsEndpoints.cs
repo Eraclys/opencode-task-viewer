@@ -4,198 +4,130 @@ namespace TaskViewer.Server.Api;
 
 public static class SessionsEndpoints
 {
-    public static IEndpointRouteBuilder MapSessionsEndpoints(this IEndpointRouteBuilder app, ISessionsUseCases useCases)
+    public static IEndpointRouteBuilder MapSessionsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet(
             "/api/tasks/board",
-            async (HttpContext ctx) =>
+            async (HttpContext ctx, string? limit, ISessionsUseCases useCases) =>
             {
                 SetNoStore(ctx.Response);
+                var items = await useCases.ListSessionsAsync(limit);
 
-                try
-                {
-                    var items = await useCases.ListSessionsAsync(ctx.Request.Query["limit"].ToString());
-
-                    return Results.Json(items);
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error listing task board items: {error}");
-
-                    return Results.Json(
-                        new ErrorResponseDto
-                        {
-                            Error = "Failed to list tasks from orchestration"
-                        },
-                        statusCode: 502);
-                }
-            });
+                return Results.Json(items);
+            })
+            .WithApiExceptionHandling(
+                "Error listing task board items",
+                _ => ApiErrorResult.BadGateway("Failed to list tasks from orchestration"));
 
         app.MapGet(
             "/api/sessions",
-            async (HttpContext ctx) =>
+            async (HttpContext ctx, string? limit, ISessionsUseCases useCases) =>
             {
                 SetNoStore(ctx.Response);
+                var items = await useCases.ListSessionsAsync(limit);
 
-                try
-                {
-                    var items = await useCases.ListSessionsAsync(ctx.Request.Query["limit"].ToString());
-
-                    return Results.Json(items);
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error listing sessions: {error}");
-
-                    return Results.Json(
-                        new ErrorResponseDto
-                        {
-                            Error = "Failed to list tasks from orchestration"
-                        },
-                        statusCode: 502);
-                }
-            });
+                return Results.Json(items);
+            })
+            .WithApiExceptionHandling(
+                "Error listing sessions",
+                _ => ApiErrorResult.BadGateway("Failed to list tasks from orchestration"));
 
         app.MapGet(
             "/api/sessions/{sessionId}",
-            async (string sessionId) =>
+            async (string sessionId, ISessionsUseCases useCases) =>
             {
-                try
-                {
-                    var result = await useCases.GetSessionTasksAsync(sessionId);
+                var result = await useCases.GetSessionTasksAsync(sessionId);
 
-                    if (!result.Found)
-                        return Results.Json(
-                            new ErrorResponseDto
-                            {
-                                Error = "Session not found"
-                            },
-                            statusCode: 404);
-
-                    return Results.Json(result.Tasks);
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error getting session todos: {error}");
-
+                if (!result.Found)
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to load session todos from OpenCode"
+                            Error = "Session not found"
                         },
-                        statusCode: 502);
-                }
-            });
+                        statusCode: 404);
+
+                return Results.Json(result.Tasks);
+            })
+            .WithApiExceptionHandling(
+                "Error getting session todos",
+                _ => ApiErrorResult.BadGateway("Failed to load session todos from OpenCode"));
 
         app.MapGet(
             "/api/sessions/{sessionId}/last-assistant-message",
-            async (string sessionId) =>
+            async (string sessionId, ISessionsUseCases useCases) =>
             {
-                try
-                {
-                    var result = await useCases.GetLastAssistantMessageAsync(sessionId);
+                var result = await useCases.GetLastAssistantMessageAsync(sessionId);
 
-                    if (!result.Found)
-                        return Results.Json(
-                            new ErrorResponseDto
-                            {
-                                Error = "Session not found"
-                            },
-                            statusCode: 404);
-
-                    return Results.Json(
-                        new LastAssistantMessageResponseDto
-                        {
-                            SessionId = result.SessionId,
-                            Message = result.Message,
-                            CreatedAt = result.CreatedAt
-                        });
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error getting last assistant message: {error}");
-
+                if (!result.Found)
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to load session messages from OpenCode"
+                            Error = "Session not found"
                         },
-                        statusCode: 502);
-                }
-            });
+                        statusCode: 404);
+
+                return Results.Json(
+                    new LastAssistantMessageResponseDto
+                    {
+                        SessionId = result.SessionId,
+                        Message = result.Message,
+                        CreatedAt = result.CreatedAt
+                    });
+            })
+            .WithApiExceptionHandling(
+                "Error getting last assistant message",
+                _ => ApiErrorResult.BadGateway("Failed to load session messages from OpenCode"));
 
         app.MapGet(
             "/api/tasks/board/{taskId}/last-assistant-message",
-            async (string taskId) =>
+            async (string taskId, ISessionsUseCases useCases) =>
             {
-                try
-                {
-                    var result = await useCases.GetTaskLastAssistantMessageAsync(taskId);
+                var result = await useCases.GetTaskLastAssistantMessageAsync(taskId);
 
-                    if (!result.Found)
-                        return Results.Json(
-                            new ErrorResponseDto
-                            {
-                                Error = "Task not found"
-                            },
-                            statusCode: 404);
-
-                    return Results.Json(
-                        new LastAssistantMessageResponseDto
-                        {
-                            SessionId = result.SessionId,
-                            Message = result.Message,
-                            CreatedAt = result.CreatedAt
-                        });
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error getting task last assistant message: {error}");
-
+                if (!result.Found)
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to load task messages from OpenCode"
+                            Error = "Task not found"
                         },
-                        statusCode: 502);
-                }
-            });
+                        statusCode: 404);
+
+                return Results.Json(
+                    new LastAssistantMessageResponseDto
+                    {
+                        SessionId = result.SessionId,
+                        Message = result.Message,
+                        CreatedAt = result.CreatedAt
+                    });
+            })
+            .WithApiExceptionHandling(
+                "Error getting task last assistant message",
+                _ => ApiErrorResult.BadGateway("Failed to load task messages from OpenCode"));
 
         app.MapPost(
             "/api/sessions/{sessionId}/archive",
-            async (string sessionId) =>
+            async (string sessionId, ISessionsUseCases useCases) =>
             {
-                try
-                {
-                    var result = await useCases.ArchiveSessionAsync(sessionId);
+                var result = await useCases.ArchiveSessionAsync(sessionId);
 
-                    if (!result.Found)
-                        return Results.Json(
-                            new ErrorResponseDto
-                            {
-                                Error = "Session not found"
-                            },
-                            statusCode: 404);
-
-                    return Results.Json(
-                        new ArchiveSessionResponseDto
-                        {
-                            Ok = true,
-                            ArchivedAt = result.ArchivedAt
-                        });
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine($"Error archiving session: {error}");
-
+                if (!result.Found)
                     return Results.Json(
                         new ErrorResponseDto
                         {
-                            Error = "Failed to archive session in OpenCode"
+                            Error = "Session not found"
                         },
-                        statusCode: 502);
-                }
-            });
+                        statusCode: 404);
+
+                return Results.Json(
+                    new ArchiveSessionResponseDto
+                    {
+                        Ok = true,
+                        ArchivedAt = result.ArchivedAt
+                    });
+            })
+            .WithApiExceptionHandling(
+                "Error archiving session",
+                _ => ApiErrorResult.BadGateway("Failed to archive session in OpenCode"));
 
         return app;
     }

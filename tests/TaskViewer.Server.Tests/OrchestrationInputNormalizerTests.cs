@@ -29,7 +29,7 @@ public sealed class OrchestrationInputNormalizerTests
         var sut = new OrchestrationInputNormalizer();
 
         var defaults = sut.ParseIssuePaging(null, null);
-        var clamped = sut.ParseIssuePaging("-1", "9999");
+        var clamped = sut.ParseIssuePaging(-1, 9999);
 
         Assert.Equal(1, defaults.PageIndex);
         Assert.Equal(100, defaults.PageSize);

@@ -27,7 +27,6 @@ public sealed class SonarOrchestratorOptions
     public IQueueDispatchService? QueueDispatchService { get; init; }
     public IDispatchFailurePolicy? DispatchFailurePolicy { get; init; }
     public IQueueWorkerCoordinator? QueueWorkerCoordinator { get; init; }
-    public IOrchestratorRuntime? OrchestratorRuntime { get; init; }
     public IWorkloadBackpressurePolicy? WorkloadBackpressurePolicy { get; init; }
     public IOrchestrationStatusService? OrchestrationStatusService { get; init; }
     public IWorkloadBackpressureStateService? WorkloadBackpressureStateService { get; init; }

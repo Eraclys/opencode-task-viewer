@@ -212,7 +212,7 @@ public sealed class SonarOrchestratorQueueTests
 
         while (DateTimeOffset.UtcNow < end)
         {
-            var items = await orchestrator.ListQueue(expectedState, "10");
+            var items = await orchestrator.ListQueue(expectedState, 10);
 
             if (items.Count > 0)
                 return items[0];

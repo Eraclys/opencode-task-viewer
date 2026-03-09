@@ -6,31 +6,31 @@ public interface IOrchestrationUseCases
 {
     OrchestrationConfigDto GetPublicConfig();
     Task<List<MappingRecord>> ListMappingsAsync();
-    Task<bool> DeleteMappingAsync(string mappingId);
+    Task<bool> DeleteMappingAsync(int mappingId);
     Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request);
-    Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType);
+    Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType);
     Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request);
 
     Task<IssuesListDto> ListIssuesAsync(
-        string mappingId,
+        int mappingId,
         string? issueType,
         string? severity,
         string? issueStatus,
-        string? page,
-        string? pageSize,
+        int? page,
+        int? pageSize,
         string? ruleKeys);
 
-    Task<RulesListDto> ListRulesAsync(string mappingId, string? issueType, string? issueStatus);
+    Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus);
     Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request);
     Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request);
-    Task<QueueOverviewDto> GetQueueAsync(string? states, string? limit);
-    Task<bool> CancelQueueItemAsync(string queueId);
+    Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit);
+    Task<bool> CancelQueueItemAsync(int queueId);
     Task<int> RetryFailedAsync();
     Task<int> ClearQueuedAsync();
-    Task<bool> ApproveTaskAsync(string taskId);
-    Task<bool> RejectTaskAsync(string taskId, string? reason);
-    Task<bool> RequeueTaskAsync(string taskId, string? reason);
-    Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason);
-    Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId);
+    Task<bool> ApproveTaskAsync(int taskId);
+    Task<bool> RejectTaskAsync(int taskId, string? reason);
+    Task<bool> RequeueTaskAsync(int taskId, string? reason);
+    Task<bool> RepromptTaskAsync(int taskId, string instructions, string? reason);
+    Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(int taskId);
     Task ResetStateAsync();
 }

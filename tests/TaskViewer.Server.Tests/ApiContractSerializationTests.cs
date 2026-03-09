@@ -37,7 +37,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeSessionsUseCases();
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapSessionsEndpoints(useCases));
+            endpoints => endpoints.MapSessionsEndpoints(),
+            services => services.AddSingleton<ISessionsUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/sessions/missing-session");
@@ -61,7 +62,8 @@ public sealed class ApiContractSerializationTests
                 DateTimeOffset.Parse("2026-01-01T00:00:00+00:00")));
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapSessionsEndpoints(useCases));
+            endpoints => endpoints.MapSessionsEndpoints(),
+            services => services.AddSingleton<ISessionsUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/sessions/sess-1/last-assistant-message");
@@ -86,7 +88,8 @@ public sealed class ApiContractSerializationTests
                 DateTimeOffset.Parse("2026-01-01T00:00:00+00:00")));
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapSessionsEndpoints(useCases));
+            endpoints => endpoints.MapSessionsEndpoints(),
+            services => services.AddSingleton<ISessionsUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/tasks/board/queue-12/last-assistant-message");
@@ -106,7 +109,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeOrchestrationUseCases(retried: 3);
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/queue/retry-failed", null);
@@ -124,7 +128,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeOrchestrationUseCases(cancelQueueItemResult: false);
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/queue/123/cancel", null);
@@ -140,7 +145,8 @@ public sealed class ApiContractSerializationTests
     public async Task OrchestrationConfig_UsesStableFieldNames()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/config");
@@ -161,7 +167,8 @@ public sealed class ApiContractSerializationTests
     public async Task RulesMissingMappingId_UsesStableErrorFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/rules");
@@ -177,7 +184,8 @@ public sealed class ApiContractSerializationTests
     public async Task QueueClear_UsesStableClearedFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases(cleared: 7)));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(cleared: 7)));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/queue/clear", null);
@@ -193,7 +201,8 @@ public sealed class ApiContractSerializationTests
     public async Task TaskApproveEndpoint_UsesStableOkFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/tasks/12/approve", null);
@@ -209,7 +218,8 @@ public sealed class ApiContractSerializationTests
     public async Task TaskRejectEndpoint_UsesStableOkFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/tasks/12/reject", JsonContent("{\"reason\":\"bad patch\"}"));
@@ -227,7 +237,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeOrchestrationUseCases();
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
 
@@ -250,7 +261,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeOrchestrationUseCases();
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync(
@@ -272,7 +284,8 @@ public sealed class ApiContractSerializationTests
         var useCases = new FakeOrchestrationUseCases();
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.DeleteAsync("/api/orch/mappings/12");
@@ -289,7 +302,8 @@ public sealed class ApiContractSerializationTests
     public async Task TaskRequeueEndpoint_UsesStableOkFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync("/api/orch/tasks/12/requeue", JsonContent("{\"reason\":\"retry with edited prompt\"}"));
@@ -305,7 +319,8 @@ public sealed class ApiContractSerializationTests
     public async Task TaskReviewHistoryEndpoint_UsesStableItemsFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/tasks/12/review-history");
@@ -341,7 +356,8 @@ public sealed class ApiContractSerializationTests
             });
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/rules?mappingId=1&issueType=CODE_SMELL&issueStatus=OPEN");
@@ -390,7 +406,8 @@ public sealed class ApiContractSerializationTests
             });
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/issues?mappingId=1&page=2&pageSize=25");
@@ -429,7 +446,8 @@ public sealed class ApiContractSerializationTests
             });
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync(
@@ -476,7 +494,8 @@ public sealed class ApiContractSerializationTests
             });
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync(
@@ -528,7 +547,8 @@ public sealed class ApiContractSerializationTests
             });
 
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(useCases));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(useCases));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/queue?states=queued,dispatching&limit=25");
@@ -548,7 +568,8 @@ public sealed class ApiContractSerializationTests
     public async Task IssuesMissingMappingId_UsesStableErrorFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases()));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases()));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/issues");
@@ -564,8 +585,8 @@ public sealed class ApiContractSerializationTests
     public async Task IssuesMappingNotFound_UsesStableErrorFieldNameAndStatus400()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(
-                new FakeOrchestrationUseCases(listIssuesException: new InvalidOperationException("Mapping not found"))));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(listIssuesException: new InvalidOperationException("Mapping not found"))));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/issues?mappingId=1");
@@ -581,8 +602,8 @@ public sealed class ApiContractSerializationTests
     public async Task EnqueueIssuesValidationFailure_UsesStableErrorFieldNameAndStatus400()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(
-                new FakeOrchestrationUseCases(enqueueIssuesException: new InvalidOperationException("No issues provided"))));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(enqueueIssuesException: new InvalidOperationException("No issues provided"))));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync(
@@ -605,8 +626,8 @@ public sealed class ApiContractSerializationTests
     public async Task EnqueueAllValidationFailure_UsesStableErrorFieldNameAndStatus400()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(
-                new FakeOrchestrationUseCases(enqueueAllException: new InvalidOperationException("mappingId is required"))));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(enqueueAllException: new InvalidOperationException("mappingId is required"))));
 
         using var client = host.GetTestClient();
         using var response = await client.PostAsync(
@@ -628,8 +649,8 @@ public sealed class ApiContractSerializationTests
     public async Task QueueLoadFailure_UsesStableErrorFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(
-                new FakeOrchestrationUseCases(queueException: new InvalidOperationException("queue boom"))));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(queueException: new InvalidOperationException("queue boom"))));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/queue");
@@ -645,7 +666,8 @@ public sealed class ApiContractSerializationTests
     public async Task ListMappingsFailure_UsesStableErrorFieldName()
     {
         using var host = await CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(new FakeOrchestrationUseCases(listMappingsException: new InvalidOperationException("boom"))));
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton<IOrchestrationUseCases>(new FakeOrchestrationUseCases(listMappingsException: new InvalidOperationException("boom"))));
 
         using var client = host.GetTestClient();
         using var response = await client.GetAsync("/api/orch/mappings");
@@ -679,6 +701,16 @@ public sealed class ApiContractSerializationTests
 
         return host;
     }
+
+    static Task<IHost> CreateSessionsHost(ISessionsUseCases useCases)
+        => CreateHost(
+            endpoints => endpoints.MapSessionsEndpoints(),
+            services => services.AddSingleton(useCases));
+
+    static Task<IHost> CreateOrchestrationHost(IOrchestrationUseCases useCases)
+        => CreateHost(
+            endpoints => endpoints.MapOrchestrationEndpoints(),
+            services => services.AddSingleton(useCases));
 
     static StringContent JsonContent(string json)
         => new(json, System.Text.Encoding.UTF8, "application/json");
@@ -811,15 +843,15 @@ public sealed class ApiContractSerializationTests
             => listMappingsException is null
                 ? Task.FromResult(new List<MappingRecord>())
                 : Task.FromException<List<MappingRecord>>(listMappingsException);
-        public Task<bool> DeleteMappingAsync(string mappingId)
+        public Task<bool> DeleteMappingAsync(int mappingId)
         {
-            LastDeletedMappingId = mappingId;
+            LastDeletedMappingId = mappingId.ToString();
             return Task.FromResult(true);
         }
         public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => throw new NotSupportedException();
-        public Task<InstructionProfileDto> GetInstructionProfileAsync(string? mappingId, string? issueType) => throw new NotSupportedException();
+        public Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType) => throw new NotSupportedException();
         public Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request) => throw new NotSupportedException();
-        public Task<IssuesListDto> ListIssuesAsync(string mappingId, string? issueType, string? severity, string? issueStatus, string? page, string? pageSize, string? ruleKeys)
+        public Task<IssuesListDto> ListIssuesAsync(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys)
             => listIssuesException is null
                 ? Task.FromResult(
                     issuesResult ??
@@ -836,7 +868,7 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<IssuesListDto>(listIssuesException);
 
-        public Task<RulesListDto> ListRulesAsync(string mappingId, string? issueType, string? issueStatus)
+        public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus)
             => Task.FromResult(
                 rulesResult ??
                 new RulesListDto
@@ -875,37 +907,37 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<EnqueueAllResultDto>(enqueueAllException);
 
-        public Task<QueueOverviewDto> GetQueueAsync(string? states, string? limit)
+        public Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit)
             => queueException is null
                 ? Task.FromResult(queueResult ?? CreateQueueOverviewDto())
                 : Task.FromException<QueueOverviewDto>(queueException);
-        public Task<bool> CancelQueueItemAsync(string queueId) => Task.FromResult(cancelQueueItemResult);
+        public Task<bool> CancelQueueItemAsync(int queueId) => Task.FromResult(cancelQueueItemResult);
         public Task<int> RetryFailedAsync() => Task.FromResult(retried);
         public Task<int> ClearQueuedAsync() => Task.FromResult(cleared);
-        public Task<bool> ApproveTaskAsync(string taskId)
+        public Task<bool> ApproveTaskAsync(int taskId)
         {
             return Task.FromResult(true);
         }
 
-        public Task<bool> RejectTaskAsync(string taskId, string? reason)
+        public Task<bool> RejectTaskAsync(int taskId, string? reason)
         {
             LastRejectedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RequeueTaskAsync(string taskId, string? reason)
+        public Task<bool> RequeueTaskAsync(int taskId, string? reason)
         {
             LastRequeuedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RepromptTaskAsync(string taskId, string instructions, string? reason)
+        public Task<bool> RepromptTaskAsync(int taskId, string instructions, string? reason)
         {
             LastRepromptedInstructions = instructions;
             LastRepromptedReason = reason;
             return Task.FromResult(true);
         }
-        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(string taskId)
+        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(int taskId)
             => Task.FromResult<IReadOnlyList<TaskReviewHistoryDto>>(
             [
                 new TaskReviewHistoryDto

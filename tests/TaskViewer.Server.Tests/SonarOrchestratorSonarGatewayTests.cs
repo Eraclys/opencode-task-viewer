@@ -47,8 +47,8 @@ public sealed class SonarOrchestratorSonarGatewayTests
             "CODE_SMELL",
             null,
             null,
-            "1",
-            "20",
+            1,
+            20,
             null);
 
         Assert.Single(result.Issues);
