@@ -1,23 +1,27 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace TaskViewer.OpenCode;
 
 public static class OpenCodeStatusParsers
 {
-    public static Dictionary<string, string> ParseWorkingStatusMap(JsonNode? data)
+    static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static Dictionary<string, string> ParseWorkingStatusMap(string? data)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        if (data is null || data is JsonValue || data is JsonArray)
+        if (string.IsNullOrWhiteSpace(data))
             return map;
 
         Dictionary<string, SessionStatusPayload>? parsed;
 
         try
         {
-            parsed = data.Deserialize<Dictionary<string, SessionStatusPayload>>();
+            parsed = JsonSerializer.Deserialize<Dictionary<string, SessionStatusPayload>>(data, JsonOptions);
         }
         catch (JsonException)
         {

@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using Microsoft.Playwright;
 using System.Text.RegularExpressions;
 using static Microsoft.Playwright.Assertions;
@@ -142,8 +142,8 @@ public sealed class OrchestrationTests
             await Expect(page.GetByTestId("orch-issues-status")).ToContainTextAsync("Cleared ");
 
             var queueData = await GetQueueResponseAsync();
-            Assert.Equal(0, AsInt(queueData["stats"]?["queued"]));
-            Assert.True(AsInt(queueData["stats"]?["cancelled"]) > 0);
+            Assert.Equal(0, AsInt(GetNestedProperty(queueData, "stats", "queued")));
+            Assert.True(AsInt(GetNestedProperty(queueData, "stats", "cancelled")) > 0);
         });
     }
 
@@ -179,10 +179,10 @@ public sealed class OrchestrationTests
 
             var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
-            var queueId = AsInt(queuedItem["id"]);
+            var queueId = AsInt(GetProperty(queuedItem.Value, "id"));
 
             var failedItem = await WaitForQueueItemStateByIdAsync(queueId, "failed", TimeSpan.FromSeconds(20));
-            Assert.Contains("OpenCode request failed", failedItem["lastError"]?.ToString());
+            Assert.Contains("OpenCode request failed", GetString(failedItem, "lastError"));
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/queue/retry-failed",
@@ -191,8 +191,8 @@ public sealed class OrchestrationTests
                 });
 
             var sessionCreated = await WaitForQueueItemStateByIdAsync(queueId, "running", TimeSpan.FromSeconds(20));
-            Assert.False(string.IsNullOrWhiteSpace(sessionCreated["sessionId"]?.ToString()));
-            Assert.Contains("/session/", sessionCreated["openCodeUrl"]?.ToString());
+            Assert.False(string.IsNullOrWhiteSpace(GetString(sessionCreated, "sessionId")));
+            Assert.Contains("/session/", GetString(sessionCreated, "openCodeUrl"));
 
             await page.ReloadAsync();
             await Expect(page.GetByTestId("column-in-progress")).ToContainTextAsync("javascript:S1126");
@@ -231,7 +231,7 @@ public sealed class OrchestrationTests
 
             var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
-            var queueId = AsInt(queuedItem["id"]);
+            var queueId = AsInt(GetProperty(queuedItem.Value, "id"));
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/queue/{queueId}/cancel",
@@ -240,18 +240,18 @@ public sealed class OrchestrationTests
                 });
 
             var cancelled = await WaitForQueueItemStateByIdAsync(queueId, "cancelled", TimeSpan.FromSeconds(20));
-            Assert.False(string.IsNullOrWhiteSpace(cancelled["cancelledAt"]?.ToString()));
+            Assert.False(string.IsNullOrWhiteSpace(GetString(cancelled, "cancelledAt")));
 
             await Task.Delay(3200);
             var latest = await GetQueueItemByIdAsync(queueId);
             Assert.NotNull(latest);
-            Assert.Equal("cancelled", latest["state"]?.ToString());
+            Assert.Equal("cancelled", GetString(latest.Value, "state"));
 
             var sessions = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/tasks/board?limit=all");
-            var array = sessions as JsonArray ?? [];
-            var queueCard = array.FirstOrDefault(item => item?["id"]?.ToString() == $"queue-{queueId}");
-            Assert.NotNull(queueCard);
-            Assert.Equal("cancelled", queueCard["status"]?.ToString());
+            var array = sessions.ValueKind == JsonValueKind.Array ? sessions.EnumerateArray().ToList() : [];
+            var queueCard = array.FirstOrDefault(item => GetString(item, "id") == $"queue-{queueId}");
+            Assert.True(queueCard.ValueKind != JsonValueKind.Undefined && queueCard.ValueKind != JsonValueKind.Null);
+            Assert.Equal("cancelled", GetString(queueCard, "status"));
         });
     }
 
@@ -284,7 +284,7 @@ public sealed class OrchestrationTests
 
             var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
             Assert.NotNull(awaitingReview);
-            var taskId = AsInt(awaitingReview["id"]);
+            var taskId = AsInt(GetProperty(awaitingReview.Value, "id"));
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",
@@ -294,12 +294,12 @@ public sealed class OrchestrationTests
                 });
 
             var rejected = await WaitForQueueItemStateByIdAsync(taskId, "rejected", TimeSpan.FromSeconds(10));
-            Assert.Equal("rejected", rejected["state"]?.ToString());
+            Assert.Equal("rejected", GetString(rejected, "state"));
 
             var historyAfterReject = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
-            var rejectItems = historyAfterReject["items"] as JsonArray ?? [];
+            var rejectItems = GetArray(historyAfterReject, "items");
             Assert.NotEmpty(rejectItems);
-            Assert.Equal("rejected", rejectItems[0]?["action"]?.ToString());
+            Assert.Equal("rejected", GetString(rejectItems[0], "action"));
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/requeue",
@@ -309,12 +309,12 @@ public sealed class OrchestrationTests
                 });
 
             var requeued = await WaitForQueueItemStateByIdAsync(taskId, "queued", TimeSpan.FromSeconds(10));
-            Assert.Equal("queued", requeued["state"]?.ToString());
+            Assert.Equal("queued", GetString(requeued, "state"));
 
             var historyAfterRequeue = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
-            var requeueItems = historyAfterRequeue["items"] as JsonArray ?? [];
+            var requeueItems = GetArray(historyAfterRequeue, "items");
             Assert.NotEmpty(requeueItems);
-            Assert.Equal("requeue", requeueItems[0]?["action"]?.ToString());
+            Assert.Equal("requeue", GetString(requeueItems[0], "action"));
 
             await WaitForQueueItemStateByIdAsync(taskId, "awaiting_review", TimeSpan.FromSeconds(20));
 
@@ -325,7 +325,7 @@ public sealed class OrchestrationTests
                 });
 
             var queueData = await GetQueueResponseAsync();
-            Assert.True(AsInt(queueData["review"]?["rejected"]) >= 0);
+            Assert.True(AsInt(GetNestedProperty(queueData, "review", "rejected")) >= 0);
         });
     }
 
@@ -359,7 +359,7 @@ public sealed class OrchestrationTests
 
             var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
             Assert.NotNull(awaitingReview);
-            var taskId = AsInt(awaitingReview["id"]);
+            var taskId = AsInt(GetProperty(awaitingReview.Value, "id"));
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",
@@ -379,13 +379,13 @@ public sealed class OrchestrationTests
                 });
 
             var requeued = await WaitForQueueItemStateByIdAsync(taskId, "queued", TimeSpan.FromSeconds(10));
-            Assert.Equal("Retry with a smaller patch and only change the target file.", requeued["instructions"]?.ToString());
-            Assert.Equal("reprompt", requeued["lastReviewAction"]?.ToString());
+            Assert.Equal("Retry with a smaller patch and only change the target file.", GetString(requeued, "instructions"));
+            Assert.Equal("reprompt", GetString(requeued, "lastReviewAction"));
 
             var historyAfterReprompt = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/review-history");
-            var repromptItems = historyAfterReprompt["items"] as JsonArray ?? [];
+            var repromptItems = GetArray(historyAfterReprompt, "items");
             Assert.NotEmpty(repromptItems);
-            Assert.Equal("reprompt", repromptItems[0]?["action"]?.ToString());
+            Assert.Equal("reprompt", GetString(repromptItems[0], "action"));
         });
     }
 
@@ -438,29 +438,29 @@ public sealed class OrchestrationTests
         await Expect(page.Locator(".orch-issue-row")).ToHaveCountAsync(expectedCount);
     }
 
-    async Task<JsonNode> GetQueueResponseAsync() => await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
+    async Task<JsonElement> GetQueueResponseAsync() => await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=500");
 
-    async Task<JsonNode?> GetLatestQueueItemForRuleAsync(string rule)
+    async Task<JsonElement?> GetLatestQueueItemForRuleAsync(string rule)
     {
         var data = await GetQueueResponseAsync();
-        var items = data["items"] as JsonArray ?? [];
+        var items = GetArray(data, "items");
 
         var matches = items
-            .Where(item => string.Equals(item?["rule"]?.ToString(), rule, StringComparison.Ordinal))
-            .OrderByDescending(item => AsInt(item?["id"]))
+            .Where(item => string.Equals(GetString(item, "rule"), rule, StringComparison.Ordinal))
+            .OrderByDescending(item => AsInt(GetProperty(item, "id")))
             .ToList();
 
         return matches.FirstOrDefault();
     }
 
-    async Task<JsonNode?> GetQueueItemByIdAsync(int queueId)
+    async Task<JsonElement?> GetQueueItemByIdAsync(int queueId)
     {
         var data = await GetQueueResponseAsync();
-        var items = data["items"] as JsonArray ?? [];
-        return items.FirstOrDefault(item => AsInt(item?["id"]) == queueId);
+        var items = GetArray(data, "items");
+        return items.FirstOrDefault(item => AsInt(GetProperty(item, "id")) == queueId);
     }
 
-    async Task<JsonNode?> WaitForLatestTaskStateByRuleAsync(string rule, string expectedState, TimeSpan timeout)
+    async Task<JsonElement?> WaitForLatestTaskStateByRuleAsync(string rule, string expectedState, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
 
@@ -469,7 +469,7 @@ public sealed class OrchestrationTests
             var candidate = await GetLatestQueueItemForRuleAsync(rule);
 
             if (candidate is not null &&
-                string.Equals(candidate["state"]?.ToString(), expectedState, StringComparison.Ordinal))
+                string.Equals(GetString(candidate.Value, "state"), expectedState, StringComparison.Ordinal))
                 return candidate;
 
             await Task.Delay(250);
@@ -478,14 +478,14 @@ public sealed class OrchestrationTests
         return null;
     }
 
-    async Task<JsonNode> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)
+    async Task<JsonElement> WaitForQueuedCountAtLeastAsync(int minQueued, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
             var data = await GetQueueResponseAsync();
-            var queued = AsInt(data["stats"]?["queued"]);
+            var queued = AsInt(GetNestedProperty(data, "stats", "queued"));
 
             if (queued >= minQueued)
                 return data;
@@ -496,18 +496,19 @@ public sealed class OrchestrationTests
         throw new TimeoutException($"Timed out waiting for queued count >= {minQueued}");
     }
 
-    async Task<JsonNode> WaitForQueueItemStateByIdAsync(int queueId, string expectedState, TimeSpan timeout)
+    async Task<JsonElement> WaitForQueueItemStateByIdAsync(int queueId, string expectedState, TimeSpan timeout)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
             var response = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/orch/queue?limit=200");
-            var items = response["items"] as JsonArray ?? [];
-            var match = items.FirstOrDefault(item => AsInt(item?["id"]) == queueId);
+            var items = GetArray(response, "items");
+            var match = items.FirstOrDefault(item => AsInt(GetProperty(item, "id")) == queueId);
 
-            if (match is not null &&
-                string.Equals(match["state"]?.ToString(), expectedState, StringComparison.Ordinal))
+            if (match.ValueKind != JsonValueKind.Undefined &&
+                match.ValueKind != JsonValueKind.Null &&
+                string.Equals(GetString(match, "state"), expectedState, StringComparison.Ordinal))
                 return match;
 
             await Task.Delay(250);
@@ -529,8 +530,8 @@ public sealed class OrchestrationTests
                 });
 
             var data = await GetQueueResponseAsync();
-            var queued = AsInt(data["stats"]?["queued"]);
-            var dispatching = AsInt(data["stats"]?["dispatching"]);
+            var queued = AsInt(GetNestedProperty(data, "stats", "queued"));
+            var dispatching = AsInt(GetNestedProperty(data, "stats", "dispatching"));
 
             if (queued == 0 &&
                 dispatching == 0)
@@ -542,16 +543,37 @@ public sealed class OrchestrationTests
         throw new TimeoutException("Timed out waiting for queue to become idle");
     }
 
-    static int AsInt(JsonNode? node)
+    static int AsInt(JsonElement? node)
     {
-        if (node is null)
+        if (!node.HasValue)
             return 0;
 
-        if (int.TryParse(node.ToString(), out var parsed))
+        var value = node.Value;
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            return number;
+
+        if (int.TryParse(value.ToString(), out var parsed))
             return parsed;
 
         return 0;
     }
+
+    static List<JsonElement> GetArray(JsonElement parent, string propertyName)
+        => parent.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.EnumerateArray().ToList()
+            : [];
+
+    static JsonElement? GetProperty(JsonElement parent, string propertyName)
+        => parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(propertyName, out var property) ? property : null;
+
+    static JsonElement? GetNestedProperty(JsonElement parent, string first, string second)
+        => parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(first, out var firstProperty) && firstProperty.ValueKind == JsonValueKind.Object && firstProperty.TryGetProperty(second, out var secondProperty)
+            ? secondProperty
+            : null;
+
+    static string? GetString(JsonElement parent, string propertyName)
+        => parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(propertyName, out var property) ? property.ToString() : null;
 
     static async Task WithPage(Func<IPage, Task> test)
     {

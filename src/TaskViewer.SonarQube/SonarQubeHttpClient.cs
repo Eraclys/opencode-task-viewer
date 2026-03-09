@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json.Nodes;
 using System.Web;
 
 namespace TaskViewer.SonarQube;
@@ -19,13 +18,13 @@ public sealed class SonarQubeHttpClient
 
     public async Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
     {
-        var data = await FetchAsync("/api/issues/search", BuildSearchIssuesQueryParams(query), cancellationToken);
-        return SonarResponseParsers.ParseIssuesSearchResponse(data, query.PageIndex, query.PageSize);
+        var body = await FetchAsync("/api/issues/search", BuildSearchIssuesQueryParams(query), cancellationToken);
+        return SonarResponseParsers.ParseIssuesSearchResponse(body, query.PageIndex, query.PageSize);
     }
 
     public async Task<SonarRuleDetailsResponse> GetRuleAsync(string ruleKey, CancellationToken cancellationToken = default)
     {
-        var data = await FetchAsync(
+        var body = await FetchAsync(
             "/api/rules/show",
             new Dictionary<string, string?>
             {
@@ -33,10 +32,10 @@ public sealed class SonarQubeHttpClient
             },
             cancellationToken);
 
-        return SonarResponseParsers.ParseRuleDetails(data);
+        return SonarResponseParsers.ParseRuleDetails(body);
     }
 
-    async Task<JsonNode?> FetchAsync(string endpointPath, Dictionary<string, string?> query, CancellationToken cancellationToken)
+    async Task<string?> FetchAsync(string endpointPath, Dictionary<string, string?> query, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.Url) ||
             string.IsNullOrWhiteSpace(_options.Token))
@@ -67,7 +66,7 @@ public sealed class SonarQubeHttpClient
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"SonarQube request failed: {(int)response.StatusCode} {response.ReasonPhrase}");
 
-        return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
+        return string.IsNullOrWhiteSpace(body) ? null : body;
     }
 
     static Dictionary<string, string?> BuildSearchIssuesQueryParams(SearchIssuesQuery query)

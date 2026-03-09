@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;
 
@@ -15,7 +15,7 @@ public sealed class OpenCodeEventHandler
         _sseHub = sseHub;
     }
 
-    public async Task HandleAsync(JsonNode evt)
+    public async Task HandleAsync(OpenCodeSseEvent evt)
     {
         var parsed = OpenCodeEventParser.Parse(evt);
 

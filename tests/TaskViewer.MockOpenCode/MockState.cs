@@ -1,5 +1,3 @@
-﻿using System.Text.Json.Nodes;
-
 namespace TaskViewer.MockOpenCode;
 
 sealed class MockState
@@ -10,9 +8,9 @@ sealed class MockState
     public int PromptDelayMs { get; set; }
     public List<ProjectRecord> Projects { get; set; } = [];
     public List<SessionRecord> Sessions { get; set; } = [];
-    public Dictionary<string, JsonArray> TodosBySessionId { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, List<TodoRecord>> TodosBySessionId { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<MessageRecord>> MessagesBySessionId { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, Dictionary<string, JsonObject>> StatusByDirectory { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, Dictionary<string, StatusRecord>> StatusByDirectory { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static MockState BuildDefault()
     {
@@ -152,12 +150,12 @@ sealed class MockState
                     }
                 }
             ],
-            TodosBySessionId = new Dictionary<string, JsonArray>(StringComparer.OrdinalIgnoreCase)
+            TodosBySessionId = new Dictionary<string, List<TodoRecord>>(StringComparer.OrdinalIgnoreCase)
             {
-                ["sess-busy"] = new(),
-                ["sess-retry"] = new(),
-                ["sess-recent"] = new(),
-                ["sess-stale"] = new()
+                ["sess-busy"] = [],
+                ["sess-retry"] = [],
+                ["sess-recent"] = [],
+                ["sess-stale"] = []
             },
             MessagesBySessionId = new Dictionary<string, List<MessageRecord>>(StringComparer.OrdinalIgnoreCase)
             {
@@ -279,21 +277,15 @@ sealed class MockState
                     }
                 ]
             },
-            StatusByDirectory = new Dictionary<string, Dictionary<string, JsonObject>>(StringComparer.OrdinalIgnoreCase)
+            StatusByDirectory = new Dictionary<string, Dictionary<string, StatusRecord>>(StringComparer.OrdinalIgnoreCase)
             {
                 [alphaDir] = new(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["sess-retry"] = new JsonObject
-                    {
-                        ["type"] = "retry"
-                    }
+                    ["sess-retry"] = new StatusRecord { Type = "retry" }
                 },
                 [betaDir] = new(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["sess-busy"] = new JsonObject
-                    {
-                        ["type"] = "busy"
-                    }
+                    ["sess-busy"] = new StatusRecord { Type = "busy" }
                 },
                 [gammaDir] = new(StringComparer.OrdinalIgnoreCase)
             }

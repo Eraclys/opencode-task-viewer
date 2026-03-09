@@ -1,5 +1,5 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 
@@ -9,10 +9,10 @@ public sealed class OpenCodeEventParserTests
     public void Parse_ReturnsNull_WhenPayloadTypeMissing()
     {
         var result = OpenCodeEventParser.Parse(
-            new JsonObject
+            new OpenCodeSseEvent
             {
-                ["directory"] = "C:/Work",
-                ["payload"] = new JsonObject()
+                Directory = "C:/Work",
+                Payload = new OpenCodeSsePayload()
             });
 
         Assert.Null(result);
@@ -22,15 +22,15 @@ public sealed class OpenCodeEventParserTests
     public void Parse_NormalizesDirectory_AndReadsSessionIdVariants()
     {
         var result = OpenCodeEventParser.Parse(
-            new JsonObject
+            new OpenCodeSseEvent
             {
-                ["directory"] = "C:\\Work\\Repo\\",
-                ["payload"] = new JsonObject
+                Directory = "C:\\Work\\Repo\\",
+                Payload = new OpenCodeSsePayload
                 {
-                    ["type"] = "todo.updated",
-                    ["properties"] = new JsonObject
+                    Type = "todo.updated",
+                    Properties = new OpenCodeSseProperties
                     {
-                        ["sessionID"] = "sess-legacy"
+                        LegacySessionId = "sess-legacy"
                     }
                 }
             });
@@ -45,17 +45,17 @@ public sealed class OpenCodeEventParserTests
     public void Parse_ReadsStatusTypeFromNestedStatusObject()
     {
         var result = OpenCodeEventParser.Parse(
-            new JsonObject
+            new OpenCodeSseEvent
             {
-                ["payload"] = new JsonObject
+                Payload = new OpenCodeSsePayload
                 {
-                    ["type"] = "session.status",
-                    ["properties"] = new JsonObject
+                    Type = "session.status",
+                    Properties = new OpenCodeSseProperties
                     {
-                        ["sessionId"] = "sess-1",
-                        ["status"] = new JsonObject
+                        SessionId = "sess-1",
+                        Status = new OpenCodeSseStatus
                         {
-                            ["type"] = "busy"
+                            Type = "busy"
                         }
                     }
                 }
@@ -70,15 +70,15 @@ public sealed class OpenCodeEventParserTests
     public void Parse_FallsBackToTopLevelTypeInProperties()
     {
         var result = OpenCodeEventParser.Parse(
-            new JsonObject
+            new OpenCodeSseEvent
             {
-                ["payload"] = new JsonObject
+                Payload = new OpenCodeSsePayload
                 {
-                    ["type"] = "session.status",
-                    ["properties"] = new JsonObject
+                    Type = "session.status",
+                    Properties = new OpenCodeSseProperties
                     {
-                        ["sessionId"] = "sess-2",
-                        ["type"] = "idle"
+                        SessionId = "sess-2",
+                        Type = "idle"
                     }
                 }
             });

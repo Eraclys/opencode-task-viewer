@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using TaskViewer.MockOpenCode;
 
 var host = Environment.GetEnvironmentVariable("HOST") ?? "127.0.0.1";
@@ -45,11 +44,10 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/setTodos",
-    async (HttpRequest request) =>
+    (SetTodosRequest body) =>
     {
-        var body = await ReadBody(request);
-        var sessionId = body?["sessionId"]?.GetValue<string>();
-        var todos = body?["todos"] as JsonArray;
+        var sessionId = body.SessionId;
+        var todos = body.Todos;
 
         if (string.IsNullOrWhiteSpace(sessionId) ||
             todos is null)
@@ -75,12 +73,11 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/setStatus",
-    async (HttpRequest request) =>
+    (SetStatusRequest body) =>
     {
-        var body = await ReadBody(request);
-        var directory = NormalizeDir(body?["directory"]?.GetValue<string>());
-        var sessionId = body?["sessionId"]?.GetValue<string>();
-        var type = body?["type"]?.GetValue<string>();
+        var directory = NormalizeDir(body.Directory);
+        var sessionId = body.SessionId;
+        var type = body.Type;
 
         if (string.IsNullOrWhiteSpace(directory) ||
             string.IsNullOrWhiteSpace(sessionId) ||
@@ -96,13 +93,13 @@ app.MapPost(
         {
             if (!state.StatusByDirectory.TryGetValue(directory, out var statuses))
             {
-                statuses = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+                statuses = new Dictionary<string, StatusRecord>(StringComparer.OrdinalIgnoreCase);
                 state.StatusByDirectory[directory] = statuses;
             }
 
-            statuses[sessionId] = new JsonObject
+            statuses[sessionId] = new StatusRecord
             {
-                ["type"] = type
+                Type = type
             };
         }
 
@@ -115,12 +112,11 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/emit",
-    async (HttpRequest request) =>
+    async (EmitRequest body) =>
     {
-        var body = await ReadBody(request);
-        var directory = body?["directory"]?.GetValue<string>();
-        var type = body?["type"]?.GetValue<string>();
-        var properties = body?["properties"] as JsonObject ?? new JsonObject();
+        var directory = body.Directory;
+        var type = body.Type;
+        var properties = CloneJsonElement(body.Properties);
 
         if (string.IsNullOrWhiteSpace(directory) ||
             string.IsNullOrWhiteSpace(type))
@@ -132,13 +128,13 @@ app.MapPost(
                 statusCode: 400);
 
         await Broadcast(
-            new JsonObject
+            new
             {
-                ["directory"] = directory,
-                ["payload"] = new JsonObject
+                directory,
+                payload = new
                 {
-                    ["type"] = type,
-                    ["properties"] = properties.DeepClone()
+                    type,
+                    properties
                 }
             });
 
@@ -151,15 +147,13 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/setFailures",
-    async (HttpRequest request) =>
+    (SetFailuresRequest body) =>
     {
-        var body = await ReadBody(request);
-
         lock (gate)
         {
-            state.FailSessionCreateCount = ParsePositiveInt(body?["sessionCreateCount"], 0);
-            state.FailPromptAsyncCount = ParsePositiveInt(body?["promptAsyncCount"], 0);
-            state.PromptDelayMs = ParsePositiveInt(body?["promptDelayMs"], 0);
+            state.FailSessionCreateCount = ParsePositiveInt(body.SessionCreateCount, 0);
+            state.FailPromptAsyncCount = ParsePositiveInt(body.PromptAsyncCount, 0);
+            state.PromptDelayMs = ParsePositiveInt(body.PromptDelayMs, 0);
         }
 
         return Results.Json(
@@ -174,15 +168,13 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/addSandboxSession",
-    async (HttpRequest request) =>
+    (AddSandboxSessionRequest body) =>
     {
-        var body = await ReadBody(request);
-
-        var projectWorktree = (body?["projectWorktree"]?.GetValue<string>() ?? body?["worktree"]?.GetValue<string>() ?? string.Empty).Trim();
-        var sandboxPath = (body?["sandboxPath"]?.GetValue<string>() ?? body?["sandbox"]?.GetValue<string>() ?? string.Empty).Trim();
-        var sessionId = (body?["sessionId"]?.GetValue<string>() ?? string.Empty).Trim();
-        var title = (body?["title"]?.GetValue<string>() ?? "Sandbox Session").Trim();
-        var directory = NormalizeDir(body?["directory"]?.GetValue<string>() ?? sandboxPath);
+        var projectWorktree = (body.ProjectWorktree ?? body.Worktree ?? string.Empty).Trim();
+        var sandboxPath = (body.SandboxPath ?? body.Sandbox ?? string.Empty).Trim();
+        var sessionId = (body.SessionId ?? string.Empty).Trim();
+        var title = (body.Title ?? "Sandbox Session").Trim();
+        var directory = NormalizeDir(body.Directory ?? sandboxPath);
 
         if (string.IsNullOrWhiteSpace(projectWorktree) ||
             string.IsNullOrWhiteSpace(sandboxPath) ||
@@ -264,8 +256,8 @@ app.MapPost(
                 ];
             }
 
-            state.TodosBySessionId.TryAdd(sessionId, new JsonArray());
-            state.StatusByDirectory.TryAdd(directory, new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase));
+            state.TodosBySessionId.TryAdd(sessionId, []);
+            state.StatusByDirectory.TryAdd(directory, new Dictionary<string, StatusRecord>(StringComparer.OrdinalIgnoreCase));
         }
 
         return Results.Json(
@@ -331,8 +323,8 @@ app.MapPost(
             }
         }
 
-        var body = await ReadBody(request);
-        var title = (body?["title"]?.GetValue<string>() ?? string.Empty).Trim();
+        var body = await request.ReadFromJsonAsync<CreateSessionRequest>();
+        var title = (body?.Title ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(title))
             title = "Untitled session";
@@ -376,10 +368,10 @@ app.MapPost(
 
             state.Sessions.Insert(0, created);
             state.MessagesBySessionId[sessionId] = [];
-            state.TodosBySessionId[sessionId] = new JsonArray();
+            state.TodosBySessionId[sessionId] = [];
 
             if (!state.StatusByDirectory.ContainsKey(directory))
-                state.StatusByDirectory[directory] = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+                state.StatusByDirectory[directory] = new Dictionary<string, StatusRecord>(StringComparer.OrdinalIgnoreCase);
 
             if (state.Projects.All(p => NormalizeDir(p.Worktree) != directory))
             {
@@ -398,15 +390,15 @@ app.MapPost(
         }
 
         _ = Broadcast(
-            new JsonObject
+            new
             {
-                ["directory"] = directory,
-                ["payload"] = new JsonObject
+                directory,
+                payload = new
                 {
-                    ["type"] = "session.created",
-                    ["properties"] = new JsonObject
+                    type = "session.created",
+                    properties = new
                     {
-                        ["sessionID"] = created.Id
+                        sessionID = created.Id
                     }
                 }
             });
@@ -465,7 +457,7 @@ app.MapGet(
         {
             state.StatusByDirectory.TryGetValue(directory, out var statuses);
 
-            return Results.Json(statuses ?? new Dictionary<string, JsonObject>());
+            return Results.Json(statuses ?? new Dictionary<string, StatusRecord>());
         }
     });
 
@@ -497,7 +489,7 @@ app.MapGet(
         {
             state.TodosBySessionId.TryGetValue(sessionId, out var todos);
 
-            return Results.Json(todos ?? new JsonArray());
+            return Results.Json(todos ?? new List<TodoRecord>());
         }
     });
 
@@ -505,7 +497,7 @@ app.MapPatch(
     "/session/{sessionId}",
     async (string sessionId, HttpRequest request) =>
     {
-        var body = await ReadBody(request);
+        var body = await request.ReadFromJsonAsync<ArchiveSessionRequest>();
 
         lock (gate)
         {
@@ -521,13 +513,11 @@ app.MapPatch(
 
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            if (body?["time"] is JsonObject timeObj &&
-                timeObj["archived"] is not null)
+            if (body?.Time?.Archived is not null)
             {
-                if (long.TryParse(timeObj["archived"]!.ToString(), out var archived))
-                    session.Time.Archived = archived;
+                session.Time.Archived = body.Time.Archived.Value;
             }
-            else if (body?["archived"]?.GetValue<bool>() == true)
+            else if (body?.Archived == true)
                 session.Time.Archived = nowMs;
 
             session.Time.Updated = NowIso();
@@ -592,18 +582,8 @@ app.MapPost(
         if (delayMs > 0)
             await Task.Delay(delayMs);
 
-        var body = await ReadBody(request);
-        var parts = body?["parts"] as JsonArray;
-        var text = string.Empty;
-
-        if (parts is not null)
-        {
-            var lines = parts
-                .Select(part => part?["text"]?.GetValue<string>())
-                .Where(value => !string.IsNullOrWhiteSpace(value));
-
-            text = string.Join("\n", lines);
-        }
+        var body = await request.ReadFromJsonAsync<PromptAsyncRequest>();
+        var text = string.Join("\n", body?.Parts?.Select(part => part.Text).Where(value => !string.IsNullOrWhiteSpace(value)) ?? []);
 
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var dir = NormalizeDir(session.Directory);
@@ -612,13 +592,13 @@ app.MapPost(
         {
             if (!state.StatusByDirectory.TryGetValue(dir, out var statuses))
             {
-                statuses = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+                statuses = new Dictionary<string, StatusRecord>(StringComparer.OrdinalIgnoreCase);
                 state.StatusByDirectory[dir] = statuses;
             }
 
-            statuses[sessionId] = new JsonObject
+            statuses[sessionId] = new StatusRecord
             {
-                ["type"] = "busy"
+                Type = "busy"
             };
 
             if (!state.MessagesBySessionId.TryGetValue(sessionId, out var messages))
@@ -646,18 +626,18 @@ app.MapPost(
         }
 
         await Broadcast(
-            new JsonObject
+            new
             {
-                ["directory"] = dir,
-                ["payload"] = new JsonObject
+                directory = dir,
+                payload = new
                 {
-                    ["type"] = "session.status",
-                    ["properties"] = new JsonObject
+                    type = "session.status",
+                    properties = new
                     {
-                        ["sessionID"] = sessionId,
-                        ["status"] = new JsonObject
+                        sessionID = sessionId,
+                        status = new
                         {
-                            ["type"] = "busy"
+                            type = "busy"
                         }
                     }
                 }
@@ -676,18 +656,18 @@ app.MapPost(
             }
 
             await Broadcast(
-                new JsonObject
+                new
                 {
-                    ["directory"] = dir,
-                    ["payload"] = new JsonObject
+                    directory = dir,
+                    payload = new
                     {
-                        ["type"] = "session.status",
-                        ["properties"] = new JsonObject
+                        type = "session.status",
+                        properties = new
                         {
-                            ["sessionID"] = sessionId,
-                            ["status"] = new JsonObject
+                            sessionID = sessionId,
+                            status = new
                             {
-                                ["type"] = "idle"
+                                type = "idle"
                             }
                         }
                     }
@@ -741,9 +721,9 @@ app.Lifetime.ApplicationStarted.Register(() =>
 
 await app.RunAsync();
 
-async Task Broadcast(JsonObject evt)
+async Task Broadcast<T>(T evt)
 {
-    var payload = $"data: {evt.ToJsonString()}\n\n";
+    var payload = $"data: {JsonSerializer.Serialize(evt)}\n\n";
     var bytes = Encoding.UTF8.GetBytes(payload);
     var dead = new List<Guid>();
 
@@ -784,16 +764,15 @@ static string NormalizeDir(string? value)
 
 static string NowIso() => DateTimeOffset.UtcNow.ToString("O");
 
-static int ParsePositiveInt(JsonNode? node, int fallback)
+static int ParsePositiveInt(int? value, int fallback)
 {
-    if (node is null)
+    if (!value.HasValue)
         return fallback;
 
-    if (!int.TryParse(node.ToString(), out var parsed) ||
-        parsed <= 0)
+    if (value.Value <= 0)
         return fallback;
 
-    return parsed;
+    return value.Value;
 }
 
 static void UpdateSessionTime(MockState state, string sessionId)
@@ -804,15 +783,78 @@ static void UpdateSessionTime(MockState state, string sessionId)
         session.Time.Updated = NowIso();
 }
 
-static async Task<JsonObject?> ReadBody(HttpRequest request)
+static JsonElement? CloneJsonElement(JsonElement? value)
 {
-    using var reader = new StreamReader(request.Body, Encoding.UTF8, leaveOpen: true);
-    var text = await reader.ReadToEndAsync();
-
-    if (string.IsNullOrWhiteSpace(text))
+    if (!value.HasValue)
         return null;
 
-    return JsonNode.Parse(text) as JsonObject;
+    using var document = JsonDocument.Parse(value.Value.GetRawText());
+    return document.RootElement.Clone();
+}
+
+sealed class SetTodosRequest
+{
+    public string? SessionId { get; init; }
+    public List<TodoRecord>? Todos { get; init; }
+}
+
+sealed class SetStatusRequest
+{
+    public string? Directory { get; init; }
+    public string? SessionId { get; init; }
+    public string? Type { get; init; }
+}
+
+sealed class EmitRequest
+{
+    public string? Directory { get; init; }
+    public string? Type { get; init; }
+    public JsonElement? Properties { get; init; }
+}
+
+sealed class SetFailuresRequest
+{
+    public int? SessionCreateCount { get; init; }
+    public int? PromptAsyncCount { get; init; }
+    public int? PromptDelayMs { get; init; }
+}
+
+sealed class AddSandboxSessionRequest
+{
+    public string? ProjectWorktree { get; init; }
+    public string? Worktree { get; init; }
+    public string? SandboxPath { get; init; }
+    public string? Sandbox { get; init; }
+    public string? SessionId { get; init; }
+    public string? Title { get; init; }
+    public string? Directory { get; init; }
+}
+
+sealed class CreateSessionRequest
+{
+    public string? Title { get; init; }
+}
+
+sealed class ArchiveSessionRequest
+{
+    public ArchiveTimeRequest? Time { get; init; }
+    public bool? Archived { get; init; }
+}
+
+sealed class ArchiveTimeRequest
+{
+    public long? Archived { get; init; }
+}
+
+sealed class PromptAsyncRequest
+{
+    public List<PromptPartRequest>? Parts { get; init; }
+}
+
+sealed class PromptPartRequest
+{
+    public string? Type { get; init; }
+    public string? Text { get; init; }
 }
 
 namespace TaskViewer.MockOpenCode

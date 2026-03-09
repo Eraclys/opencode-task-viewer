@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace TaskViewer.E2E.Tests;
 
@@ -207,7 +207,7 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
         throw new HttpRequestException($"Request failed: {(int)response.StatusCode} {response.ReasonPhrase} for {url}. Body: {body}");
     }
 
-    public async Task<JsonNode> PostJsonAndReadAsync(string url, object payload)
+    public async Task<JsonElement> PostJsonAndReadAsync(string url, object payload)
     {
         using var response = await Http.PostAsJsonAsync(url, payload);
         var body = await response.Content.ReadAsStringAsync();
@@ -215,16 +215,22 @@ public sealed class E2eEnvironmentFixture : IAsyncLifetime
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Request failed: {(int)response.StatusCode} {response.ReasonPhrase} for {url}. Body: {body}");
 
-        return JsonNode.Parse(body) ?? new JsonObject();
+        return ParseJson(body);
     }
 
-    public async Task<JsonNode> GetJsonAsync(string url)
+    public async Task<JsonElement> GetJsonAsync(string url)
     {
         var response = await Http.GetAsync(url);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync();
 
-        return JsonNode.Parse(body) ?? new JsonObject();
+        return ParseJson(body);
+    }
+
+    static JsonElement ParseJson(string body)
+    {
+        using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        return document.RootElement.Clone();
     }
 
     async Task<string> StartProjectAndWaitForMarker(string projectPath, string marker, IReadOnlyDictionary<string, string> env)

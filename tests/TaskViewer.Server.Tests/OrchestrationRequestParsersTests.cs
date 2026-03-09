@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
@@ -9,14 +8,15 @@ public sealed class OrchestrationRequestParsersTests
     public void ParseUpsertMapping_SupportsLegacyProjectKey_AndOptionalFields()
     {
         var request = OrchestrationRequestParsers.ParseUpsertMapping(
-            new JsonObject
+            """
             {
-                ["id"] = "7",
-                ["sonar_project_key"] = "alpha-key",
-                ["directory"] = "C:/Work/Alpha",
-                ["branch"] = "  ",
-                ["enabled"] = false
-            });
+              "id": "7",
+              "sonar_project_key": "alpha-key",
+              "directory": "C:/Work/Alpha",
+              "branch": "  ",
+              "enabled": false
+            }
+            """);
 
         Assert.Equal(7, request.Id);
         Assert.Equal("alpha-key", request.SonarProjectKey);
@@ -29,12 +29,13 @@ public sealed class OrchestrationRequestParsersTests
     public void ParseUpsertInstructionProfile_ParsesMappingIdAndText()
     {
         var request = OrchestrationRequestParsers.ParseUpsertInstructionProfile(
-            new JsonObject
+            """
             {
-                ["mappingId"] = "42",
-                ["issueType"] = "code_smell",
-                ["instructions"] = "Do the safe change"
-            });
+              "mappingId": "42",
+              "issueType": "code_smell",
+              "instructions": "Do the safe change"
+            }
+            """);
 
         Assert.Equal(42, request.MappingId);
         Assert.Equal("code_smell", request.IssueType);
@@ -45,16 +46,16 @@ public sealed class OrchestrationRequestParsersTests
     public void ParseEnqueueIssues_ParsesIssueArray()
     {
         var request = OrchestrationRequestParsers.ParseEnqueueIssues(
-            new JsonObject
+            """
             {
-                ["mappingId"] = "5",
-                ["issueType"] = "BUG",
-                ["instructions"] = "fix it",
-                ["issues"] = new JsonArray
-                {
-                    new JsonObject { ["key"] = "sq-1" }
-                }
-            });
+              "mappingId": "5",
+              "issueType": "BUG",
+              "instructions": "fix it",
+              "issues": [
+                { "key": "sq-1" }
+              ]
+            }
+            """);
 
         Assert.Equal(5, request.MappingId);
         Assert.Equal("BUG", request.IssueType);
@@ -67,18 +68,20 @@ public sealed class OrchestrationRequestParsersTests
     public void ParseEnqueueAll_UsesRuleFallbacks()
     {
         var fromRules = OrchestrationRequestParsers.ParseEnqueueAll(
-            new JsonObject
+            """
             {
-                ["mappingId"] = "9",
-                ["rules"] = "javascript:S3776"
-            });
+              "mappingId": "9",
+              "rules": "javascript:S3776"
+            }
+            """);
 
         var fromRule = OrchestrationRequestParsers.ParseEnqueueAll(
-            new JsonObject
+            """
             {
-                ["mappingId"] = "9",
-                ["rule"] = "csharpsquid:S1118"
-            });
+              "mappingId": "9",
+              "rule": "csharpsquid:S1118"
+            }
+            """);
 
         Assert.Equal("javascript:S3776", fromRules.RuleKeys);
         Assert.Equal("csharpsquid:S1118", fromRule.RuleKeys);

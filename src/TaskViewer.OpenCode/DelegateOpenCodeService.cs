@@ -1,12 +1,12 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace TaskViewer.OpenCode;
 
 public sealed class DelegateOpenCodeService : IOpenCodeService
 {
-    readonly Func<string, OpenCodeRequest, Task<JsonNode?>> _openCodeFetch;
+    readonly Func<string, OpenCodeRequest, Task<string?>> _openCodeFetch;
 
-    public DelegateOpenCodeService(Func<string, OpenCodeRequest, Task<JsonNode?>> openCodeFetch)
+    public DelegateOpenCodeService(Func<string, OpenCodeRequest, Task<string?>> openCodeFetch)
     {
         _openCodeFetch = openCodeFetch;
     }
@@ -51,10 +51,7 @@ public sealed class DelegateOpenCodeService : IOpenCodeService
             {
                 Method = "POST",
                 Directory = directory,
-                JsonBody = new JsonObject
-                {
-                    ["title"] = title
-                }
+                JsonBody = JsonSerializer.Serialize(new { title })
             });
 
         var sessionId = OpenCodeDispatchParsers.ParseCreatedSessionId(created);
@@ -73,17 +70,18 @@ public sealed class DelegateOpenCodeService : IOpenCodeService
             {
                 Method = "POST",
                 Directory = directory,
-                JsonBody = new JsonObject
-                {
-                    ["parts"] = new JsonArray
+                JsonBody = JsonSerializer.Serialize(
+                    new
                     {
-                        new JsonObject
+                        parts = new[]
                         {
-                            ["type"] = "text",
-                            ["text"] = prompt
+                            new
+                            {
+                                type = "text",
+                                text = prompt
+                            }
                         }
-                    }
-                }
+                    })
             });
     }
 }

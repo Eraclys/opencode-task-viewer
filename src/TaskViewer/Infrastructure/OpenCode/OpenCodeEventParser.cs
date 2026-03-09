@@ -1,29 +1,29 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Domain;
+using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;
 
 public static class OpenCodeEventParser
 {
-    public static OpenCodeEventEnvelope? Parse(JsonNode? evt)
+    public static OpenCodeEventEnvelope? Parse(OpenCodeSseEvent? evt)
     {
-        var directoryRaw = evt?["directory"]?.ToString();
+        var directoryRaw = evt?.Directory;
         var directory = DirectoryPath.Normalize(directoryRaw) ?? directoryRaw;
-        var type = evt?["payload"]?["type"]?.ToString().Trim();
+        var type = evt?.Payload?.Type?.Trim();
 
         if (string.IsNullOrWhiteSpace(type))
             return null;
 
-        var properties = evt?["payload"]?["properties"];
+        var properties = evt?.Payload?.Properties;
         var sessionId = ReadSessionId(properties);
         var statusType = ReadStatusType(properties);
 
         return new OpenCodeEventEnvelope(directory, type, sessionId, statusType);
     }
 
-    static string? ReadSessionId(JsonNode? properties)
-        => properties?["sessionID"]?.ToString() ?? properties?["sessionId"]?.ToString();
+    static string? ReadSessionId(OpenCodeSseProperties? properties)
+        => properties?.LegacySessionId ?? properties?.SessionId;
 
-    static string? ReadStatusType(JsonNode? properties)
-        => properties?["status"]?["type"]?.ToString() ?? properties?["type"]?.ToString();
+    static string? ReadStatusType(OpenCodeSseProperties? properties)
+        => properties?.Status?.Type ?? properties?.Type;
 }

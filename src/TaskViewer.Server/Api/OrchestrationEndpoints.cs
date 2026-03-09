@@ -1,5 +1,6 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using System.Text;
-using System.Text.Json.Nodes;
 using TaskViewer.Application.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 
@@ -38,7 +39,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var mapping = await useCases.UpsertMappingAsync(OrchestrationRequestParsers.ParseUpsertMapping(body));
 
                     return Results.Json(mapping);
@@ -117,7 +118,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
 
                     return Results.Json(await useCases.UpsertInstructionProfileAsync(OrchestrationRequestParsers.ParseUpsertInstructionProfile(body)));
                 }
@@ -232,7 +233,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var result = await useCases.EnqueueIssuesAsync(OrchestrationRequestParsers.ParseEnqueueIssues(body));
 
                     return Results.Json(result);
@@ -262,7 +263,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var result = await useCases.EnqueueAllMatchingAsync(OrchestrationRequestParsers.ParseEnqueueAll(body));
 
                     return Results.Json(result);
@@ -410,7 +411,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var ok = await useCases.ApproveTaskAsync(taskId);
 
                     if (!ok)
@@ -433,7 +434,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
                     var ok = await useCases.RejectTaskAsync(taskId, review.Reason);
 
@@ -457,7 +458,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
                     var ok = await useCases.RequeueTaskAsync(taskId, review.Reason);
 
@@ -481,7 +482,7 @@ public static class OrchestrationEndpoints
             {
                 try
                 {
-                    var body = await ParseOptionalJsonBodyAsync(ctx.Request);
+                    var body = await ReadOptionalJsonBodyAsync(ctx.Request);
                     var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
                     var ok = await useCases.RepromptTaskAsync(taskId, review.Instructions ?? string.Empty, review.Reason);
 
@@ -561,7 +562,7 @@ public static class OrchestrationEndpoints
         response.Headers.Expires = "0";
     }
 
-    static async Task<JsonNode?> ParseOptionalJsonBodyAsync(HttpRequest request)
+    static async Task<string?> ReadOptionalJsonBodyAsync(HttpRequest request)
     {
         request.EnableBuffering();
 
@@ -572,6 +573,6 @@ public static class OrchestrationEndpoints
         if (string.IsNullOrWhiteSpace(body))
             return null;
 
-        return JsonNode.Parse(body);
+        return body;
     }
 }

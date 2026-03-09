@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace TaskViewer.OpenCode;
 
@@ -15,7 +15,7 @@ public sealed class OpenCodeSseHttpClient
         _options = options;
     }
 
-    public async Task ReadEventStreamAsync(Func<JsonNode, Task> handleEventAsync, CancellationToken cancellationToken)
+    public async Task ReadEventStreamAsync(Func<OpenCodeSseEvent, Task> handleEventAsync, CancellationToken cancellationToken)
     {
         var url = new Uri(new Uri(_options.Url), "/global/event");
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -61,7 +61,7 @@ public sealed class OpenCodeSseHttpClient
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
     }
 
-    static JsonNode? TryParsePayload(string rawEvent)
+    static OpenCodeSseEvent? TryParsePayload(string rawEvent)
     {
         if (string.IsNullOrWhiteSpace(rawEvent))
             return null;
@@ -81,9 +81,9 @@ public sealed class OpenCodeSseHttpClient
 
         try
         {
-            return JsonNode.Parse(data);
+            return JsonSerializer.Deserialize<OpenCodeSseEvent>(data);
         }
-        catch
+        catch (JsonException)
         {
             return null;
         }

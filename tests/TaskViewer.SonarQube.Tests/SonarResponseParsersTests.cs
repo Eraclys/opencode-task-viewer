@@ -1,13 +1,22 @@
-using System.Text.Json.Nodes;
-
 namespace TaskViewer.SonarQube.Tests;
 
 public sealed class SonarResponseParsersTests
 {
     [Fact]
+    public void ParseIssuesSearchResponse_ReturnsFallbackPagingForMalformedPayload()
+    {
+        var response = SonarResponseParsers.ParseIssuesSearchResponse("{not-json}", fallbackPageIndex: 4, fallbackPageSize: 25);
+
+        Assert.Equal(4, response.PageIndex);
+        Assert.Equal(25, response.PageSize);
+        Assert.Null(response.Total);
+        Assert.Empty(response.Issues);
+    }
+
+    [Fact]
     public void ParseIssuesSearchResponse_ParsesPagingAndIssues()
     {
-        var payload = JsonNode.Parse(
+        var payload =
             """
             {
               "paging": {
@@ -24,7 +33,7 @@ public sealed class SonarResponseParsersTests
                 }
               ]
             }
-            """);
+            """;
 
         var response = SonarResponseParsers.ParseIssuesSearchResponse(payload, fallbackPageIndex: 1, fallbackPageSize: 100);
 
@@ -41,7 +50,7 @@ public sealed class SonarResponseParsersTests
     [Fact]
     public void ParseRuleDetails_TrimsRuleName()
     {
-        var payload = JsonNode.Parse("""{ "rule": { "name": " Cognitive Complexity " } }""");
+        var payload = """{ "rule": { "name": " Cognitive Complexity " } }""";
 
         var response = SonarResponseParsers.ParseRuleDetails(payload);
 

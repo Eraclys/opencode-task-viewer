@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -56,8 +56,8 @@ public sealed class UiTests
                 enabled = true
             });
 
-        var gammaMappingId = AsInt(gammaMapping["id"]);
-        var alphaMappingId = AsInt(alphaMapping["id"]);
+        var gammaMappingId = AsInt(gammaMapping.TryGetProperty("id", out var gammaId) ? gammaId : (JsonElement?)null);
+        var alphaMappingId = AsInt(alphaMapping.TryGetProperty("id", out var alphaId) ? alphaId : (JsonElement?)null);
 
         await _fixture.PostJsonAsync(
             $"{_fixture.ViewerUrl}/api/orch/enqueue",
@@ -167,14 +167,16 @@ public sealed class UiTests
         await test(page);
     }
 
-    static int AsInt(object? value)
+    static int AsInt(JsonElement? value)
     {
-        if (value is null)
+        if (!value.HasValue)
             return 0;
 
-        if (value is JsonNode node)
-            return int.TryParse(node.ToString(), out var parsedNode) ? parsedNode : 0;
+        var element = value.Value;
 
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : 0;
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var parsedElement))
+            return parsedElement;
+
+        return int.TryParse(element.ToString(), out var parsed) ? parsed : 0;
     }
 }

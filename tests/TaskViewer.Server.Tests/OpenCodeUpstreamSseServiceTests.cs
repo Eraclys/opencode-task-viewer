@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json.Nodes;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;
@@ -12,7 +11,7 @@ public sealed class OpenCodeUpstreamSseServiceTests
     public async Task RunAsync_ProcessesValidJsonEvent()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        JsonNode? captured = null;
+        OpenCodeSseEvent? captured = null;
         var service = CreateService(
             CreateHandler(
                 _ => CreateResponse(
@@ -27,8 +26,8 @@ public sealed class OpenCodeUpstreamSseServiceTests
             },
             cts.Token);
 
-        Assert.Equal("todo.updated", captured?["payload"]?["type"]?.ToString());
-        Assert.Equal("C:/Work", captured?["directory"]?.ToString());
+        Assert.Equal("todo.updated", captured?.Payload?.Type);
+        Assert.Equal("C:/Work", captured?.Directory);
     }
 
     [Fact]
@@ -45,7 +44,7 @@ public sealed class OpenCodeUpstreamSseServiceTests
         await service.RunAsync(
             evt =>
             {
-                received.Add(evt["payload"]?["type"]?.ToString() ?? string.Empty);
+                received.Add(evt.Payload?.Type ?? string.Empty);
                 cts.Cancel();
                 return Task.CompletedTask;
             },

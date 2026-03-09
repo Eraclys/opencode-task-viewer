@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-
 namespace TaskViewer.OpenCode;
 
 public sealed class OpenCodeUpstreamSseService
@@ -11,7 +9,7 @@ public sealed class OpenCodeUpstreamSseService
         _createClient = createClient;
     }
 
-    public async Task RunAsync(Func<JsonNode, Task> handleEventAsync, CancellationToken cancellationToken)
+    public async Task RunAsync(Func<OpenCodeSseEvent, Task> handleEventAsync, CancellationToken cancellationToken)
     {
         var retryDelayMs = 1000;
 

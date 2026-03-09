@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using TaskViewer.MockSonarQube;
 
 var host = Environment.GetEnvironmentVariable("HOST") ?? "127.0.0.1";
@@ -42,12 +41,9 @@ app.MapPost(
 
 app.MapPost(
     "/__test__/setIssues",
-    async (HttpRequest request) =>
+    (SonarIssuesSetRequest body) =>
     {
-        var body = await JsonNode.ParseAsync(request.Body);
-        var issuesNode = body?["issues"] as JsonArray;
-
-        if (issuesNode is null)
+        if (body.Issues is null)
             return Results.Json(
                 new
                 {
@@ -55,7 +51,7 @@ app.MapPost(
                 },
                 statusCode: 400);
 
-        var issues = issuesNode
+        var issues = body.Issues
             .Select(ParseIssue)
             .Where(issue => issue is not null)
             .Cast<SonarIssueRecord>()
@@ -229,11 +225,11 @@ static int ParseBoundedInt(
     return parsed;
 }
 
-static SonarIssueRecord? ParseIssue(JsonNode? node)
+static SonarIssueRecord? ParseIssue(SonarIssueSetPayload? node)
 {
-    var key = node?["key"]?.GetValue<string>()?.Trim();
-    var component = node?["component"]?.GetValue<string>()?.Trim();
-    var rule = node?["rule"]?.GetValue<string>()?.Trim();
+    var key = node?.Key?.Trim();
+    var component = node?.Component?.Trim();
+    var rule = node?.Rule?.Trim();
 
     if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(component) || string.IsNullOrWhiteSpace(rule))
         return null;
@@ -242,13 +238,30 @@ static SonarIssueRecord? ParseIssue(JsonNode? node)
     {
         Key = key,
         Component = component,
-        Line = int.TryParse(node?["line"]?.ToString(), out var line) ? line : 1,
+        Line = node?.Line ?? 1,
         Rule = rule,
-        Severity = node?["severity"]?.GetValue<string>()?.Trim() ?? "MAJOR",
-        Type = node?["type"]?.GetValue<string>()?.Trim() ?? "CODE_SMELL",
-        Status = node?["status"]?.GetValue<string>()?.Trim() ?? "OPEN",
-        Message = node?["message"]?.GetValue<string>()?.Trim() ?? $"Issue {key}"
+        Severity = node?.Severity?.Trim() ?? "MAJOR",
+        Type = node?.Type?.Trim() ?? "CODE_SMELL",
+        Status = node?.Status?.Trim() ?? "OPEN",
+        Message = node?.Message?.Trim() ?? $"Issue {key}"
     };
+}
+
+sealed class SonarIssuesSetRequest
+{
+    public List<SonarIssueSetPayload>? Issues { get; init; }
+}
+
+sealed class SonarIssueSetPayload
+{
+    public string? Key { get; init; }
+    public string? Component { get; init; }
+    public int? Line { get; init; }
+    public string? Rule { get; init; }
+    public string? Severity { get; init; }
+    public string? Type { get; init; }
+    public string? Status { get; init; }
+    public string? Message { get; init; }
 }
 
 namespace TaskViewer.MockSonarQube

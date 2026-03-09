@@ -1,8 +1,10 @@
 using System.Text;
-using System.Text.Json.Nodes;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using TaskViewer.Application.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 
@@ -19,24 +21,25 @@ public sealed class OpenCodeEventHandlerTests
         var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
 
         await sut.HandleAsync(
-            JsonNode.Parse("""
+            new OpenCodeSseEvent
             {
-              "directory": "C:/Work",
-              "payload": {
-                "type": "todo.updated",
-                "properties": {
-                  "sessionID": "sess-1"
+                Directory = "C:/Work",
+                Payload = new OpenCodeSsePayload
+                {
+                    Type = "todo.updated",
+                    Properties = new OpenCodeSseProperties
+                    {
+                        LegacySessionId = "sess-1"
+                    }
                 }
-              }
-            }
-            """)!);
+            });
 
         await DrainClientAsync(client, cts);
 
         Assert.False(cacheCoordinator.TryGetFreshTodos("C:/Work", "sess-1", out _));
         var payload = ReadBroadcastPayload(responseBody);
-        Assert.Equal("update", payload?["type"]?.ToString());
-        Assert.Equal("sess-1", payload?["sessionId"]?.ToString());
+        Assert.Equal("update", payload?.Type);
+        Assert.Equal("sess-1", payload?.SessionId);
     }
 
     [Fact]
@@ -60,18 +63,22 @@ public sealed class OpenCodeEventHandlerTests
         var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
 
         await sut.HandleAsync(
-            JsonNode.Parse("""
+            new OpenCodeSseEvent
             {
-              "directory": "C:/Work",
-              "payload": {
-                "type": "session.status",
-                "properties": {
-                  "sessionID": "sess-1",
-                  "status": { "type": "working" }
+                Directory = "C:/Work",
+                Payload = new OpenCodeSsePayload
+                {
+                    Type = "session.status",
+                    Properties = new OpenCodeSseProperties
+                    {
+                        LegacySessionId = "sess-1",
+                        Status = new OpenCodeSseStatus
+                        {
+                            Type = "working"
+                        }
+                    }
                 }
-              }
-            }
-            """)!);
+            });
 
         await DrainClientAsync(client, cts);
 
@@ -79,7 +86,7 @@ public sealed class OpenCodeEventHandlerTests
         Assert.Equal("working", type);
         Assert.Null(cacheCoordinator.GetFreshAllTasks());
         var payload = ReadBroadcastPayload(responseBody);
-        Assert.Equal("sess-1", payload?["sessionId"]?.ToString());
+        Assert.Equal("sess-1", payload?.SessionId);
     }
 
     [Fact]
@@ -93,20 +100,20 @@ public sealed class OpenCodeEventHandlerTests
         var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
 
         await sut.HandleAsync(
-            JsonNode.Parse("""
+            new OpenCodeSseEvent
             {
-              "payload": {
-                "type": "message.updated"
-              }
-            }
-            """)!);
+                Payload = new OpenCodeSsePayload
+                {
+                    Type = "message.updated"
+                }
+            });
 
         await DrainClientAsync(client, cts);
 
         Assert.False(cacheCoordinator.TryGetFreshAssistantPresence("sess-1", out _));
         var payload = ReadBroadcastPayload(responseBody);
-        Assert.Equal("update", payload?["type"]?.ToString());
-        Assert.Null(payload?["sessionId"]);
+        Assert.Equal("update", payload?.Type);
+        Assert.Null(payload?.SessionId);
     }
 
     static async Task DrainClientAsync(SseClient client, CancellationTokenSource cts)
@@ -126,10 +133,19 @@ public sealed class OpenCodeEventHandlerTests
         return (hub, client, cts);
     }
 
-    static JsonNode? ReadBroadcastPayload(MemoryStream responseBody)
+    static BroadcastPayload? ReadBroadcastPayload(MemoryStream responseBody)
     {
         var text = Encoding.UTF8.GetString(responseBody.ToArray());
         var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Single(x => x.StartsWith("data: ", StringComparison.Ordinal));
-        return JsonNode.Parse(line[6..]);
+        return JsonSerializer.Deserialize<BroadcastPayload>(line[6..]);
+    }
+
+    sealed class BroadcastPayload
+    {
+        [JsonPropertyName("type")]
+        public string? Type { get; init; }
+
+        [JsonPropertyName("sessionId")]
+        public string? SessionId { get; init; }
     }
 }

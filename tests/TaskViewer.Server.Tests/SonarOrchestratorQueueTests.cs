@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
 using TaskViewer.SonarQube;
@@ -21,24 +20,16 @@ public sealed class SonarOrchestratorQueueTests
         {
             if (path == "/session" &&
                 string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase))
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["id"] = "sess-created-1"
-                    });
+                return Task.FromResult<string?>("""{ "id": "sess-created-1" }""");
 
             if (path == "/session/sess-created-1/prompt_async" &&
                 string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase))
-                return Task.FromResult<JsonNode?>(
-                    new JsonObject
-                    {
-                        ["ok"] = true
-                    });
+                return Task.FromResult<string?>("""{ "ok": true }""");
 
             if (path == "/session/status")
-                return Task.FromResult<JsonNode?>(new JsonObject());
+                return Task.FromResult<string?>("{}");
 
-            return Task.FromResult<JsonNode?>(null);
+            return Task.FromResult<string?>(null);
         });
 
         var mapping = await orchestrator.UpsertMapping(
@@ -92,7 +83,7 @@ public sealed class SonarOrchestratorQueueTests
                     string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("OpenCode request failed: injected error");
 
-                return Task.FromResult<JsonNode?>(null);
+                return Task.FromResult<string?>(null);
             },
             1);
 
@@ -134,11 +125,7 @@ public sealed class SonarOrchestratorQueueTests
         Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
         File.WriteAllText(Path.Combine(GammaDirectory, "src", "cancel.js"), "// cancel\n");
 
-        await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<JsonNode?>(
-            new JsonObject
-            {
-                ["id"] = "unused"
-            }));
+        await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<string?>("""{ "id": "unused" }"""));
 
         var mapping = await orchestrator.UpsertMapping(
             new UpsertMappingRequest(
@@ -176,7 +163,7 @@ public sealed class SonarOrchestratorQueueTests
         Directory.CreateDirectory(Path.Combine(GammaDirectory, "src"));
         File.WriteAllText(Path.Combine(GammaDirectory, "src", "dupe.js"), "// dupe\n");
 
-        await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<JsonNode?>(null));
+        await using var orchestrator = CreateOrchestrator((_, _) => Task.FromResult<string?>(null));
 
         var mapping = await orchestrator.UpsertMapping(
             new UpsertMappingRequest(
@@ -237,7 +224,7 @@ public sealed class SonarOrchestratorQueueTests
     }
 
     static SonarOrchestrator CreateOrchestrator(
-        Func<string, OpenCodeRequest, Task<JsonNode?>> openCodeFetch,
+        Func<string, OpenCodeRequest, Task<string?>> openCodeFetch,
         int maxAttempts = 2)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-orch-queue-{Guid.NewGuid():N}.sqlite");
