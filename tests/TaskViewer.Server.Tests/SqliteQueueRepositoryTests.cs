@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using TaskViewer.Infrastructure.Orchestration;
-using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 
@@ -349,25 +348,7 @@ public sealed class SqliteQueueRepositoryTests
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-queue-repo-{Guid.NewGuid():N}.sqlite");
 
-        await using var orchestrator = new SonarOrchestrator(
-            new SonarOrchestratorOptions
-            {
-                SonarUrl = string.Empty,
-                SonarToken = string.Empty,
-                DbPath = dbPath,
-                MaxActive = 1,
-                PerProjectMaxActive = 1,
-                PollMs = 1000,
-                LeaseSeconds = 180,
-                MaxAttempts = 1,
-                MaxWorkingGlobal = 0,
-                WorkingResumeBelow = 0,
-                OpenCodeApiClient = new DisabledOpenCodeService(),
-                TaskReadinessGate = new TestTaskReadinessGate(),
-                NormalizeDirectory = value => value,
-                BuildOpenCodeSessionUrl = (_, _) => null,
-                OnChange = () => { }
-            });
+        await using var persistence = new SqliteOrchestrationPersistence(dbPath, () => { });
 
         return dbPath;
     }

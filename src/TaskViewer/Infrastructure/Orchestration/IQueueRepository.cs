@@ -1,6 +1,6 @@
 namespace TaskViewer.Infrastructure.Orchestration;
 
-interface IQueueRepository
+public interface IQueueRepository
 {
     Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
         MappingRecord mapping,

@@ -1,3 +1,3 @@
 ﻿namespace TaskViewer.Infrastructure.Orchestration;
 
-sealed record QueueSkip(string IssueKey, string Reason);
+public sealed record QueueSkip(string IssueKey, string Reason);

@@ -8,6 +8,7 @@
     </Folder>
     <Folder Name="/src/">
         <Project Path="src/TaskViewer.OpenCode/TaskViewer.OpenCode.csproj" />
+        <Project Path="src/TaskViewer.Persistence/TaskViewer.Persistence.csproj" />
         <Project Path="src/TaskViewer.Server/TaskViewer.Server.csproj" />
         <Project Path="src/TaskViewer.SonarQube/TaskViewer.SonarQube.csproj" />
         <Project Path="src/TaskViewer/TaskViewer.csproj" />

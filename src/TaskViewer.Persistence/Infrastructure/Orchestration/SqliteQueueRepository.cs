@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace TaskViewer.Infrastructure.Orchestration;
 
-sealed class SqliteQueueRepository : IQueueRepository
+public sealed class SqliteQueueRepository : IQueueRepository
 {
     readonly SemaphoreSlim _dbLock;
     readonly Action _onChange;

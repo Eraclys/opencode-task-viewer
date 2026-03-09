@@ -10,6 +10,7 @@ public sealed class SonarOrchestratorSonarGatewayTests
     public async Task ListIssues_UsesInjectedSonarGateway_WhenProvided()
     {
         var gateway = new FakeSonarGateway();
+        var dbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-sonar-gateway-{Guid.NewGuid():N}.sqlite");
 
         await using var orchestrator = new SonarOrchestrator(
             new SonarOrchestratorOptions
@@ -17,7 +18,8 @@ public sealed class SonarOrchestratorSonarGatewayTests
                 SonarUrl = string.Empty,
                 SonarToken = string.Empty,
                 SonarQubeService = gateway,
-                DbPath = Path.Combine(Path.GetTempPath(), $"taskviewer-sonar-gateway-{Guid.NewGuid():N}.sqlite"),
+                DbPath = dbPath,
+                Persistence = new SqliteOrchestrationPersistence(dbPath, () => { }),
                 MaxActive = 1,
                 PerProjectMaxActive = 1,
                 PollMs = 1000,

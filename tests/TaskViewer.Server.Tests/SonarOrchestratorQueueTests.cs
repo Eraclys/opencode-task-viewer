@@ -235,6 +235,7 @@ public sealed class SonarOrchestratorQueueTests
                 SonarUrl = "http://sonar.local",
                 SonarToken = "token",
                 DbPath = dbPath,
+                Persistence = new SqliteOrchestrationPersistence(dbPath, () => { }),
                 MaxActive = 1,
                 PerProjectMaxActive = 1,
                 PollMs = 1000,

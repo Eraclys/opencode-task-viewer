@@ -1,4 +1,5 @@
 using TaskViewer.Application.Orchestration;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
 using TaskViewer.SonarQube;
 
@@ -38,6 +39,7 @@ public sealed class SonarOrchestratorOptions
     public ITaskSchedulerService? TaskSchedulerService { get; init; }
     public ITaskReconcilerService? TaskReconcilerService { get; init; }
     public ITaskReadinessGate? TaskReadinessGate { get; init; }
+    public IOrchestrationPersistence? Persistence { get; init; }
     public required Func<string?, string?> NormalizeDirectory { get; init; }
     public required Func<string, string?, string?> BuildOpenCodeSessionUrl { get; init; }
     public required Action OnChange { get; init; }

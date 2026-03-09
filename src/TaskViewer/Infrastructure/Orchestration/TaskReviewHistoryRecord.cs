@@ -1,6 +1,6 @@
 namespace TaskViewer.Infrastructure.Orchestration;
 
-sealed record TaskReviewHistoryRecord(
+public sealed record TaskReviewHistoryRecord(
     string Action,
     string? Reason,
     DateTimeOffset CreatedAt);

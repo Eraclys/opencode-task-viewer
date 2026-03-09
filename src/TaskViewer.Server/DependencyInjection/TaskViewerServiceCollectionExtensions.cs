@@ -4,6 +4,7 @@ using TaskViewer.Domain;
 using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
+using TaskViewer.Persistence.DependencyInjection;
 using TaskViewer.Server.Configuration;
 using TaskViewer.SonarQube;
 
@@ -29,6 +30,12 @@ internal static class TaskViewerServiceCollectionExtensions
             {
                 var runtimeSettings = sp.GetRequiredService<AppRuntimeSettings>();
                 return new SonarQubeClientOptions(runtimeSettings.SonarQube.Url, runtimeSettings.SonarQube.Token);
+            });
+        services.AddTaskViewerPersistence(
+            sp =>
+            {
+                var runtimeSettings = sp.GetRequiredService<AppRuntimeSettings>();
+                return (runtimeSettings.Orchestration.DbPath, () => _ = sp.GetRequiredService<OpenCodeViewerUpdateNotifier>().InvalidateAllAndBroadcastAsync());
             });
         services.AddSingleton<FakeSonarQubeService>();
         services.AddSingleton<ISonarQubeService>(
@@ -82,6 +89,7 @@ internal static class TaskViewerServiceCollectionExtensions
                         MaxAttempts = runtimeSettings.Orchestration.MaxAttempts,
                         MaxWorkingGlobal = runtimeSettings.Orchestration.MaxWorkingGlobal,
                         WorkingResumeBelow = runtimeSettings.Orchestration.WorkingResumeBelow,
+                        Persistence = sp.GetRequiredService<IOrchestrationPersistence>(),
                         TaskReadinessGate = new AlwaysReadyGate(),
                         NormalizeDirectory = DirectoryPath.Normalize,
                         BuildOpenCodeSessionUrl = sp.GetRequiredService<OpenCodeSessionSearchService>().BuildOpenCodeSessionUrl,

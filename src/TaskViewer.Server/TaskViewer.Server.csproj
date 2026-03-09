@@ -6,10 +6,6 @@
         <ProjectReference Include="..\TaskViewer.OpenCode\TaskViewer.OpenCode.csproj" />
         <ProjectReference Include="..\TaskViewer.SonarQube\TaskViewer.SonarQube.csproj" />
         <ProjectReference Include="..\TaskViewer\TaskViewer.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Dapper" />
-        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <ProjectReference Include="..\TaskViewer.Persistence\TaskViewer.Persistence.csproj" />
     </ItemGroup>
 </Project>

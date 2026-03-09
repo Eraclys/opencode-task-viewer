@@ -13,6 +13,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\TaskViewer.Server\TaskViewer.Server.csproj" />
+        <ProjectReference Include="..\..\src\TaskViewer.Persistence\TaskViewer.Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>

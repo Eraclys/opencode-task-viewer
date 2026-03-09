@@ -133,6 +133,7 @@ public sealed class SessionsUseCasesTests
                 SonarUrl = string.Empty,
                 SonarToken = string.Empty,
                 DbPath = dbPath,
+                Persistence = new SqliteOrchestrationPersistence(dbPath, () => { }),
                 MaxActive = 1,
                 PerProjectMaxActive = 1,
                 PollMs = 1000,

@@ -1,6 +1,6 @@
 namespace TaskViewer.Infrastructure.Orchestration;
 
-static class OrchestrationTaskBatchingPolicy
+public static class OrchestrationTaskBatchingPolicy
 {
     public const string TaskUnit = "project+file+rule";
 
