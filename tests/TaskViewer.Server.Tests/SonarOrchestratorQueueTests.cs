@@ -1,5 +1,8 @@
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
+using TaskViewer.Persistence;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;

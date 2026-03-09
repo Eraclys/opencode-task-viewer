@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Infrastructure.Orchestration;

@@ -1,4 +1,4 @@
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Api;
@@ -13,9 +13,9 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/mappings",
-            async (IOrchestrationUseCases useCases) =>
+            async (IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                return Results.Json(await useCases.ListMappingsAsync());
+                return Results.Json(await useCases.ListMappingsAsync(cancellationToken));
             })
             .WithApiExceptionHandling(
                 "Error listing orchestrator mappings",
@@ -23,9 +23,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/mappings",
-            async (OrchestrationRequestParsers.UpsertMappingPayload? body, IOrchestrationUseCases useCases) =>
+            async (OrchestrationRequestParsers.UpsertMappingPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var mapping = await useCases.UpsertMappingAsync(OrchestrationRequestParsers.ParseUpsertMapping(body));
+                var mapping = await useCases.UpsertMappingAsync(OrchestrationRequestParsers.ParseUpsertMapping(body), cancellationToken);
 
                 return Results.Json(mapping);
             })
@@ -37,9 +37,9 @@ public static class OrchestrationEndpoints
 
         app.MapDelete(
             "/api/orch/mappings/{mappingId}",
-            async (int mappingId, IOrchestrationUseCases useCases) =>
+            async (int mappingId, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var ok = await useCases.DeleteMappingAsync(mappingId);
+                var ok = await useCases.DeleteMappingAsync(mappingId, cancellationToken);
 
                 if (!ok)
                     return Results.Json(new ErrorResponseDto { Error = "Mapping not found" }, statusCode: 404);
@@ -54,9 +54,9 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/instructions",
-            async (int? mappingId, string? issueType, IOrchestrationUseCases useCases) =>
+            async (int? mappingId, string? issueType, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.GetInstructionProfileAsync(mappingId, issueType);
+                var result = await useCases.GetInstructionProfileAsync(mappingId, issueType, cancellationToken);
 
                 return Results.Json(result);
             })
@@ -66,9 +66,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/instructions",
-            async (OrchestrationRequestParsers.UpsertInstructionProfilePayload? body, IOrchestrationUseCases useCases) =>
+            async (OrchestrationRequestParsers.UpsertInstructionProfilePayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                return Results.Json(await useCases.UpsertInstructionProfileAsync(OrchestrationRequestParsers.ParseUpsertInstructionProfile(body)));
+                return Results.Json(await useCases.UpsertInstructionProfileAsync(OrchestrationRequestParsers.ParseUpsertInstructionProfile(body), cancellationToken));
             })
             .WithApiExceptionHandling(
                 "Error saving instruction profile",
@@ -78,7 +78,7 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/issues",
-            async (HttpContext ctx, int? mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys, string? rules, string? rule, IOrchestrationUseCases useCases) =>
+            async (HttpContext ctx, int? mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys, string? rules, string? rule, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
 
@@ -103,7 +103,8 @@ public static class OrchestrationEndpoints
                     issueStatus,
                     page,
                     pageSize,
-                    selectedRuleKeys);
+                    selectedRuleKeys,
+                    cancellationToken);
 
                 return Results.Json(result);
             })
@@ -115,7 +116,7 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/rules",
-            async (HttpContext ctx, int? mappingId, string? issueType, string? issueStatus, IOrchestrationUseCases useCases) =>
+            async (HttpContext ctx, int? mappingId, string? issueType, string? issueStatus, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
 
@@ -127,7 +128,7 @@ public static class OrchestrationEndpoints
                         },
                         statusCode: 400);
 
-                var result = await useCases.ListRulesAsync(mappingId.Value, issueType, issueStatus);
+                var result = await useCases.ListRulesAsync(mappingId.Value, issueType, issueStatus, cancellationToken);
 
                 return Results.Json(result);
             })
@@ -139,9 +140,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/enqueue",
-            async (OrchestrationRequestParsers.EnqueueIssuesPayload? body, IOrchestrationUseCases useCases) =>
+            async (OrchestrationRequestParsers.EnqueueIssuesPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.EnqueueIssuesAsync(OrchestrationRequestParsers.ParseEnqueueIssues(body));
+                var result = await useCases.EnqueueIssuesAsync(OrchestrationRequestParsers.ParseEnqueueIssues(body), cancellationToken);
 
                 return Results.Json(result);
             })
@@ -153,9 +154,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/enqueue-all",
-            async (OrchestrationRequestParsers.EnqueueAllPayload? body, IOrchestrationUseCases useCases) =>
+            async (OrchestrationRequestParsers.EnqueueAllPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.EnqueueAllMatchingAsync(OrchestrationRequestParsers.ParseEnqueueAll(body));
+                var result = await useCases.EnqueueAllMatchingAsync(OrchestrationRequestParsers.ParseEnqueueAll(body), cancellationToken);
 
                 return Results.Json(result);
             })
@@ -167,11 +168,11 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/queue",
-            async (HttpContext ctx, string? states, int? limit, IOrchestrationUseCases useCases) =>
+            async (HttpContext ctx, string? states, int? limit, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
 
-                var result = await useCases.GetQueueAsync(states, limit);
+                var result = await useCases.GetQueueAsync(states, limit, cancellationToken);
 
                 return Results.Json(result);
             })
@@ -181,9 +182,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/queue/{queueId}/cancel",
-            async (int queueId, IOrchestrationUseCases useCases) =>
+            async (int queueId, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var ok = await useCases.CancelQueueItemAsync(queueId);
+                var ok = await useCases.CancelQueueItemAsync(queueId, cancellationToken);
 
                 if (!ok)
                     return Results.Json(
@@ -207,9 +208,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/queue/retry-failed",
-            async (IOrchestrationUseCases useCases) =>
+            async (IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var retried = await useCases.RetryFailedAsync();
+                var retried = await useCases.RetryFailedAsync(cancellationToken);
 
                 return Results.Json(
                     new RetryFailedResponseDto
@@ -223,9 +224,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/queue/clear",
-            async (IOrchestrationUseCases useCases) =>
+            async (IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var cleared = await useCases.ClearQueuedAsync();
+                var cleared = await useCases.ClearQueuedAsync(cancellationToken);
 
                 return Results.Json(
                     new ClearQueuedResponseDto
@@ -239,9 +240,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/tasks/{taskId}/approve",
-            async (int taskId, IOrchestrationUseCases useCases) =>
+            async (int taskId, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var ok = await useCases.ApproveTaskAsync(taskId);
+                var ok = await useCases.ApproveTaskAsync(taskId, cancellationToken);
 
                 if (!ok)
                     return Results.Json(new ErrorResponseDto { Error = "Task not found or not awaiting review" }, statusCode: 404);
@@ -256,10 +257,10 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/tasks/{taskId}/reject",
-            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases) =>
+            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
-                var ok = await useCases.RejectTaskAsync(taskId, review.Reason);
+                var ok = await useCases.RejectTaskAsync(taskId, review.Reason, cancellationToken);
 
                 if (!ok)
                     return Results.Json(new ErrorResponseDto { Error = "Task not found or not awaiting review" }, statusCode: 404);
@@ -274,10 +275,10 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/tasks/{taskId}/requeue",
-            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases) =>
+            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
-                var ok = await useCases.RequeueTaskAsync(taskId, review.Reason);
+                var ok = await useCases.RequeueTaskAsync(taskId, review.Reason, cancellationToken);
 
                 if (!ok)
                     return Results.Json(new ErrorResponseDto { Error = "Task not found or not requeueable" }, statusCode: 404);
@@ -292,10 +293,10 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/orch/tasks/{taskId}/reprompt",
-            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases) =>
+            async (int taskId, OrchestrationRequestParsers.TaskReviewPayload? body, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 var review = OrchestrationRequestParsers.ParseTaskReviewRequest(body);
-                var ok = await useCases.RepromptTaskAsync(taskId, review.Instructions ?? string.Empty, review.Reason);
+                var ok = await useCases.RepromptTaskAsync(taskId, review.Instructions ?? string.Empty, review.Reason, cancellationToken);
 
                 if (!ok)
                     return Results.Json(new ErrorResponseDto { Error = "Task not found or not repromptable" }, statusCode: 404);
@@ -310,11 +311,11 @@ public static class OrchestrationEndpoints
 
         app.MapGet(
             "/api/orch/tasks/{taskId}/review-history",
-            async (int taskId, HttpContext ctx, IOrchestrationUseCases useCases) =>
+            async (int taskId, HttpContext ctx, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
 
-                var items = await useCases.GetTaskReviewHistoryAsync(taskId);
+                var items = await useCases.GetTaskReviewHistoryAsync(taskId, cancellationToken);
 
                 return Results.Json(
                     new TaskReviewHistoryListDto
@@ -330,9 +331,9 @@ public static class OrchestrationEndpoints
 
         app.MapPost(
             "/api/test/orch/reset",
-            async (IOrchestrationUseCases useCases) =>
+            async (IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                await useCases.ResetStateAsync();
+                await useCases.ResetStateAsync(cancellationToken);
 
                 return Results.Json(
                     new OrchestrationResetStateDto

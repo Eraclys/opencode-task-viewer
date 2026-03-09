@@ -2,9 +2,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.Infrastructure.ServerSentEvents;
 using TaskViewer.OpenCode;
+using TaskViewer.Server.Infrastructure.ServerSentEvents;
 
 namespace TaskViewer.Server.Tests;
 
@@ -13,12 +15,13 @@ public sealed class OpenCodeEventHandlerTests
     [Fact]
     public async Task HandleAsync_TodoUpdatedForSession_InvalidatesTodoCacheAndBroadcastsSessionUpdate()
     {
-        var cacheCoordinator = new OpenCodeViewerCacheCoordinator(new OpenCodeViewerState(), new OpenCodeViewerCachePolicy());
-        cacheCoordinator.StoreTodos("C:/Work", "sess-1", [new SessionTodoDto("todo-1", "open", "task")], DateTimeOffset.UtcNow);
+        var viewerState = new OpenCodeViewerState();
+        var cachePolicy = new OpenCodeViewerCachePolicy();
+        viewerState.StoreTodos("C:/Work", "sess-1", [new SessionTodoDto("todo-1", "open", "task")], cachePolicy.TodoCacheTtlMs);
 
         using var responseBody = new MemoryStream();
         var (hub, client, cts) = CreateSseHub(responseBody);
-        var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
+        var sut = new OpenCodeEventHandler(viewerState, hub, new OpenCodeCacheInvalidationPolicy(), cachePolicy);
 
         await sut.HandleAsync(
             new OpenCodeSseEvent
@@ -36,7 +39,7 @@ public sealed class OpenCodeEventHandlerTests
 
         await DrainClientAsync(client, cts);
 
-        Assert.False(cacheCoordinator.TryGetFreshTodos("C:/Work", "sess-1", out _));
+        Assert.False(viewerState.TryGetFreshTodos("C:/Work", "sess-1", out _));
         var payload = ReadBroadcastPayload(responseBody);
         Assert.Equal("update", payload?.Type);
         Assert.Equal("sess-1", payload?.SessionId);
@@ -45,8 +48,9 @@ public sealed class OpenCodeEventHandlerTests
     [Fact]
     public async Task HandleAsync_SessionStatus_StoresOverrideAndInvalidatesTaskOverview()
     {
-        var cacheCoordinator = new OpenCodeViewerCacheCoordinator(new OpenCodeViewerState(), new OpenCodeViewerCachePolicy());
-        cacheCoordinator.StoreAllTasks(
+        var viewerState = new OpenCodeViewerState();
+        var cachePolicy = new OpenCodeViewerCachePolicy();
+        viewerState.StoreAllTasks(
             [
                 new GlobalViewerTaskDto
                 {
@@ -56,11 +60,11 @@ public sealed class OpenCodeEventHandlerTests
                     SessionId = "sess-1"
                 }
             ],
-            DateTimeOffset.UtcNow);
+            cachePolicy.TasksAllCacheTtlMs);
 
         using var responseBody = new MemoryStream();
         var (hub, client, cts) = CreateSseHub(responseBody);
-        var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
+        var sut = new OpenCodeEventHandler(viewerState, hub, new OpenCodeCacheInvalidationPolicy(), cachePolicy);
 
         await sut.HandleAsync(
             new OpenCodeSseEvent
@@ -82,9 +86,9 @@ public sealed class OpenCodeEventHandlerTests
 
         await DrainClientAsync(client, cts);
 
-        Assert.True(cacheCoordinator.TryGetRecentStatusOverride("C:/Work", "sess-1", out var type));
+        Assert.True(viewerState.TryGetRecentStatusOverride("C:/Work", "sess-1", out var type));
         Assert.Equal("working", type);
-        Assert.Null(cacheCoordinator.GetFreshAllTasks());
+        Assert.Null(viewerState.GetFreshAllTasks());
         var payload = ReadBroadcastPayload(responseBody);
         Assert.Equal("sess-1", payload?.SessionId);
     }
@@ -92,12 +96,13 @@ public sealed class OpenCodeEventHandlerTests
     [Fact]
     public async Task HandleAsync_MessageUpdated_ClearsAssistantPresenceAndBroadcastsGlobalUpdate()
     {
-        var cacheCoordinator = new OpenCodeViewerCacheCoordinator(new OpenCodeViewerState(), new OpenCodeViewerCachePolicy());
-        cacheCoordinator.CompleteAssistantPresenceLookup("sess-1", true, DateTimeOffset.UtcNow);
+        var viewerState = new OpenCodeViewerState();
+        var cachePolicy = new OpenCodeViewerCachePolicy();
+        viewerState.CompleteAssistantPresenceLookup("sess-1", true, cachePolicy.MessagePresenceCacheTtlMs);
 
         using var responseBody = new MemoryStream();
         var (hub, client, cts) = CreateSseHub(responseBody);
-        var sut = new OpenCodeEventHandler(cacheCoordinator, hub, new OpenCodeCacheInvalidationPolicy());
+        var sut = new OpenCodeEventHandler(viewerState, hub, new OpenCodeCacheInvalidationPolicy(), cachePolicy);
 
         await sut.HandleAsync(
             new OpenCodeSseEvent
@@ -110,7 +115,7 @@ public sealed class OpenCodeEventHandlerTests
 
         await DrainClientAsync(client, cts);
 
-        Assert.False(cacheCoordinator.TryGetFreshAssistantPresence("sess-1", out _));
+        Assert.False(viewerState.TryGetFreshAssistantPresence("sess-1", out _));
         var payload = ReadBroadcastPayload(responseBody);
         Assert.Equal("update", payload?.Type);
         Assert.Null(payload?.SessionId);

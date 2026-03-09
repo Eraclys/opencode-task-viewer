@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.Server.Infrastructure.ServerSentEvents;
 
 namespace TaskViewer.Server.Api;
 

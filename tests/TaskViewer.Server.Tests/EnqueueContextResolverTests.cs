@@ -1,5 +1,6 @@
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 
 namespace TaskViewer.Server.Tests;
 
@@ -97,11 +98,11 @@ public sealed class EnqueueContextResolverTests
         public string? UpsertIssueType { get; private set; }
         public string? UpsertInstructions { get; private set; }
 
-        public Task<List<MappingRecord>> ListMappings() => Task.FromResult(new List<MappingRecord>());
+        public Task<List<MappingRecord>> ListMappings(CancellationToken cancellationToken = default) => Task.FromResult(new List<MappingRecord>());
 
-        public Task<MappingRecord?> GetMappingById(int id) => Task.FromResult(Mapping is not null && Mapping.Id == id ? Mapping : null);
+        public Task<MappingRecord?> GetMappingById(int id, CancellationToken cancellationToken = default) => Task.FromResult(Mapping is not null && Mapping.Id == id ? Mapping : null);
 
-        public Task<bool> DeleteMapping(int id) => throw new NotSupportedException();
+        public Task<bool> DeleteMapping(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<MappingRecord> UpsertMapping(
             int? id,
@@ -109,15 +110,15 @@ public sealed class EnqueueContextResolverTests
             string directory,
             string? branch,
             bool enabled,
-            DateTimeOffset now) => throw new NotSupportedException();
+            DateTimeOffset now, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType) => Task.FromResult(Profile);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default) => Task.FromResult(Profile);
 
         public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
             string issueType,
             string instructions,
-            DateTimeOffset now)
+            DateTimeOffset now, CancellationToken cancellationToken = default)
         {
             UpsertMappingId = mappingId;
             UpsertIssueType = issueType;
@@ -135,6 +136,6 @@ public sealed class EnqueueContextResolverTests
                 });
         }
 
-        public Task<List<string>> ListEnabledMappingDirectories() => throw new NotSupportedException();
+        public Task<List<string>> ListEnabledMappingDirectories(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

@@ -6,9 +6,10 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using TaskViewer.Application.Orchestration;
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Orchestration;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.Server.Api;
 
 namespace TaskViewer.Server.Tests;
@@ -702,16 +703,6 @@ public sealed class ApiContractSerializationTests
         return host;
     }
 
-    static Task<IHost> CreateSessionsHost(ISessionsUseCases useCases)
-        => CreateHost(
-            endpoints => endpoints.MapSessionsEndpoints(),
-            services => services.AddSingleton(useCases));
-
-    static Task<IHost> CreateOrchestrationHost(IOrchestrationUseCases useCases)
-        => CreateHost(
-            endpoints => endpoints.MapOrchestrationEndpoints(),
-            services => services.AddSingleton(useCases));
-
     static StringContent JsonContent(string json)
         => new(json, System.Text.Encoding.UTF8, "application/json");
 
@@ -792,19 +783,19 @@ public sealed class ApiContractSerializationTests
         readonly LastAssistantMessageResult _taskLastAssistantMessageResult = taskLastAssistantMessageResult ?? new LastAssistantMessageResult(false, "missing-task", null, null);
         readonly ArchiveSessionResult _archiveSessionResult = archiveSessionResult ?? new ArchiveSessionResult(false, null);
 
-        public Task<IReadOnlyList<SessionSummaryDto>> ListSessionsAsync(string? limitParam)
+        public Task<IReadOnlyList<SessionSummaryDto>> ListSessionsAsync(string? limitParam, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<SessionSummaryDto>>([]);
 
-        public Task<SessionTasksResult> GetSessionTasksAsync(string sessionId)
+        public Task<SessionTasksResult> GetSessionTasksAsync(string sessionId, CancellationToken cancellationToken = default)
             => Task.FromResult(_sessionTasksResult);
 
-        public Task<LastAssistantMessageResult> GetTaskLastAssistantMessageAsync(string taskId)
+        public Task<LastAssistantMessageResult> GetTaskLastAssistantMessageAsync(string taskId, CancellationToken cancellationToken = default)
             => Task.FromResult(_taskLastAssistantMessageResult);
 
-        public Task<LastAssistantMessageResult> GetLastAssistantMessageAsync(string sessionId)
+        public Task<LastAssistantMessageResult> GetLastAssistantMessageAsync(string sessionId, CancellationToken cancellationToken = default)
             => Task.FromResult(_lastAssistantMessageResult);
 
-        public Task<ArchiveSessionResult> ArchiveSessionAsync(string sessionId)
+        public Task<ArchiveSessionResult> ArchiveSessionAsync(string sessionId, CancellationToken cancellationToken = default)
             => Task.FromResult(_archiveSessionResult);
     }
 
@@ -839,19 +830,19 @@ public sealed class ApiContractSerializationTests
             WorkingResumeBelow = 4
         };
 
-        public Task<List<MappingRecord>> ListMappingsAsync()
+        public Task<List<MappingRecord>> ListMappingsAsync(CancellationToken cancellationToken = default)
             => listMappingsException is null
                 ? Task.FromResult(new List<MappingRecord>())
                 : Task.FromException<List<MappingRecord>>(listMappingsException);
-        public Task<bool> DeleteMappingAsync(int mappingId)
+        public Task<bool> DeleteMappingAsync(int mappingId, CancellationToken cancellationToken = default)
         {
             LastDeletedMappingId = mappingId.ToString();
             return Task.FromResult(true);
         }
-        public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request) => throw new NotSupportedException();
-        public Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType) => throw new NotSupportedException();
-        public Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request) => throw new NotSupportedException();
-        public Task<IssuesListDto> ListIssuesAsync(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys)
+        public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IssuesListDto> ListIssuesAsync(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys, CancellationToken cancellationToken = default)
             => listIssuesException is null
                 ? Task.FromResult(
                     issuesResult ??
@@ -868,7 +859,7 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<IssuesListDto>(listIssuesException);
 
-        public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus)
+        public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 rulesResult ??
                 new RulesListDto
@@ -881,7 +872,7 @@ public sealed class ApiContractSerializationTests
                     Rules = []
                 });
 
-        public Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request)
+        public Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request, CancellationToken cancellationToken = default)
             => enqueueIssuesException is null
                 ? Task.FromResult(
                     enqueueIssuesResult ??
@@ -893,7 +884,7 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<EnqueueIssuesResultDto>(enqueueIssuesException);
 
-        public Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request)
+        public Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request, CancellationToken cancellationToken = default)
             => enqueueAllException is null
                 ? Task.FromResult(
                     enqueueAllResult ??
@@ -907,37 +898,37 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<EnqueueAllResultDto>(enqueueAllException);
 
-        public Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit)
+        public Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit, CancellationToken cancellationToken = default)
             => queueException is null
                 ? Task.FromResult(queueResult ?? CreateQueueOverviewDto())
                 : Task.FromException<QueueOverviewDto>(queueException);
-        public Task<bool> CancelQueueItemAsync(int queueId) => Task.FromResult(cancelQueueItemResult);
-        public Task<int> RetryFailedAsync() => Task.FromResult(retried);
-        public Task<int> ClearQueuedAsync() => Task.FromResult(cleared);
-        public Task<bool> ApproveTaskAsync(int taskId)
+        public Task<bool> CancelQueueItemAsync(int queueId, CancellationToken cancellationToken = default) => Task.FromResult(cancelQueueItemResult);
+        public Task<int> RetryFailedAsync(CancellationToken cancellationToken = default) => Task.FromResult(retried);
+        public Task<int> ClearQueuedAsync(CancellationToken cancellationToken = default) => Task.FromResult(cleared);
+        public Task<bool> ApproveTaskAsync(int taskId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(true);
         }
 
-        public Task<bool> RejectTaskAsync(int taskId, string? reason)
+        public Task<bool> RejectTaskAsync(int taskId, string? reason, CancellationToken cancellationToken = default)
         {
             LastRejectedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RequeueTaskAsync(int taskId, string? reason)
+        public Task<bool> RequeueTaskAsync(int taskId, string? reason, CancellationToken cancellationToken = default)
         {
             LastRequeuedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RepromptTaskAsync(int taskId, string instructions, string? reason)
+        public Task<bool> RepromptTaskAsync(int taskId, string instructions, string? reason, CancellationToken cancellationToken = default)
         {
             LastRepromptedInstructions = instructions;
             LastRepromptedReason = reason;
             return Task.FromResult(true);
         }
-        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(int taskId)
+        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistoryAsync(int taskId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<TaskReviewHistoryDto>>(
             [
                 new TaskReviewHistoryDto
@@ -947,6 +938,6 @@ public sealed class ApiContractSerializationTests
                     CreatedAt = DateTimeOffset.Parse("2026-03-08T10:04:00Z")
                 }
             ]);
-        public Task ResetStateAsync() => Task.CompletedTask;
+        public Task ResetStateAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

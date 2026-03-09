@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;

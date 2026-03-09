@@ -1,11 +1,14 @@
-using TaskViewer.Application.Orchestration;
-using TaskViewer.Application.Sessions;
 using TaskViewer.Domain;
+using TaskViewer.Domain.Orchestration;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.ServerSentEvents;
 using TaskViewer.OpenCode;
-using TaskViewer.Persistence.DependencyInjection;
+using TaskViewer.Persistence;
+using TaskViewer.Server.BackgroundServices;
 using TaskViewer.Server.Configuration;
+using TaskViewer.Server.Infrastructure.ServerSentEvents;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.DependencyInjection;
@@ -53,12 +56,10 @@ internal static class TaskViewerServiceCollectionExtensions
         services.AddSingleton<SessionTodoViewService>();
         services.AddSingleton<OpenCodeViewerState>();
         services.AddSingleton<OpenCodeViewerCachePolicy>();
-        services.AddSingleton<OpenCodeViewerCacheCoordinator>();
         services.AddSingleton<OpenCodeCacheInvalidationPolicy>();
         services.AddSingleton<OpenCodeSessionSearchService>();
         services.AddSingleton<OpenCodeTasksOverviewService>();
         services.AddSingleton<OpenCodeEventHandler>();
-        services.AddSingleton<OpenCodeSessionRuntimeService>();
         services.AddSingleton<QueueItemSessionSummaryMapper>();
         services.AddSingleton<OpenCodeViewerUpdateNotifier>();
         services.AddSingleton<ISonarRuleReadService>(sp => new CachedSonarRuleReadService(sp.GetRequiredService<ISonarQubeService>()));

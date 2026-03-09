@@ -1,3 +1,4 @@
+using TaskViewer.Infrastructure.ServerSentEvents;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;
@@ -5,13 +6,15 @@ namespace TaskViewer.Infrastructure.OpenCode;
 public sealed class OpenCodeEventHandler
 {
     readonly OpenCodeCacheInvalidationPolicy _cacheInvalidationPolicy;
-    readonly OpenCodeViewerCacheCoordinator _cacheCoordinator;
+    readonly OpenCodeViewerCachePolicy _cachePolicy;
+    readonly OpenCodeViewerState _viewerState;
     readonly ISseHub _sseHub;
 
-    public OpenCodeEventHandler(OpenCodeViewerCacheCoordinator cacheCoordinator, ISseHub sseHub, OpenCodeCacheInvalidationPolicy cacheInvalidationPolicy)
+    public OpenCodeEventHandler(OpenCodeViewerState viewerState, ISseHub sseHub, OpenCodeCacheInvalidationPolicy cacheInvalidationPolicy, OpenCodeViewerCachePolicy cachePolicy)
     {
         _cacheInvalidationPolicy = cacheInvalidationPolicy;
-        _cacheCoordinator = cacheCoordinator;
+        _cachePolicy = cachePolicy;
+        _viewerState = viewerState;
         _sseHub = sseHub;
     }
 
@@ -28,22 +31,22 @@ public sealed class OpenCodeEventHandler
             return;
 
         if (decision.InvalidateSessionTodos && !string.IsNullOrWhiteSpace(parsed.SessionId))
-            _cacheCoordinator.InvalidateTodos(parsed.Directory, parsed.SessionId);
+            _viewerState.InvalidateTodos(parsed.Directory, parsed.SessionId);
 
         if (!string.IsNullOrWhiteSpace(parsed.SessionId) && !string.IsNullOrWhiteSpace(decision.StatusType))
-            _cacheCoordinator.NoteStatusOverride(decision.StatusDirectory, parsed.SessionId, decision.StatusType);
+            _viewerState.NoteStatusOverride(decision.StatusDirectory, parsed.SessionId, decision.StatusType, _cachePolicy.StatusOverrideTtlMs);
 
         if (decision.ClearAssistantPresence)
-            _cacheCoordinator.ClearAssistantPresence();
+            _viewerState.ClearAssistantPresence();
 
         if (decision.InvalidateAllCaches)
-            _cacheCoordinator.InvalidateAllCaches();
+            _viewerState.InvalidateAllCaches();
 
         if (decision.InvalidateSessionsList)
-            _cacheCoordinator.InvalidateSessionsList();
+            _viewerState.InvalidateSessionsList();
 
         if (decision.InvalidateTaskOverview)
-            _cacheCoordinator.InvalidateTaskOverview();
+            _viewerState.InvalidateTaskOverview();
 
         if (decision.BroadcastUpdate)
             await BroadcastUpdate(decision.BroadcastSessionId);

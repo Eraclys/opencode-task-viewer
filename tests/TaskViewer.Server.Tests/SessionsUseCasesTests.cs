@@ -1,7 +1,10 @@
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Orchestration;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
+using TaskViewer.Persistence;
 
 namespace TaskViewer.Server.Tests;
 
@@ -14,7 +17,7 @@ public sealed class SessionsUseCasesTests
 
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(null));
+            findSessionInfo: (_, _) => Task.FromResult<OpenCodeSessionDto?>(null));
 
         var result = await sut.GetSessionTasksAsync("missing-session");
 
@@ -31,8 +34,8 @@ public sealed class SessionsUseCasesTests
 
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
-            getLastAssistantMessage: _ => Task.FromResult<LastAssistantMessage?>(new LastAssistantMessage("done", DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))));
+            findSessionInfo: (_, _) => Task.FromResult<OpenCodeSessionDto?>(session),
+            getLastAssistantMessage: (_, _) => Task.FromResult<LastAssistantMessage?>(new LastAssistantMessage("done", DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))));
 
         var result = await sut.GetLastAssistantMessageAsync("sess-1");
 
@@ -53,8 +56,8 @@ public sealed class SessionsUseCasesTests
 
         var sut = CreateUseCases(
             orchestrator,
-            findSessionInfo: _ => Task.FromResult<OpenCodeSessionDto?>(session),
-            archiveSessionOnOpenCode: (_, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00")),
+            findSessionInfo: (_, _) => Task.FromResult<OpenCodeSessionDto?>(session),
+            archiveSessionOnOpenCode: (_, _, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00")),
             invalidateAllCaches: () => invalidated++,
             broadcastUpdate: () =>
             {
@@ -102,11 +105,11 @@ public sealed class SessionsUseCasesTests
         SonarOrchestrator orchestrator,
         Func<string, string?, string?>? buildOpenCodeSessionUrl = null,
         Func<QueueItemRecord, SessionSummaryDto?>? mapQueueItemToSessionSummary = null,
-        Func<string, Task<OpenCodeSessionDto?>>? findSessionInfo = null,
-        Func<string, string?, Task<List<SessionTodoDto>>>? getTodosForSession = null,
+        Func<string, CancellationToken, Task<OpenCodeSessionDto?>>? findSessionInfo = null,
+        Func<string, string?, CancellationToken, Task<List<SessionTodoDto>>>? getTodosForSession = null,
         Func<List<SessionTodoDto>, List<ViewerTaskDto>>? mapTodosToViewerTasks = null,
-        Func<string, Task<LastAssistantMessage?>>? getLastAssistantMessage = null,
-        Func<string, string?, Task<DateTimeOffset?>>? archiveSessionOnOpenCode = null,
+        Func<string, CancellationToken, Task<LastAssistantMessage?>>? getLastAssistantMessage = null,
+        Func<string, string?, CancellationToken, Task<DateTimeOffset?>>? archiveSessionOnOpenCode = null,
         Action? invalidateAllCaches = null,
         Func<Task>? broadcastUpdate = null)
     {
@@ -114,11 +117,11 @@ public sealed class SessionsUseCasesTests
             orchestrator,
             mapQueueItemToSessionSummary ?? (new QueueItemSessionSummaryMapper().Map),
             findSessionInfo ??
-            (_ => Task.FromResult<OpenCodeSessionDto?>(new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null))),
-            getTodosForSession ?? ((_, _) => Task.FromResult(new List<SessionTodoDto>())),
+            ((_, _) => Task.FromResult<OpenCodeSessionDto?>(new OpenCodeSessionDto("sess-1", "Session One", "C:/Work/Alpha", "C:/Work/Alpha", null, null))),
+            getTodosForSession ?? ((_, _, _) => Task.FromResult(new List<SessionTodoDto>())),
             mapTodosToViewerTasks ?? (_ => new List<ViewerTaskDto>()),
-            getLastAssistantMessage ?? (_ => Task.FromResult<LastAssistantMessage?>(null)),
-            archiveSessionOnOpenCode ?? ((_, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))),
+            getLastAssistantMessage ?? ((_, _) => Task.FromResult<LastAssistantMessage?>(null)),
+            archiveSessionOnOpenCode ?? ((_, _, _) => Task.FromResult<DateTimeOffset?>(DateTimeOffset.Parse("2026-01-01T00:00:00.0000000+00:00"))),
             invalidateAllCaches ?? (() => { }),
             broadcastUpdate ?? (() => Task.CompletedTask));
     }

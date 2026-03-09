@@ -792,71 +792,70 @@ static JsonElement? CloneJsonElement(JsonElement? value)
     return document.RootElement.Clone();
 }
 
-sealed class SetTodosRequest
-{
-    public string? SessionId { get; init; }
-    public List<TodoRecord>? Todos { get; init; }
-}
-
-sealed class SetStatusRequest
-{
-    public string? Directory { get; init; }
-    public string? SessionId { get; init; }
-    public string? Type { get; init; }
-}
-
-sealed class EmitRequest
-{
-    public string? Directory { get; init; }
-    public string? Type { get; init; }
-    public JsonElement? Properties { get; init; }
-}
-
-sealed class SetFailuresRequest
-{
-    public int? SessionCreateCount { get; init; }
-    public int? PromptAsyncCount { get; init; }
-    public int? PromptDelayMs { get; init; }
-}
-
-sealed class AddSandboxSessionRequest
-{
-    public string? ProjectWorktree { get; init; }
-    public string? Worktree { get; init; }
-    public string? SandboxPath { get; init; }
-    public string? Sandbox { get; init; }
-    public string? SessionId { get; init; }
-    public string? Title { get; init; }
-    public string? Directory { get; init; }
-}
-
-sealed class CreateSessionRequest
-{
-    public string? Title { get; init; }
-}
-
-sealed class ArchiveSessionRequest
-{
-    public ArchiveTimeRequest? Time { get; init; }
-    public bool? Archived { get; init; }
-}
-
-sealed class ArchiveTimeRequest
-{
-    public long? Archived { get; init; }
-}
-
-sealed class PromptAsyncRequest
-{
-    public List<PromptPartRequest>? Parts { get; init; }
-}
-
-sealed class PromptPartRequest
-{
-    public string? Type { get; init; }
-    public string? Text { get; init; }
-}
-
 namespace TaskViewer.MockOpenCode
 {
+    sealed class SetTodosRequest
+    {
+        public string? SessionId { get; init; }
+        public List<TodoRecord>? Todos { get; init; }
+    }
+
+    sealed class SetStatusRequest
+    {
+        public string? Directory { get; init; }
+        public string? SessionId { get; init; }
+        public string? Type { get; init; }
+    }
+
+    sealed class EmitRequest
+    {
+        public string? Directory { get; init; }
+        public string? Type { get; init; }
+        public JsonElement? Properties { get; init; }
+    }
+
+    sealed class SetFailuresRequest
+    {
+        public int? SessionCreateCount { get; init; }
+        public int? PromptAsyncCount { get; init; }
+        public int? PromptDelayMs { get; init; }
+    }
+
+    sealed class AddSandboxSessionRequest
+    {
+        public string? ProjectWorktree { get; init; }
+        public string? Worktree { get; init; }
+        public string? SandboxPath { get; init; }
+        public string? Sandbox { get; init; }
+        public string? SessionId { get; init; }
+        public string? Title { get; init; }
+        public string? Directory { get; init; }
+    }
+
+    sealed class CreateSessionRequest
+    {
+        public string? Title { get; init; }
+    }
+
+    sealed class ArchiveSessionRequest
+    {
+        public ArchiveTimeRequest? Time { get; init; }
+        public bool? Archived { get; init; }
+    }
+
+    sealed class ArchiveTimeRequest
+    {
+        public long? Archived { get; init; }
+    }
+
+    sealed class PromptAsyncRequest
+    {
+        public List<PromptPartRequest>? Parts { get; init; }
+    }
+
+    sealed class PromptPartRequest
+    {
+        public string? Type { get; init; }
+        public string? Text { get; init; }
+    }
 }

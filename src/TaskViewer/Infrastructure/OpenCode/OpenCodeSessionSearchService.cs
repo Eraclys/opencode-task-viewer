@@ -1,6 +1,6 @@
 using System.Globalization;
-using TaskViewer.Application.Sessions;
 using TaskViewer.Domain;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;
@@ -8,14 +8,17 @@ namespace TaskViewer.Infrastructure.OpenCode;
 public sealed class OpenCodeSessionSearchService
 {
     readonly IOpenCodeService _openCodeService;
-    readonly OpenCodeViewerCacheCoordinator _cacheCoordinator;
+    readonly OpenCodeViewerCachePolicy _cachePolicy;
+    readonly OpenCodeViewerState _viewerState;
 
     public OpenCodeSessionSearchService(
         IOpenCodeService openCodeService,
-        OpenCodeViewerCacheCoordinator cacheCoordinator)
+        OpenCodeViewerState viewerState,
+        OpenCodeViewerCachePolicy cachePolicy)
     {
         _openCodeService = openCodeService;
-        _cacheCoordinator = cacheCoordinator;
+        _viewerState = viewerState;
+        _cachePolicy = cachePolicy;
     }
 
     public string? BuildOpenCodeSessionUrl(string sessionId, string? directory) => _openCodeService.BuildSessionUrl(sessionId, directory);
@@ -23,9 +26,10 @@ public sealed class OpenCodeSessionSearchService
     public async Task<List<OpenCodeSessionDto>> ListGlobalSessionsAsync(
         string limitParam,
         int maxAllSessions,
-        int maxSessionsPerProject)
+        int maxSessionsPerProject,
+        CancellationToken cancellationToken = default)
     {
-        var cachedSessions = _cacheCoordinator.GetFreshSessions();
+        var cachedSessions = _viewerState.GetFreshSessions();
 
         if (cachedSessions is not null)
             return cachedSessions;
@@ -34,7 +38,7 @@ public sealed class OpenCodeSessionSearchService
             ? maxAllSessions
             : Math.Clamp(ParseIntSafe(limitParam, 20), 1, maxAllSessions);
 
-        var projects = await ListProjectsAsync();
+        var projects = await ListProjectsAsync(cancellationToken);
         var projectSearchEntries = BuildProjectSearchEntries(projects);
         var perDirectoryLimit = string.Equals(limitParam, "all", StringComparison.OrdinalIgnoreCase)
             ? maxSessionsPerProject
@@ -44,7 +48,7 @@ public sealed class OpenCodeSessionSearchService
 
         foreach (var entry in projectSearchEntries)
         {
-            var listed = await ListSessionsForDirectoryAsync(entry.Directory, entry.ProjectWorktree, perDirectoryLimit, maxSessionsPerProject);
+            var listed = await ListSessionsForDirectoryAsync(entry.Directory, entry.ProjectWorktree, perDirectoryLimit, maxSessionsPerProject, cancellationToken);
             sessions.AddRange(listed);
         }
 
@@ -55,11 +59,11 @@ public sealed class OpenCodeSessionSearchService
         if (!string.Equals(limitParam, "all", StringComparison.OrdinalIgnoreCase))
             sessions = sessions.Take(limit).ToList();
 
-        _cacheCoordinator.StoreSessions(sessions, DateTimeOffset.UtcNow);
+        _viewerState.StoreSessions(sessions, _cachePolicy.SessionsCacheTtlMs);
         return sessions;
     }
 
-    public async Task<Dictionary<string, SessionRuntimeStatus>> GetStatusMapForDirectoryAsync(string? directory)
+    public async Task<Dictionary<string, SessionRuntimeStatus>> GetStatusMapForDirectoryAsync(string? directory, CancellationToken cancellationToken = default)
     {
         var normalizedDirectory = DirectoryPath.Normalize(directory);
 
@@ -71,7 +75,7 @@ public sealed class OpenCodeSessionSearchService
         if (string.IsNullOrWhiteSpace(directoryKey))
             return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
-        if (_cacheCoordinator.TryGetFreshStatusMap(directoryKey, out var cachedStatusMap))
+        if (_viewerState.TryGetFreshStatusMap(directoryKey, out var cachedStatusMap))
             return cachedStatusMap;
 
         Dictionary<string, SessionRuntimeStatus> statusMap = new(StringComparer.Ordinal);
@@ -80,7 +84,7 @@ public sealed class OpenCodeSessionSearchService
         {
             try
             {
-                var result = await _openCodeService.ReadWorkingStatusMapAsync(candidateDirectory);
+                var result = await _openCodeService.ReadWorkingStatusMapAsync(candidateDirectory, cancellationToken);
                 var normalized = result.ToDictionary(pair => pair.Key, pair => new SessionRuntimeStatus(pair.Value), StringComparer.Ordinal);
 
                 if (normalized.Count > 0)
@@ -97,47 +101,47 @@ public sealed class OpenCodeSessionSearchService
             }
         }
 
-        _cacheCoordinator.StoreStatusMap(directoryKey, statusMap, DateTimeOffset.UtcNow);
+        _viewerState.StoreStatusMap(directoryKey, statusMap, _cachePolicy.StatusCacheTtlMs);
         return statusMap;
     }
 
-    public async Task<List<SessionTodoDto>> GetTodosForSessionAsync(string sessionId, string? directory)
+    public async Task<List<SessionTodoDto>> GetTodosForSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
     {
-        if (_cacheCoordinator.TryGetFreshTodos(directory, sessionId, out var cachedTodos))
+        if (_viewerState.TryGetFreshTodos(directory, sessionId, out var cachedTodos))
             return cachedTodos;
 
-        var rawTodos = await _openCodeService.ReadTodosAsync(sessionId, directory);
+        var rawTodos = await _openCodeService.ReadTodosAsync(sessionId, directory, cancellationToken);
         var normalized = rawTodos.Select(todo => new SessionTodoDto(todo.Content, todo.Status, todo.Priority)).ToList();
-        _cacheCoordinator.StoreTodos(directory, sessionId, normalized, DateTimeOffset.UtcNow);
+        _viewerState.StoreTodos(directory, sessionId, normalized, _cachePolicy.TodoCacheTtlMs);
         return normalized;
     }
 
-    public async Task<OpenCodeSessionDto?> FindSessionInfoAsync(string sessionId, int maxAllSessions, int maxSessionsPerProject)
+    public async Task<OpenCodeSessionDto?> FindSessionInfoAsync(string sessionId, int maxAllSessions, int maxSessionsPerProject, CancellationToken cancellationToken = default)
     {
-        if (_cacheCoordinator.TryGetSessionInfo(sessionId, out var cached))
+        if (_viewerState.TryGetSessionInfo(sessionId, out var cached))
             return cached;
 
         try
         {
-            await ListGlobalSessionsAsync("200", maxAllSessions, maxSessionsPerProject);
+            await ListGlobalSessionsAsync("200", maxAllSessions, maxSessionsPerProject, cancellationToken);
         }
         catch
         {
         }
 
-        return _cacheCoordinator.TryGetSessionInfo(sessionId, out var refreshed)
+        return _viewerState.TryGetSessionInfo(sessionId, out var refreshed)
             ? refreshed
             : null;
     }
 
-    public async Task<DateTimeOffset?> ArchiveSessionAsync(string sessionId, string? directory)
+    public async Task<DateTimeOffset?> ArchiveSessionAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
     {
-        return await _openCodeService.ArchiveSessionAsync(sessionId, directory);
+        return await _openCodeService.ArchiveSessionAsync(sessionId, directory, cancellationToken);
     }
 
-    public async Task<LastAssistantMessage?> GetLastAssistantMessageAsync(string sessionId)
+    public async Task<LastAssistantMessage?> GetLastAssistantMessageAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        var tailMessages = await _openCodeService.ReadMessagesAsync(sessionId, 400);
+        var tailMessages = await _openCodeService.ReadMessagesAsync(sessionId, 400, cancellationToken);
         var match = tailMessages.LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.Ordinal));
 
         if (match is not null)
@@ -146,7 +150,7 @@ public sealed class OpenCodeSessionSearchService
         if (tailMessages.Count < 400)
             return null;
 
-        var allMessages = await _openCodeService.ReadMessagesAsync(sessionId);
+        var allMessages = await _openCodeService.ReadMessagesAsync(sessionId, cancellationToken: cancellationToken);
         var allMatch = allMessages.LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.Ordinal));
         return allMatch is null ? null : new LastAssistantMessage(allMatch.Text, allMatch.CreatedAt);
     }
@@ -189,19 +193,19 @@ public sealed class OpenCodeSessionSearchService
         return entries;
     }
 
-    async Task<List<OpenCodeProject>> ListProjectsAsync()
+    async Task<List<OpenCodeProject>> ListProjectsAsync(CancellationToken cancellationToken)
     {
-        var cachedProjects = _cacheCoordinator.GetFreshProjects();
+        var cachedProjects = _viewerState.GetFreshProjects();
 
         if (cachedProjects is not null)
             return cachedProjects;
 
-        var projects = await _openCodeService.ReadProjectsAsync();
-        _cacheCoordinator.StoreProjects(projects, DateTimeOffset.UtcNow);
+        var projects = await _openCodeService.ReadProjectsAsync(cancellationToken);
+        _viewerState.StoreProjects(projects, _cachePolicy.ProjectsCacheTtlMs);
         return projects;
     }
 
-    async Task<List<OpenCodeSessionDto>> ListSessionsForDirectoryAsync(string directory, string? projectWorktree, int limit, int maxSessionsPerProject)
+    async Task<List<OpenCodeSessionDto>> ListSessionsForDirectoryAsync(string directory, string? projectWorktree, int limit, int maxSessionsPerProject, CancellationToken cancellationToken)
     {
         var normalizedDirectory = DirectoryPath.Normalize(directory);
 
@@ -213,7 +217,7 @@ public sealed class OpenCodeSessionSearchService
         if (string.IsNullOrWhiteSpace(directoryKey))
             return [];
 
-        if (_cacheCoordinator.TryGetFreshSessionsForDirectory(directoryKey, out var cachedSessions))
+        if (_viewerState.TryGetFreshSessionsForDirectory(directoryKey, out var cachedSessions))
             return cachedSessions;
 
         var perRequestLimit = Math.Clamp(limit, 1, maxSessionsPerProject);
@@ -225,7 +229,7 @@ public sealed class OpenCodeSessionSearchService
         {
             try
             {
-                var sessionsForDirectory = await _openCodeService.ReadSessionsAsync(candidateDirectory, perRequestLimit);
+                var sessionsForDirectory = await _openCodeService.ReadSessionsAsync(candidateDirectory, perRequestLimit, cancellationToken);
                 hadSuccess = true;
 
                 var list = sessionsForDirectory
@@ -256,7 +260,7 @@ public sealed class OpenCodeSessionSearchService
             throw lastError;
 
         var sessions = mergedById.Values.ToList();
-        _cacheCoordinator.StoreSessionsForDirectory(directoryKey, sessions, DateTimeOffset.UtcNow);
+        _viewerState.StoreSessionsForDirectory(directoryKey, sessions, _cachePolicy.DirectorySessionsCacheTtlMs);
         return sessions;
     }
 }

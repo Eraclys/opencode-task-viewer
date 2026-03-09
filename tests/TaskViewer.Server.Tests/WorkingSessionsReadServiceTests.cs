@@ -1,5 +1,6 @@
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;
@@ -73,11 +74,11 @@ public sealed class WorkingSessionsReadServiceTests
             _directories = directories;
         }
 
-        public Task<List<string>> ListEnabledMappingDirectories() => Task.FromResult(_directories);
+        public Task<List<string>> ListEnabledMappingDirectories(CancellationToken cancellationToken = default) => Task.FromResult(_directories);
 
-        public Task<List<MappingRecord>> ListMappings() => throw new NotSupportedException();
-        public Task<MappingRecord?> GetMappingById(int id) => throw new NotSupportedException();
-        public Task<bool> DeleteMapping(int id) => throw new NotSupportedException();
+        public Task<List<MappingRecord>> ListMappings(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MappingRecord?> GetMappingById(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> DeleteMapping(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<MappingRecord> UpsertMapping(
             int? id,
@@ -85,15 +86,15 @@ public sealed class WorkingSessionsReadServiceTests
             string directory,
             string? branch,
             bool enabled,
-            DateTimeOffset now) => throw new NotSupportedException();
+            DateTimeOffset now, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType) => throw new NotSupportedException();
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
             string issueType,
             string instructions,
-            DateTimeOffset now) => throw new NotSupportedException();
+            DateTimeOffset now, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     sealed class FakeOpenCodeService : DisabledOpenCodeService

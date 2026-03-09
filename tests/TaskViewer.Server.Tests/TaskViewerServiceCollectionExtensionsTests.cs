@@ -1,8 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Data.Sqlite;
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.OpenCode;
+using TaskViewer.Server.BackgroundServices;
 using TaskViewer.Server.Configuration;
 using TaskViewer.Server.DependencyInjection;
 using TaskViewer.SonarQube;

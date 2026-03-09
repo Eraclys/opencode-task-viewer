@@ -1,4 +1,5 @@
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
+using TaskViewer.Infrastructure.Persistence;
 
 namespace TaskViewer.Infrastructure.OpenCode;
 

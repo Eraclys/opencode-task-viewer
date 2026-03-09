@@ -1,4 +1,4 @@
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.Server.Api;
 
@@ -8,10 +8,10 @@ public static class SessionsEndpoints
     {
         app.MapGet(
             "/api/tasks/board",
-            async (HttpContext ctx, string? limit, ISessionsUseCases useCases) =>
+            async (HttpContext ctx, string? limit, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
-                var items = await useCases.ListSessionsAsync(limit);
+                var items = await useCases.ListSessionsAsync(limit, cancellationToken);
 
                 return Results.Json(items);
             })
@@ -21,10 +21,10 @@ public static class SessionsEndpoints
 
         app.MapGet(
             "/api/sessions",
-            async (HttpContext ctx, string? limit, ISessionsUseCases useCases) =>
+            async (HttpContext ctx, string? limit, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
                 SetNoStore(ctx.Response);
-                var items = await useCases.ListSessionsAsync(limit);
+                var items = await useCases.ListSessionsAsync(limit, cancellationToken);
 
                 return Results.Json(items);
             })
@@ -34,9 +34,9 @@ public static class SessionsEndpoints
 
         app.MapGet(
             "/api/sessions/{sessionId}",
-            async (string sessionId, ISessionsUseCases useCases) =>
+            async (string sessionId, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.GetSessionTasksAsync(sessionId);
+                var result = await useCases.GetSessionTasksAsync(sessionId, cancellationToken);
 
                 if (!result.Found)
                     return Results.Json(
@@ -54,9 +54,9 @@ public static class SessionsEndpoints
 
         app.MapGet(
             "/api/sessions/{sessionId}/last-assistant-message",
-            async (string sessionId, ISessionsUseCases useCases) =>
+            async (string sessionId, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.GetLastAssistantMessageAsync(sessionId);
+                var result = await useCases.GetLastAssistantMessageAsync(sessionId, cancellationToken);
 
                 if (!result.Found)
                     return Results.Json(
@@ -80,9 +80,9 @@ public static class SessionsEndpoints
 
         app.MapGet(
             "/api/tasks/board/{taskId}/last-assistant-message",
-            async (string taskId, ISessionsUseCases useCases) =>
+            async (string taskId, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.GetTaskLastAssistantMessageAsync(taskId);
+                var result = await useCases.GetTaskLastAssistantMessageAsync(taskId, cancellationToken);
 
                 if (!result.Found)
                     return Results.Json(
@@ -106,9 +106,9 @@ public static class SessionsEndpoints
 
         app.MapPost(
             "/api/sessions/{sessionId}/archive",
-            async (string sessionId, ISessionsUseCases useCases) =>
+            async (string sessionId, ISessionsUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.ArchiveSessionAsync(sessionId);
+                var result = await useCases.ArchiveSessionAsync(sessionId, cancellationToken);
 
                 if (!result.Found)
                     return Results.Json(

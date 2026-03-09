@@ -11,5 +11,4 @@ internal static class TaskViewerRuntimeDefaults
     internal const int DirectorySessionsCacheTtlMs = 8_000;
     internal const int MaxSessionsPerProject = 500;
     internal const int MessagePresenceCacheTtlMs = 120_000;
-    internal const int SessionRecentWindowMs = 5 * 60 * 1000;
 }

@@ -1,4 +1,4 @@
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Server.Tests;

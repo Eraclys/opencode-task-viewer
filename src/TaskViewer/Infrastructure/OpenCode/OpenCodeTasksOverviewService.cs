@@ -1,34 +1,34 @@
-using TaskViewer.Application.Sessions;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.Infrastructure.OpenCode;
 
 public sealed class OpenCodeTasksOverviewService
 {
     readonly OpenCodeSessionSearchService _sessionSearchService;
-    readonly OpenCodeSessionRuntimeService _sessionRuntimeService;
-    readonly OpenCodeViewerCacheCoordinator _cacheCoordinator;
+    readonly OpenCodeViewerCachePolicy _cachePolicy;
     readonly SessionTodoViewService _sessionTodoViewService;
+    readonly OpenCodeViewerState _viewerState;
 
     public OpenCodeTasksOverviewService(
         OpenCodeSessionSearchService sessionSearchService,
-        OpenCodeSessionRuntimeService sessionRuntimeService,
-        OpenCodeViewerCacheCoordinator cacheCoordinator,
+        OpenCodeViewerState viewerState,
+        OpenCodeViewerCachePolicy cachePolicy,
         SessionTodoViewService sessionTodoViewService)
     {
         _sessionSearchService = sessionSearchService;
-        _sessionRuntimeService = sessionRuntimeService;
-        _cacheCoordinator = cacheCoordinator;
+        _viewerState = viewerState;
+        _cachePolicy = cachePolicy;
         _sessionTodoViewService = sessionTodoViewService;
     }
 
     public async Task<List<GlobalViewerTaskDto>> GetAllTasksAsync()
     {
-        var cachedTasks = _cacheCoordinator.GetFreshAllTasks();
+        var cachedTasks = _viewerState.GetFreshAllTasks();
 
         if (cachedTasks is not null)
             return cachedTasks;
 
-        var sessions = _cacheCoordinator.GetSessionSnapshot();
+        var sessions = _viewerState.GetSessionSnapshot();
 
         if (sessions.Count == 0)
         {
@@ -70,7 +70,7 @@ public sealed class OpenCodeTasksOverviewService
             var statusMap = !string.IsNullOrWhiteSpace(directoryKey) && statusByDirectory.TryGetValue(directoryKey, out var cachedStatusMap)
                 ? cachedStatusMap
                 : new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
-            var runtimeStatus = _sessionRuntimeService.NormalizeRuntimeStatus(session.Directory, session.Id, statusMap);
+            var runtimeStatus = NormalizeRuntimeStatus(session.Directory, session.Id, statusMap);
 
             List<SessionTodoDto> todos;
 
@@ -87,7 +87,19 @@ public sealed class OpenCodeTasksOverviewService
             tasks.AddRange(_sessionTodoViewService.MapTodosToGlobalViewerTasks(inferred, session.Id, session.Name, session.Project));
         }
 
-        _cacheCoordinator.StoreAllTasks(tasks, DateTimeOffset.UtcNow);
+        _viewerState.StoreAllTasks(tasks, _cachePolicy.TasksAllCacheTtlMs);
         return tasks;
+    }
+
+    string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<string, SessionRuntimeStatus> statusMap)
+    {
+        if (_viewerState.TryGetRecentStatusOverride(directory, sessionId, out var overrideType))
+            return string.IsNullOrWhiteSpace(overrideType) ? "idle" : overrideType;
+
+        if (statusMap.TryGetValue(sessionId, out var status) &&
+            !string.IsNullOrWhiteSpace(status.Type))
+            return status.Type;
+
+        return "idle";
     }
 }

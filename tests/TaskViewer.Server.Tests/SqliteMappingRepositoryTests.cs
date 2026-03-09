@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.Persistence;
 
 namespace TaskViewer.Server.Tests;
 
@@ -187,18 +189,16 @@ public sealed class SqliteMappingRepositoryTests
 
     static SqliteMappingRepository CreateRepository(string dbPath)
     {
-        var dbLock = new SemaphoreSlim(1, 1);
         var onChange = () => { };
 
-        return new SqliteMappingRepository(dbLock, () => OpenConnection(dbPath), onChange);
+        return new SqliteMappingRepository(() => OpenConnection(dbPath), onChange);
     }
 
     static SqliteQueueRepository CreateQueueRepository(string dbPath)
     {
-        var dbLock = new SemaphoreSlim(1, 1);
         var onChange = () => { };
 
-        return new SqliteQueueRepository(dbLock, () => OpenConnection(dbPath), onChange);
+        return new SqliteQueueRepository(() => OpenConnection(dbPath), onChange);
     }
 
     static SqliteConnection OpenConnection(string dbPath)

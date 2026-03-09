@@ -1,8 +1,11 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
+using TaskViewer.Persistence;
 using TaskViewer.Server;
+using TaskViewer.Server.BackgroundServices;
 using TaskViewer.Server.Configuration;
 using TaskViewer.SonarQube;
 

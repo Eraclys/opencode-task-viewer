@@ -1,5 +1,6 @@
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Persistence;
 
 namespace TaskViewer.Server.Tests;
 
@@ -209,15 +210,15 @@ public sealed class OrchestrationUseCasesTests
             WorkingResumeBelow = 4
         };
 
-        public Task<List<MappingRecord>> ListMappings() => Task.FromResult(new List<MappingRecord>());
+        public Task<List<MappingRecord>> ListMappings(CancellationToken cancellationToken = default) => Task.FromResult(new List<MappingRecord>());
 
-        public Task<bool> DeleteMapping(int mappingId)
+        public Task<bool> DeleteMapping(int mappingId, CancellationToken cancellationToken = default)
         {
             LastDeletedMappingId = mappingId;
             return Task.FromResult(mappingId > 0);
         }
 
-        public Task<MappingRecord> UpsertMapping(UpsertMappingRequest request) => Task.FromResult(
+        public Task<MappingRecord> UpsertMapping(UpsertMappingRequest request, CancellationToken cancellationToken = default) => Task.FromResult(
             new MappingRecord
             {
                 Id = 1,
@@ -227,9 +228,9 @@ public sealed class OrchestrationUseCasesTests
                 UpdatedAt = DateTimeOffset.UnixEpoch
             });
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType) => Task.FromResult(InstructionProfileResult);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType, CancellationToken cancellationToken = default) => Task.FromResult(InstructionProfileResult);
 
-        public Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request)
+        public Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new InstructionProfileRecord
                 {
@@ -248,7 +249,8 @@ public sealed class OrchestrationUseCasesTests
             string? issueStatus,
             int? page,
             int? pageSize,
-            string? ruleKeys)
+            string? ruleKeys,
+            CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new IssuesListDto
                 {
@@ -269,7 +271,7 @@ public sealed class OrchestrationUseCasesTests
                     Issues = []
                 });
 
-        public Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus)
+        public Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new RulesListDto
                 {
@@ -288,7 +290,7 @@ public sealed class OrchestrationUseCasesTests
                     Rules = []
                 });
 
-        public Task<EnqueueIssuesResultDto> EnqueueIssues(EnqueueIssuesRequest request)
+        public Task<EnqueueIssuesResultDto> EnqueueIssues(EnqueueIssuesRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new EnqueueIssuesResultDto
                 {
@@ -297,7 +299,7 @@ public sealed class OrchestrationUseCasesTests
                     Items = []
                 });
 
-        public Task<EnqueueAllResultDto> EnqueueAllMatching(EnqueueAllRequest request)
+        public Task<EnqueueAllResultDto> EnqueueAllMatching(EnqueueAllRequest request, CancellationToken cancellationToken = default)
         {
             LastRuleKeys = request.RuleKeys;
 
@@ -312,33 +314,33 @@ public sealed class OrchestrationUseCasesTests
                 });
         }
 
-        public Task<List<QueueItemRecord>> ListQueue(string? states, int? limit) => Task.FromResult(QueueItemsResult);
-        public Task<QueueStatsDto> GetQueueStats() => Task.FromResult(QueueStatsResult);
-        public Task<OrchestrationWorkerStateDto> GetWorkerState() => Task.FromResult(WorkerStateResult);
-        public Task<bool> CancelQueueItem(int queueId) => Task.FromResult(true);
-        public Task<int> RetryFailed() => Task.FromResult(0);
-        public Task<int> ClearQueued() => Task.FromResult(0);
-        public Task<bool> ApproveTask(int taskId)
+        public Task<List<QueueItemRecord>> ListQueue(string? states, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(QueueItemsResult);
+        public Task<QueueStatsDto> GetQueueStats(CancellationToken cancellationToken = default) => Task.FromResult(QueueStatsResult);
+        public Task<OrchestrationWorkerStateDto> GetWorkerState(CancellationToken cancellationToken = default) => Task.FromResult(WorkerStateResult);
+        public Task<bool> CancelQueueItem(int queueId, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<int> RetryFailed(CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<int> ClearQueued(CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<bool> ApproveTask(int taskId, CancellationToken cancellationToken = default)
         {
             LastApprovedTaskId = taskId;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RejectTask(int taskId, string? reason)
+        public Task<bool> RejectTask(int taskId, string? reason, CancellationToken cancellationToken = default)
         {
             LastRejectedTaskId = taskId;
             LastRejectedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RequeueTask(int taskId, string? reason)
+        public Task<bool> RequeueTask(int taskId, string? reason, CancellationToken cancellationToken = default)
         {
             LastRequeuedTaskId = taskId;
             LastRequeuedReason = reason;
             return Task.FromResult(true);
         }
 
-        public Task<bool> RepromptTask(int taskId, string instructions, string? reason)
+        public Task<bool> RepromptTask(int taskId, string instructions, string? reason, CancellationToken cancellationToken = default)
         {
             LastRepromptedTaskId = taskId;
             LastRepromptedInstructions = instructions;
@@ -346,11 +348,11 @@ public sealed class OrchestrationUseCasesTests
             return Task.FromResult(true);
         }
 
-        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int taskId)
+        public Task<IReadOnlyList<TaskReviewHistoryDto>> GetTaskReviewHistory(int taskId, CancellationToken cancellationToken = default)
         {
             LastReviewTaskId = taskId;
             return Task.FromResult(ReviewHistoryResult);
         }
-        public Task ResetState() => Task.CompletedTask;
+        public Task ResetState(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

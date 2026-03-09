@@ -1,17 +1,19 @@
+using TaskViewer.Infrastructure.ServerSentEvents;
+
 namespace TaskViewer.Infrastructure.OpenCode;
 
 public sealed class OpenCodeViewerUpdateNotifier
 {
-    readonly OpenCodeViewerCacheCoordinator _cacheCoordinator;
+    readonly OpenCodeViewerState _viewerState;
     readonly ISseHub _sseHub;
 
-    public OpenCodeViewerUpdateNotifier(OpenCodeViewerCacheCoordinator cacheCoordinator, ISseHub sseHub)
+    public OpenCodeViewerUpdateNotifier(OpenCodeViewerState viewerState, ISseHub sseHub)
     {
-        _cacheCoordinator = cacheCoordinator;
+        _viewerState = viewerState;
         _sseHub = sseHub;
     }
 
-    public void InvalidateAllCaches() => _cacheCoordinator.InvalidateAllCaches();
+    public void InvalidateAllCaches() => _viewerState.InvalidateAllCaches();
 
     public Task BroadcastUpdateAsync() => _sseHub.Broadcast(
         new ViewerUpdateEventDto
@@ -21,7 +23,7 @@ public sealed class OpenCodeViewerUpdateNotifier
 
     public Task InvalidateAllAndBroadcastAsync()
     {
-        _cacheCoordinator.InvalidateAllCaches();
+        _viewerState.InvalidateAllCaches();
         return BroadcastUpdateAsync();
     }
 }

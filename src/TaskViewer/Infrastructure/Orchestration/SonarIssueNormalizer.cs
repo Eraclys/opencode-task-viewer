@@ -1,3 +1,4 @@
+using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Infrastructure.Orchestration;

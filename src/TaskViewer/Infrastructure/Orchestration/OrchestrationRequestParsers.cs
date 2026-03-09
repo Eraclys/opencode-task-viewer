@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using TaskViewer.Application.Orchestration;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Infrastructure.Orchestration;
@@ -64,9 +64,6 @@ public static class OrchestrationRequestParsers
             request?.Severity,
             request?.Instructions);
     }
-
-    public static TaskReviewRequestDto ParseTaskReviewRequest(string? payload)
-        => ParseTaskReviewRequest(Deserialize<TaskReviewPayload>(payload));
 
     public static TaskReviewRequestDto ParseTaskReviewRequest(TaskReviewPayload? request)
     {
