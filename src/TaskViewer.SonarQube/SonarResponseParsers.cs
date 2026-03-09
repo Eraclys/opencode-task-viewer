@@ -26,9 +26,6 @@ public static class SonarResponseParsers
     public static int ParsePageSize(JsonNode? data, int fallback)
         => ParseIntSafe(data?["paging"]?["pageSize"]?.ToString(), fallback);
 
-    public static int ParseTotal(JsonNode? data, int fallback)
-        => ParseIntSafe(data?["paging"]?["total"]?.ToString(), fallback);
-
     public static int? ParseNullableTotal(JsonNode? data)
         => ParseNullableInt(data?["paging"]?["total"]?.ToString());
 

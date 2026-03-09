@@ -1,8 +1,7 @@
+using TaskViewer.Application.Sessions;
+using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Application.Sessions;
-using TaskViewer.Server.Infrastructure.OpenCode;
-using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 

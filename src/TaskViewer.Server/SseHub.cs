@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace TaskViewer.Server;
 
-sealed class SseHub
+sealed class SseHub : ISseHub
 {
     readonly ConcurrentDictionary<Guid, SseClient> _clients = new();
 

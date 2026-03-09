@@ -6,10 +6,10 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TaskViewer.Application.Orchestration;
+using TaskViewer.Application.Sessions;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Server.Api;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Application.Sessions;
-using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 

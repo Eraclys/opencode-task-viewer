@@ -1,5 +1,5 @@
 using System.Text;
-using TaskViewer.Server.Application;
+using TaskViewer.Application;
 
 namespace TaskViewer.Server.Tests;
 

@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 
@@ -61,7 +61,7 @@ public sealed class SqliteMappingRepositoryTests
 
         var loaded = await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL");
         Assert.NotNull(loaded);
-        Assert.Equal("Fix only this issue", loaded!.Instructions);
+        Assert.Equal("Fix only this issue", loaded.Instructions);
     }
 
     [Fact]

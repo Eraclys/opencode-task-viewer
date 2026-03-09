@@ -1,10 +1,10 @@
+using TaskViewer.Application.Orchestration;
+using TaskViewer.Application.Sessions;
+using TaskViewer.Domain;
+using TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Application.Sessions;
 using TaskViewer.Server.Configuration;
-using TaskViewer.Server.Domain;
-using TaskViewer.Server.Infrastructure.OpenCode;
-using TaskViewer.Server.Infrastructure.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.DependencyInjection;
@@ -38,9 +38,10 @@ internal static class TaskViewerServiceCollectionExtensions
 
                 return string.Equals(runtimeSettings.SonarQube.Mode, SonarQubeMode.Fake, StringComparison.Ordinal)
                     ? sp.GetRequiredService<FakeSonarQubeService>()
-                    : sp.GetRequiredService<SonarQubeApiClient>();
+                    : sp.GetRequiredService<SonarQubeService>();
             });
         services.AddSingleton<SseHub>();
+        services.AddSingleton<ISseHub>(sp => sp.GetRequiredService<SseHub>());
         services.AddSingleton<SessionTodoViewService>();
         services.AddSingleton<OpenCodeViewerState>();
         services.AddSingleton<OpenCodeViewerCachePolicy>();
@@ -70,7 +71,7 @@ internal static class TaskViewerServiceCollectionExtensions
                         SonarRuleReadService = sp.GetRequiredService<ISonarRuleReadService>(),
                         SonarRulesReadService = sp.GetRequiredService<ISonarRulesReadService>(),
                         SonarIssuesReadService = sp.GetRequiredService<ISonarIssuesReadService>(),
-                        OpenCodeApiClient = sp.GetRequiredService<OpenCodeApiClient>(),
+                        OpenCodeApiClient = sp.GetRequiredService<IOpenCodeService>(),
                         SonarUrl = runtimeSettings.SonarQube.Url,
                         SonarToken = runtimeSettings.SonarQube.Token,
                         DbPath = runtimeSettings.Orchestration.DbPath,

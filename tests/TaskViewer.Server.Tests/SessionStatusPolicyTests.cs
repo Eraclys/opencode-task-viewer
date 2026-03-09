@@ -1,4 +1,4 @@
-using TaskViewer.Server.Domain;
+using TaskViewer.Domain;
 
 namespace TaskViewer.Server.Tests;
 

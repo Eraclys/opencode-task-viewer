@@ -29,7 +29,7 @@ public static class OpenCodeStatusParsers
 
         foreach (var kv in parsed)
         {
-            var statusType = kv.Value?.Type?.Trim()?.ToLowerInvariant();
+            var statusType = kv.Value?.Type?.Trim().ToLowerInvariant();
 
             if (!string.IsNullOrWhiteSpace(statusType))
                 map[kv.Key] = statusType;

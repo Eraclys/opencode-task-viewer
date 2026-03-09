@@ -1,0 +1,9 @@
+using TaskViewer.OpenCode;
+
+namespace TaskViewer;
+
+sealed class ProjectsCache
+{
+    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.MinValue;
+    public List<OpenCodeProjectTransport> Data { get; set; } = [];
+}

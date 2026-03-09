@@ -13,7 +13,7 @@ public sealed class OpenCodeServiceCollectionExtensionsTests
 
         using var provider = services.BuildServiceProvider();
 
-        var apiClient = provider.GetRequiredService<OpenCodeApiClient>();
+        var apiClient = provider.GetRequiredService<IOpenCodeService>();
         var statusReader = provider.GetRequiredService<IOpenCodeStatusReader>();
         var dispatchClient = provider.GetRequiredService<IOpenCodeDispatchClient>();
         var sseService = provider.GetRequiredService<OpenCodeUpstreamSseService>();

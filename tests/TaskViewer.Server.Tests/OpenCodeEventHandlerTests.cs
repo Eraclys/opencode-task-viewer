@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
-using TaskViewer.Server.Application.Sessions;
-using TaskViewer.Server.Infrastructure.OpenCode;
+using TaskViewer.Application.Sessions;
+using TaskViewer.Infrastructure.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 
@@ -116,7 +116,7 @@ public sealed class OpenCodeEventHandlerTests
         await client.Completion;
     }
 
-    static (SseHub Hub, SseClient Client, CancellationTokenSource Cts) CreateSseHub(Stream responseBody)
+    static (ISseHub Hub, SseClient Client, CancellationTokenSource Cts) CreateSseHub(Stream responseBody)
     {
         var hub = new SseHub();
         var context = new DefaultHttpContext();

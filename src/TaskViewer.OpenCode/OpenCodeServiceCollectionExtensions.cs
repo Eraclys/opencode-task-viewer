@@ -17,19 +17,19 @@ public static class OpenCodeServiceCollectionExtensions
         services.AddHttpClient(ApiHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(60));
         services.AddHttpClient(SseHttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddTransient(
-            sp => new OpenCodeApiHttpClient(
+            sp => new OpenCodeHttpClient(
                 sp.GetRequiredService<IHttpClientFactory>().CreateClient(ApiHttpClientName),
                 optionsFactory(sp)));
         services.AddTransient(
             sp => new OpenCodeSseHttpClient(
                 sp.GetRequiredService<IHttpClientFactory>().CreateClient(SseHttpClientName),
                 optionsFactory(sp)));
-        services.AddSingleton(
-            sp => new OpenCodeApiClient(
-                () => sp.GetRequiredService<OpenCodeApiHttpClient>(),
+        services.AddSingleton<IOpenCodeService>(
+            sp => new OpenCodeService(
+                () => sp.GetRequiredService<OpenCodeHttpClient>(),
                 optionsFactory(sp)));
-        services.AddSingleton<IOpenCodeStatusReader>(sp => sp.GetRequiredService<OpenCodeApiClient>());
-        services.AddSingleton<IOpenCodeDispatchClient>(sp => sp.GetRequiredService<OpenCodeApiClient>());
+        services.AddSingleton<IOpenCodeStatusReader>(sp => sp.GetRequiredService<IOpenCodeService>());
+        services.AddSingleton<IOpenCodeDispatchClient>(sp => sp.GetRequiredService<IOpenCodeService>());
         services.AddSingleton(sp => new OpenCodeUpstreamSseService(sp.GetRequiredService<OpenCodeSseHttpClient>));
 
         return services;

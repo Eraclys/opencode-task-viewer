@@ -13,7 +13,7 @@ public sealed class SonarQubeServiceCollectionExtensionsTests
 
         using var provider = services.BuildServiceProvider();
 
-        var apiClient = provider.GetRequiredService<SonarQubeApiClient>();
+        var apiClient = provider.GetRequiredService<SonarQubeService>();
         var service = provider.GetRequiredService<ISonarQubeService>();
 
         Assert.Same(apiClient, service);

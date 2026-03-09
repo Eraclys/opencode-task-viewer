@@ -1,4 +1,4 @@
-using TaskViewer.Server.Infrastructure.OpenCode;
+using TaskViewer.Infrastructure.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 

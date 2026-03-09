@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server.Infrastructure.OpenCode;
+using TaskViewer.Infrastructure.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 
@@ -36,7 +36,7 @@ public sealed class OpenCodeEventParserTests
             });
 
         Assert.NotNull(result);
-        Assert.Equal("C:\\Work\\Repo", result!.Directory);
+        Assert.Equal("C:\\Work\\Repo", result.Directory);
         Assert.Equal("todo.updated", result.Type);
         Assert.Equal("sess-legacy", result.SessionId);
     }
@@ -62,7 +62,7 @@ public sealed class OpenCodeEventParserTests
             });
 
         Assert.NotNull(result);
-        Assert.Equal("sess-1", result!.SessionId);
+        Assert.Equal("sess-1", result.SessionId);
         Assert.Equal("busy", result.StatusType);
     }
 
@@ -84,6 +84,6 @@ public sealed class OpenCodeEventParserTests
             });
 
         Assert.NotNull(result);
-        Assert.Equal("idle", result!.StatusType);
+        Assert.Equal("idle", result.StatusType);
     }
 }

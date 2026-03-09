@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json.Nodes;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
@@ -121,7 +120,7 @@ public sealed class UiTests
             var gammaValue = await gammaOption.GetAttributeAsync("value");
             Assert.False(string.IsNullOrWhiteSpace(gammaValue));
 
-            await page.GetByTestId("project-filter").SelectOptionAsync(gammaValue!);
+            await page.GetByTestId("project-filter").SelectOptionAsync(gammaValue);
             await Expect(page.Locator("[data-testid=\"session-card\"]")).ToHaveCountAsync(1);
             await Expect(page.Locator("[data-testid=\"session-card\"]").First).ToContainTextAsync("sq-gamma-001");
         });

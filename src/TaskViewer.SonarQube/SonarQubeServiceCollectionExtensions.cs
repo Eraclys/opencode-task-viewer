@@ -15,13 +15,13 @@ public static class SonarQubeServiceCollectionExtensions
 
         services.AddHttpClient(ApiHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(60));
         services.AddTransient(
-            sp => new SonarQubeTypedHttpClient(
+            sp => new SonarQubeHttpClient(
                 sp.GetRequiredService<IHttpClientFactory>().CreateClient(ApiHttpClientName),
                 optionsFactory(sp)));
         services.AddSingleton(
-            sp => new SonarQubeApiClient(
-                () => sp.GetRequiredService<SonarQubeTypedHttpClient>()));
-        services.AddSingleton<ISonarQubeService>(sp => sp.GetRequiredService<SonarQubeApiClient>());
+            sp => new SonarQubeService(
+                () => sp.GetRequiredService<SonarQubeHttpClient>()));
+        services.AddSingleton<ISonarQubeService>(sp => sp.GetRequiredService<SonarQubeService>());
 
         return services;
     }

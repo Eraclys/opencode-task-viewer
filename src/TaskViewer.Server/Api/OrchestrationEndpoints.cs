@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.Application.Orchestration;
+using TaskViewer.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Api;
 

@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 

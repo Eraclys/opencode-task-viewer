@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Data.Sqlite;
+using TaskViewer.Application.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Application.Orchestration;
 using TaskViewer.Server.Configuration;
 using TaskViewer.Server.DependencyInjection;
 using TaskViewer.SonarQube;
@@ -35,10 +35,10 @@ public sealed class TaskViewerServiceCollectionExtensionsTests
 
         await using var provider = services.BuildServiceProvider();
 
-        var openCodeApiClient = provider.GetRequiredService<OpenCodeApiClient>();
+        var openCodeApiClient = provider.GetRequiredService<IOpenCodeService>();
         var openCodeStatusReader = provider.GetRequiredService<IOpenCodeStatusReader>();
         var openCodeDispatchClient = provider.GetRequiredService<IOpenCodeDispatchClient>();
-        var sonarQubeApiClient = provider.GetRequiredService<SonarQubeApiClient>();
+        var sonarQubeApiClient = provider.GetRequiredService<SonarQubeService>();
         var sonarQubeService = provider.GetRequiredService<ISonarQubeService>();
         var orchestrator = provider.GetRequiredService<SonarOrchestrator>();
         var orchestrationUseCases = provider.GetRequiredService<IOrchestrationUseCases>();

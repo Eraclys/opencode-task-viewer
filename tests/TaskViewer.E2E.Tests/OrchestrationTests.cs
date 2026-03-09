@@ -179,7 +179,7 @@ public sealed class OrchestrationTests
 
             var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
-            var queueId = AsInt(queuedItem!["id"]);
+            var queueId = AsInt(queuedItem["id"]);
 
             var failedItem = await WaitForQueueItemStateByIdAsync(queueId, "failed", TimeSpan.FromSeconds(20));
             Assert.Contains("OpenCode request failed", failedItem["lastError"]?.ToString());
@@ -231,7 +231,7 @@ public sealed class OrchestrationTests
 
             var queuedItem = await GetLatestQueueItemForRuleAsync("javascript:S1126");
             Assert.NotNull(queuedItem);
-            var queueId = AsInt(queuedItem!["id"]);
+            var queueId = AsInt(queuedItem["id"]);
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/queue/{queueId}/cancel",
@@ -245,13 +245,13 @@ public sealed class OrchestrationTests
             await Task.Delay(3200);
             var latest = await GetQueueItemByIdAsync(queueId);
             Assert.NotNull(latest);
-            Assert.Equal("cancelled", latest!["state"]?.ToString());
+            Assert.Equal("cancelled", latest["state"]?.ToString());
 
             var sessions = await _fixture.GetJsonAsync($"{_fixture.ViewerUrl}/api/tasks/board?limit=all");
             var array = sessions as JsonArray ?? [];
             var queueCard = array.FirstOrDefault(item => item?["id"]?.ToString() == $"queue-{queueId}");
             Assert.NotNull(queueCard);
-            Assert.Equal("cancelled", queueCard!["status"]?.ToString());
+            Assert.Equal("cancelled", queueCard["status"]?.ToString());
         });
     }
 
@@ -284,7 +284,7 @@ public sealed class OrchestrationTests
 
             var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
             Assert.NotNull(awaitingReview);
-            var taskId = AsInt(awaitingReview!["id"]);
+            var taskId = AsInt(awaitingReview["id"]);
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",
@@ -359,7 +359,7 @@ public sealed class OrchestrationTests
 
             var awaitingReview = await WaitForLatestTaskStateByRuleAsync("javascript:S1126", "awaiting_review", TimeSpan.FromSeconds(20));
             Assert.NotNull(awaitingReview);
-            var taskId = AsInt(awaitingReview!["id"]);
+            var taskId = AsInt(awaitingReview["id"]);
 
             await _fixture.PostJsonAsync(
                 $"{_fixture.ViewerUrl}/api/orch/tasks/{taskId}/reject",

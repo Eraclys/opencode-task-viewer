@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using TaskViewer;
+using TaskViewer.Application.Orchestration;
+using TaskViewer.Application.Sessions;
+using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.OpenCode;
 using TaskViewer.Server;
 using TaskViewer.Server.Api;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Application.Sessions;
 using TaskViewer.Server.DependencyInjection;
-using TaskViewer.Server.Infrastructure.OpenCode;
 
 var builder = WebApplication.CreateBuilder(args);
 var runtimeSettings = builder.AddTaskViewerRuntimeSettings();

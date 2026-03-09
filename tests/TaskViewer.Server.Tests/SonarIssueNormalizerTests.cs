@@ -1,4 +1,4 @@
-using TaskViewer.Server.Infrastructure.Orchestration;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
@@ -25,7 +25,7 @@ public sealed class SonarIssueNormalizerTests
         var result = SonarIssueNormalizer.NormalizeForQueue(raw, mapping);
 
         Assert.NotNull(result);
-        Assert.Equal("sq-2", result!.Key);
+        Assert.Equal("sq-2", result.Key);
         Assert.Equal("BUG", result.Type);
         Assert.Equal("CRITICAL", result.Severity);
         Assert.Equal("src/File.cs", result.RelativePath);
@@ -42,7 +42,7 @@ public sealed class SonarIssueNormalizerTests
         var result = SonarIssueNormalizer.NormalizeForQueue(raw, mapping);
 
         Assert.NotNull(result);
-        Assert.Equal("lib/module.js", result!.RelativePath);
+        Assert.Equal("lib/module.js", result.RelativePath);
         Assert.Equal("C:/Work/Alpha/lib/module.js", result.AbsolutePath);
         Assert.Equal("CODE_SMELL", result.Type);
     }

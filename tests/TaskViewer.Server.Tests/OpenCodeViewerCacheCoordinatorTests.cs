@@ -1,6 +1,6 @@
+using TaskViewer.Application.Sessions;
+using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Application.Sessions;
-using TaskViewer.Server.Infrastructure.OpenCode;
 
 namespace TaskViewer.Server.Tests;
 

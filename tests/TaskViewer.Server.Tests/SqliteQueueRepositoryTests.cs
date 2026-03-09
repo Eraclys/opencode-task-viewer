@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 
@@ -72,7 +72,7 @@ public sealed class SqliteQueueRepositoryTests
             DateTimeOffset.Parse("2026-03-08T10:13:00Z"));
 
         Assert.NotNull(claimed);
-        Assert.Equal("sq-old", claimed!.IssueKey);
+        Assert.Equal("sq-old", claimed.IssueKey);
         Assert.Equal("leased", claimed.State);
         Assert.Equal("worker-1", claimed.LeaseOwner);
         Assert.NotNull(claimed.LeaseExpiresAt);
@@ -105,7 +105,7 @@ public sealed class SqliteQueueRepositoryTests
             DateTimeOffset.Parse("2026-03-08T10:04:00Z"));
         Assert.NotNull(claimed);
 
-        var attemptInfo = await repository.GetAttemptInfo(claimed!.Id, 0, 0);
+        var attemptInfo = await repository.GetAttemptInfo(claimed.Id, 0, 0);
         Assert.Equal(1, attemptInfo.AttemptCount);
         Assert.Equal(4, attemptInfo.MaxAttempts);
 
@@ -134,7 +134,7 @@ public sealed class SqliteQueueRepositoryTests
         Assert.NotNull(claimedAgain);
 
         var marked = await repository.MarkTaskRunning(
-            claimedAgain!.Id,
+            claimedAgain.Id,
             "sess-123",
             "http://opencode.local/session/sess-123",
             "worker-1",

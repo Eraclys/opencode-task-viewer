@@ -5,6 +5,7 @@
     <ItemGroup>
         <ProjectReference Include="..\TaskViewer.OpenCode\TaskViewer.OpenCode.csproj" />
         <ProjectReference Include="..\TaskViewer.SonarQube\TaskViewer.SonarQube.csproj" />
+        <ProjectReference Include="..\TaskViewer\TaskViewer.csproj" />
     </ItemGroup>
 
     <ItemGroup>

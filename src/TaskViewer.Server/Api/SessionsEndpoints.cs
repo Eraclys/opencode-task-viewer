@@ -1,5 +1,4 @@
-using System;
-using TaskViewer.Server.Application.Sessions;
+using TaskViewer.Application.Sessions;
 
 namespace TaskViewer.Server.Api;
 

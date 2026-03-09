@@ -1,6 +1,6 @@
+using TaskViewer.Application.Orchestration;
+using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.OpenCode;
-using TaskViewer.Server.Application.Orchestration;
-using TaskViewer.Server.Infrastructure.Orchestration;
 
 namespace TaskViewer.Server.Tests;
 
