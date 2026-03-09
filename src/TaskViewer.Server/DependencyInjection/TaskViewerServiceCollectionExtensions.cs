@@ -98,7 +98,6 @@ internal static class TaskViewerServiceCollectionExtensions
         services.AddSingleton<ISessionsUseCases>(
             sp => new SessionsUseCases(
                 sp.GetRequiredService<OpenCodeSessionSearchService>(),
-                sp.GetRequiredService<OpenCodeSessionRuntimeService>(),
                 sp.GetRequiredService<SonarOrchestrator>(),
                 sp.GetRequiredService<QueueItemSessionSummaryMapper>(),
                 sp.GetRequiredService<SessionTodoViewService>(),

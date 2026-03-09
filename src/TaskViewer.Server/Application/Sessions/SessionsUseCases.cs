@@ -12,7 +12,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
 {
     readonly Func<string, string?, Task<DateTimeOffset?>> _archiveSessionOnOpenCode;
     readonly Func<Task> _broadcastUpdate;
-    readonly Func<string, string?, string?> _buildOpenCodeSessionUrl;
     readonly Func<string, Task<OpenCodeSessionDto?>> _findSessionInfo;
     readonly Func<string, Task<LastAssistantMessage?>> _getLastAssistantMessage;
     readonly Func<string, string?, Task<List<SessionTodoDto>>> _getTodosForSession;
@@ -23,13 +22,11 @@ public sealed class SessionsUseCases : ISessionsUseCases
 
     internal SessionsUseCases(
         OpenCodeSessionSearchService sessionSearchService,
-        OpenCodeSessionRuntimeService runtimeService,
         SonarOrchestrator orchestrator,
         QueueItemSessionSummaryMapper queueItemSessionSummaryMapper,
         SessionTodoViewService sessionTodoViewService,
         OpenCodeViewerUpdateNotifier updateNotifier)
         : this(
-            sessionSearchService.BuildOpenCodeSessionUrl,
             orchestrator,
             queueItemSessionSummaryMapper.Map,
             sessionId => sessionSearchService.FindSessionInfoAsync(
@@ -46,7 +43,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
     }
 
     internal SessionsUseCases(
-        Func<string, string?, string?> buildOpenCodeSessionUrl,
         SonarOrchestrator orchestrator,
         Func<QueueItemRecord, SessionSummaryDto?> mapQueueItemToSessionSummary,
         Func<string, Task<OpenCodeSessionDto?>> findSessionInfo,
@@ -57,7 +53,6 @@ public sealed class SessionsUseCases : ISessionsUseCases
         Action invalidateAllCaches,
         Func<Task> broadcastUpdate)
     {
-        _buildOpenCodeSessionUrl = buildOpenCodeSessionUrl;
         _orchestrator = orchestrator;
         _mapQueueItemToSessionSummary = mapQueueItemToSessionSummary;
         _findSessionInfo = findSessionInfo;

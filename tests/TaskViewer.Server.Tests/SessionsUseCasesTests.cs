@@ -112,7 +112,6 @@ public sealed class SessionsUseCasesTests
         Func<Task>? broadcastUpdate = null)
     {
         return new SessionsUseCases(
-            buildOpenCodeSessionUrl ?? ((sessionId, _) => $"http://localhost:4096/session/{sessionId}"),
             orchestrator,
             mapQueueItemToSessionSummary ?? (new QueueItemSessionSummaryMapper().Map),
             findSessionInfo ??

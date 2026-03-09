@@ -1,5 +1,4 @@
 using TaskViewer.Server.Application.Sessions;
-using TaskViewer.Server.Domain;
 
 namespace TaskViewer.Server.Infrastructure.OpenCode;
 
@@ -23,11 +22,4 @@ sealed class OpenCodeSessionRuntimeService
 
         return "idle";
     }
-
-    public string DeriveSessionKanbanStatus(string runtimeType, DateTimeOffset modifiedAt, bool? hasAssistantResponse)
-        => SessionStatusPolicy.DeriveKanbanStatus(
-            runtimeType,
-            modifiedAt,
-            hasAssistantResponse,
-            TaskViewerRuntimeDefaults.SessionRecentWindowMs);
 }
