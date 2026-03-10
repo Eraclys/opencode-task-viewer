@@ -5,6 +5,6 @@
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>
     <ItemGroup>
-        <InternalsVisibleTo Include="TaskViewer.Server.Tests"/>
+        <InternalsVisibleTo Include="SonarQube.OpenCodeTaskViewer.Server.Tests"/>
     </ItemGroup>
 </Project>

@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\SonarQube.OpenCodeTaskViewer\SonarQube.OpenCodeTaskViewer.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Dapper"/>
+        <PackageReference Include="Microsoft.Data.Sqlite"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+<Solution>
+    <Folder Name="/build/">
+        <File Path="Directory.Build.props"/>
+        <File Path="Directory.Packages.props"/>
+        <File Path="global.json"/>
+        <File Path="LICENSE"/>
+        <File Path="README.md"/>
+    </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/OpenCode.Client/OpenCode.Client.csproj"/>
+        <Project Path="src/SonarQube.Client/SonarQube.Client.csproj"/>
+        <Project Path="src/SonarQube.OpenCodeTaskViewer.Persistence/SonarQube.OpenCodeTaskViewer.Persistence.csproj"/>
+        <Project Path="src/SonarQube.OpenCodeTaskViewer.Server/SonarQube.OpenCodeTaskViewer.Server.csproj"/>
+        <Project Path="src/SonarQube.OpenCodeTaskViewer/SonarQube.OpenCodeTaskViewer.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project
+            Path="tests/SonarQube.OpenCodeTaskViewer.MockSonarQube/SonarQube.OpenCodeTaskViewer.MockSonarQube.csproj"/>
+        <Project Path="tests/OpenCode.Client.Tests/OpenCode.Client.Tests.csproj"/>
+        <Project Path="tests/SonarQube.Client.Tests/SonarQube.Client.Tests.csproj"/>
+        <Project Path="tests/SonarQube.OpenCodeTaskViewer.E2E.Tests/SonarQube.OpenCodeTaskViewer.E2E.Tests.csproj"/>
+        <Project
+            Path="tests/SonarQube.OpenCodeTaskViewer.MockOpenCode/SonarQube.OpenCodeTaskViewer.MockOpenCode.csproj"/>
+        <Project
+            Path="tests/SonarQube.OpenCodeTaskViewer.Server.Tests/SonarQube.OpenCodeTaskViewer.Server.Tests.csproj"/>
+    </Folder>
+</Solution>

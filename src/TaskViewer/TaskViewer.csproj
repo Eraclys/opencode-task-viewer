@@ -1,9 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-    <ItemGroup>
-        <ProjectReference Include="..\TaskViewer.OpenCode\TaskViewer.OpenCode.csproj" />
-        <ProjectReference Include="..\TaskViewer.SonarQube\TaskViewer.SonarQube.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
-    </ItemGroup>
-</Project>
