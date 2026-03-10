@@ -44,7 +44,7 @@ public static class AppRuntimeSettingsFactory
         var sonarMode = FirstNonEmpty(options.SonarQube.Mode, SonarQubeMode.Real).ToLowerInvariant();
         var sonarUrl = FirstNonEmpty(options.SonarQube.Url);
         var sonarToken = FirstNonEmpty(options.SonarQube.Token);
-        var dbPathSetting = FirstNonEmpty(options.Orchestration.DbPath, "data/orchestrator.sqlite");
+        var dbPathSetting = FirstNonEmpty(options.Orchestration.DbPath);
         var maxActive = ReadInt(options.Orchestration.MaxActive, 3, 1);
         var perProjectMaxActive = ReadInt(options.Orchestration.PerProjectMaxActive, 2, 1);
         var pollMs = ReadInt(options.Orchestration.PollMs, 3000, 1000);
@@ -66,7 +66,7 @@ public static class AppRuntimeSettingsFactory
             new OpenCodeRuntimeSettings(openCodeUrl, openCodeUsername, openCodePassword),
             new SonarQubeRuntimeSettings(sonarUrl, sonarToken, string.Equals(sonarMode, SonarQubeMode.Fake, StringComparison.Ordinal) ? SonarQubeMode.Fake : SonarQubeMode.Real),
             new OrchestrationRuntimeSettings(
-                ResolvePath(environment.ContentRootPath, dbPathSetting),
+                ResolveDbPath(environment.ContentRootPath, dbPathSetting),
                 maxActive,
                 perProjectMaxActive,
                 pollMs,
@@ -76,12 +76,30 @@ public static class AppRuntimeSettingsFactory
                 workingResumeBelow));
     }
 
+    static string ResolveDbPath(string contentRootPath, string configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+            return GetDefaultDbPath(contentRootPath);
+
+        return ResolvePath(contentRootPath, configuredPath);
+    }
+
     static string ResolvePath(string contentRootPath, string configuredPath)
     {
         if (Path.IsPathRooted(configuredPath))
             return configuredPath;
 
         return Path.GetFullPath(Path.Combine(contentRootPath, configuredPath));
+    }
+
+    static string GetDefaultDbPath(string contentRootPath)
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+        if (string.IsNullOrWhiteSpace(localAppData))
+            return Path.GetFullPath(Path.Combine(contentRootPath, "data", "orchestrator.sqlite"));
+
+        return Path.GetFullPath(Path.Combine(localAppData, "SonarQube.OpenCodeTaskViewer", "orchestrator.sqlite"));
     }
 
     static void ValidateRequiredAbsoluteUri(string name, string value)

@@ -9,7 +9,15 @@ using TaskViewer.Server;
 using TaskViewer.Server.Api;
 using TaskViewer.Server.DependencyInjection;
 
-var builder = WebApplication.CreateBuilder(args);
+var contentRootPath = ResolveContentRoot(AppContext.BaseDirectory);
+var webRootPath = ResolveWebRoot(AppContext.BaseDirectory, contentRootPath);
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = contentRootPath,
+    WebRootPath = webRootPath
+});
 var runtimeSettings = builder.AddTaskViewerRuntimeSettings();
 var viewerHost = runtimeSettings.Viewer.Host;
 var viewerPort = runtimeSettings.Viewer.Port;
@@ -53,3 +61,46 @@ app.MapViewerEndpoints();
 app.MapFallbackToFile("index.html");
 
 await app.RunAsync();
+
+static string ResolveContentRoot(string baseDirectory)
+{
+    var directory = new DirectoryInfo(baseDirectory);
+
+    while (directory is not null)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "appsettings.json")) &&
+            (File.Exists(Path.Combine(directory.FullName, "wwwroot", "index.html")) ||
+             File.Exists(Path.Combine(directory.FullName, "staticwebassets", "index.html"))))
+            return directory.FullName;
+
+        directory = directory.Parent;
+    }
+
+    return baseDirectory;
+}
+
+static string ResolveWebRoot(string baseDirectory, string contentRootPath)
+{
+    return FindDirectoryUpwards(contentRootPath, "wwwroot")
+           ?? FindDirectoryUpwards(baseDirectory, "wwwroot")
+           ?? FindDirectoryUpwards(contentRootPath, "staticwebassets")
+           ?? FindDirectoryUpwards(baseDirectory, "staticwebassets")
+           ?? Path.Combine(contentRootPath, "wwwroot");
+}
+
+static string? FindDirectoryUpwards(string startPath, string directoryName)
+{
+    var directory = new DirectoryInfo(startPath);
+
+    while (directory is not null)
+    {
+        var candidate = Path.Combine(directory.FullName, directoryName);
+
+        if (Directory.Exists(candidate))
+            return candidate;
+
+        directory = directory.Parent;
+    }
+
+    return null;
+}

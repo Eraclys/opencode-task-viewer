@@ -63,6 +63,28 @@ public sealed class AppRuntimeSettingsLoaderTests
     }
 
     [Fact]
+    public void Load_UsesLocalApplicationDataForDefaultDbPath()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["OpenCode:Url"] = "http://config-opencode:4444"
+                })
+            .Build();
+
+        var contentRoot = Path.Combine(Path.GetTempPath(), "task-viewer-config-tests");
+        var settings = AppRuntimeSettingsLoader.Load(configuration, new TestHostEnvironment(contentRoot));
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var expected = string.IsNullOrWhiteSpace(localAppData)
+            ? Path.GetFullPath(Path.Combine(contentRoot, "data", "orchestrator.sqlite"))
+            : Path.GetFullPath(Path.Combine(localAppData, "SonarQube.OpenCodeTaskViewer", "orchestrator.sqlite"));
+
+        Assert.Equal(expected, settings.Orchestration.DbPath);
+    }
+
+    [Fact]
     public void Load_UsesStronglyTypedKeysWhenLegacyKeysAreMissing()
     {
         var configuration = new ConfigurationBuilder()

@@ -1,6 +1,6 @@
-# OpenCode Task Viewer
+# SonarQube OpenCode Task Viewer
 
-A real-time Kanban board for observing OpenCode Web Mode sessions across all projects.
+A real-time Kanban board for observing SonarQube issues being worked through in OpenCode sessions.
 
 ## What It Shows
 
@@ -23,7 +23,21 @@ A real-time Kanban board for observing OpenCode Web Mode sessions across all pro
 - .NET SDK >= 9.0
 - OpenCode Web Mode server running (default: `http://localhost:4096`)
 
-## Run
+## Install as a .NET Tool
+
+```bash
+dotnet tool install -g SonarQube.OpenCodeTaskViewer
+sonar-taskviewer
+```
+
+Update or remove it later with:
+
+```bash
+dotnet tool update -g SonarQube.OpenCodeTaskViewer
+dotnet tool uninstall -g SonarQube.OpenCodeTaskViewer
+```
+
+## Run from Source
 
 ```bash
 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
@@ -35,22 +49,24 @@ Open http://127.0.0.1:3456
 
 ```bash
 # Viewer server
-PORT=8080 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
-HOST=127.0.0.1 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+PORT=8080 sonar-taskviewer
+HOST=127.0.0.1 sonar-taskviewer
 
 # OpenCode server
-OPENCODE_URL=http://localhost:4096 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+OPENCODE_URL=http://localhost:4096 sonar-taskviewer
 
 # SonarQube orchestration (optional)
-SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
-SONARQUBE_MODE=fake dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
-ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
-ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
-ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+SONARQUBE_URL=http://localhost:9000 SONARQUBE_TOKEN=... sonar-taskviewer
+SONARQUBE_MODE=fake sonar-taskviewer
+ORCHESTRATOR_DB_PATH=./data/orchestrator.sqlite sonar-taskviewer
+ORCH_MAX_ACTIVE=3 ORCH_POLL_MS=3000 ORCH_MAX_ATTEMPTS=3 sonar-taskviewer
+ORCH_MAX_WORKING_GLOBAL=5 ORCH_WORKING_RESUME_BELOW=4 sonar-taskviewer
 
 # If your OpenCode server uses Basic Auth
-OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+OPENCODE_USERNAME=opencode OPENCODE_PASSWORD=... sonar-taskviewer
 ```
+
+By default, the orchestration SQLite database is stored in the current user's local application data directory. Override it with `ORCHESTRATOR_DB_PATH` if you want a repo-local or custom location.
 
 ## API (Viewer)
 
@@ -93,6 +109,17 @@ Playwright browser install (first run):
 ```bash
 dotnet build tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj
 powershell ./tests/TaskViewer.E2E.Tests/bin/Debug/net9.0/playwright.ps1 install chromium
+```
+
+## Publish to NuGet.org
+
+```bash
+dotnet build TaskViewer.slnx
+dotnet test TaskViewer.slnx
+dotnet pack -c Release src/TaskViewer.Server/TaskViewer.Server.csproj -o ./artifacts/nupkg
+dotnet tool install --tool-path ./artifacts/tool-test SonarQube.OpenCodeTaskViewer --add-source ./artifacts/nupkg
+./artifacts/tool-test/sonar-taskviewer
+dotnet nuget push ./artifacts/nupkg/SonarQube.OpenCodeTaskViewer.0.1.0.nupkg --source https://api.nuget.org/v3/index.json --api-key <NUGET_API_KEY>
 ```
 
 ## Package Management
