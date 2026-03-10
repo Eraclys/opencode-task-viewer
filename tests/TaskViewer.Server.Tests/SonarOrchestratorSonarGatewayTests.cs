@@ -46,9 +46,9 @@ public sealed class SonarOrchestratorSonarGatewayTests
 
         var result = await orchestrator.ListIssues(
             mapping.Id,
-            "CODE_SMELL",
-            null,
-            null,
+            [SonarIssueType.CodeSmell],
+            [],
+            [],
             1,
             20,
             null);

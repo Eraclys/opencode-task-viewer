@@ -1,20 +1,27 @@
 using TaskViewer.SonarQube;
+using System.Text.Json.Serialization;
 
 namespace TaskViewer.Domain.Orchestration;
 
 public sealed class IssueListItemDto
 {
     public required string Key { get; init; }
-    public string? Type { get; init; }
-    public SonarIssueType ParsedType => SonarIssueType.FromRaw(Type);
-    public string? Severity { get; init; }
-    public SonarIssueSeverity ParsedSeverity => SonarIssueSeverity.FromRaw(Severity);
+    [JsonIgnore]
+    public SonarIssueType Type { get; init; }
+    [JsonPropertyName("type")]
+    public string? TypeValue => Type.OrNull();
+    [JsonIgnore]
+    public SonarIssueSeverity Severity { get; init; }
+    [JsonPropertyName("severity")]
+    public string? SeverityValue => Severity.OrNull();
     public string? Rule { get; init; }
     public string? Message { get; init; }
     public string? Component { get; init; }
     public int? Line { get; init; }
-    public string? Status { get; init; }
-    public SonarIssueStatus ParsedStatus => SonarIssueStatus.FromRaw(Status);
+    [JsonIgnore]
+    public SonarIssueStatus Status { get; init; }
+    [JsonPropertyName("status")]
+    public string? StatusValue => Status.OrNull();
     public string? RelativePath { get; init; }
     public string? AbsolutePath { get; init; }
 }

@@ -46,7 +46,7 @@ public sealed class SonarOrchestratorQueueTests
         await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 MappingId: mapping.Id,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 Instructions: "keep it focused",
                 Issues:
                 [
@@ -101,7 +101,7 @@ public sealed class SonarOrchestratorQueueTests
         await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 MappingId: mapping.Id,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 Instructions: null,
                 Issues:
                 [
@@ -141,7 +141,7 @@ public sealed class SonarOrchestratorQueueTests
         await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 MappingId: mapping.Id,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 Instructions: null,
                 Issues:
                 [
@@ -179,7 +179,7 @@ public sealed class SonarOrchestratorQueueTests
         var first = await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 MappingId: mapping.Id,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 Instructions: null,
                 Issues:
                 [
@@ -192,7 +192,7 @@ public sealed class SonarOrchestratorQueueTests
         var second = await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 MappingId: mapping.Id,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 Instructions: null,
                 Issues:
                 [

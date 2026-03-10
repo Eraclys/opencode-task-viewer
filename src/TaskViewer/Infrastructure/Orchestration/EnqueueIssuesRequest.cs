@@ -4,6 +4,6 @@ namespace TaskViewer.Infrastructure.Orchestration;
 
 public sealed record EnqueueIssuesRequest(
     int? MappingId,
-    string? IssueType,
+    SonarIssueType IssueType,
     string? Instructions,
     IReadOnlyList<SonarIssueTransport>? Issues);

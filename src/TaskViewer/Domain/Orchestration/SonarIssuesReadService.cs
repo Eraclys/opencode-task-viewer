@@ -15,27 +15,23 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
 
     public async Task<SonarIssuesPage> ListIssuesAsync(
         MappingRecord mapping,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         int page,
         int pageSize,
         IReadOnlyList<string> ruleKeys,
         CancellationToken cancellationToken = default)
     {
-        var types = SonarIssueType.ParseCsv(issueType);
-        var severities = SonarIssueSeverity.ParseCsv(severity);
-        var statuses = SonarIssueStatus.ParseCsv(issueStatus);
-
         var response = await _sonarQubeService.SearchIssuesAsync(new SearchIssuesQuery
         {
             ComponentKey = mapping.SonarProjectKey,
             Branch = mapping.Branch,
             PageIndex = page,
             PageSize = pageSize,
-            Types = types,
+            Types = issueTypes,
             Severities = severities,
-            Statuses = statuses,
+            Statuses = issueStatuses,
             RuleKeys =  ruleKeys
         }, cancellationToken);
 
@@ -50,13 +46,13 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
 
             issues.Add(new SonarIssueSummaryItem(
                 issue.Key,
-                issue.Type,
-                issue.Severity,
+                issue.IssueType,
+                issue.IssueSeverity,
                 issue.Rule,
                 issue.Message,
                 issue.Component,
                 issue.Line,
-                issue.Status,
+                issue.IssueStatus,
                 issue.RelativePath,
                 issue.AbsolutePath));
         }

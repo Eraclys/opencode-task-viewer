@@ -1,4 +1,5 @@
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -6,9 +7,9 @@ public sealed class DisabledSonarEnqueueAllIssuesReadService : ISonarEnqueueAllI
 {
     public Task<SonarEnqueueAllIssuesResult> CollectMatchingIssuesAsync(
         MappingRecord mapping,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         IReadOnlyList<string> ruleKeys,
         int maxScanIssues,
         CancellationToken cancellationToken = default) =>

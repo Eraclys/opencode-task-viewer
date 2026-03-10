@@ -15,17 +15,13 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
 
     public async Task<SonarEnqueueAllIssuesResult> CollectMatchingIssuesAsync(
         MappingRecord mapping,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         IReadOnlyList<string> ruleKeys,
         int maxScanIssues,
         CancellationToken cancellationToken = default)
     {
-        var types = SonarIssueType.ParseCsv(issueType);
-        var severities = SonarIssueSeverity.ParseCsv(severity);
-        var statuses = SonarIssueStatus.ParseCsv(issueStatus);
-
         const int pageSize = 500;
         var page = 1;
         int? total = null;
@@ -39,9 +35,9 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
                 Branch = mapping.Branch,
                 PageIndex = page,
                 PageSize = pageSize,
-                Types = types,
+                Types = issueTypes,
                 Severities = severities,
-                Statuses = statuses,
+                Statuses = issueStatuses,
                 RuleKeys =  ruleKeys
             }, cancellationToken);
 

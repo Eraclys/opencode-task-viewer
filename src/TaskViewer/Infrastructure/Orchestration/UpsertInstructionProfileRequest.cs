@@ -1,6 +1,8 @@
-﻿namespace TaskViewer.Infrastructure.Orchestration;
+﻿using TaskViewer.SonarQube;
+
+namespace TaskViewer.Infrastructure.Orchestration;
 
 public sealed record UpsertInstructionProfileRequest(
     int? MappingId,
-    string? IssueType,
+    SonarIssueType IssueType,
     string? Instructions);

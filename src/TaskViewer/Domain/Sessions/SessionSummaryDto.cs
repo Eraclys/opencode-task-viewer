@@ -1,4 +1,5 @@
 using TaskViewer.Domain.Orchestration;
+using System.Text.Json.Serialization;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Sessions;
@@ -13,33 +14,45 @@ public sealed class SessionSummaryDto
     public DateTimeOffset? CreatedAt { get; init; }
     public required DateTimeOffset ModifiedAt { get; init; }
     public required SessionRuntimeStatus RuntimeStatus { get; init; }
-    public required string Status { get; init; }
-    public ViewerTaskStatus ParsedStatus => ViewerTaskStatus.FromRaw(Status);
+    [JsonIgnore]
+    public required ViewerTaskStatus Status { get; init; }
+    [JsonPropertyName("status")]
+    public string StatusValue => Status.Value;
     public bool? HasAssistantResponse { get; init; }
     public string? OpenCodeUrl { get; init; }
 
     public bool? IsQueueItem { get; init; }
     public long? QueueItemId { get; init; }
-    public string? QueueState { get; init; }
-    public QueueState? ParsedQueueState => TaskViewer.Domain.Orchestration.QueueState.TryParse(QueueState, out var state) ? state : null;
+    [JsonIgnore]
+    public QueueState? QueueState { get; init; }
+    [JsonPropertyName("queueState")]
+    public string? QueueStateValue => QueueState?.Value;
     public long? TaskId { get; init; }
-    public string? TaskState { get; init; }
-    public QueueState? ParsedTaskState => TaskViewer.Domain.Orchestration.QueueState.TryParse(TaskState, out var state) ? state : null;
+    [JsonIgnore]
+    public QueueState? TaskState { get; init; }
+    [JsonPropertyName("taskState")]
+    public string? TaskStateValue => TaskState?.Value;
     public string? TaskKey { get; init; }
     public string? TaskUnit { get; init; }
     public string? TaskInstructions { get; init; }
     public int? TaskIssueCount { get; init; }
     public string? IssueKey { get; init; }
-    public string? IssueType { get; init; }
-    public SonarIssueType ParsedIssueType => SonarIssueType.FromRaw(IssueType);
-    public string? IssueSeverity { get; init; }
-    public SonarIssueSeverity ParsedIssueSeverity => SonarIssueSeverity.FromRaw(IssueSeverity);
+    [JsonIgnore]
+    public SonarIssueType IssueType { get; init; }
+    [JsonPropertyName("issueType")]
+    public string? IssueTypeValue => IssueType.OrNull();
+    [JsonIgnore]
+    public SonarIssueSeverity IssueSeverity { get; init; }
+    [JsonPropertyName("issueSeverity")]
+    public string? IssueSeverityValue => IssueSeverity.OrNull();
     public string? IssueRule { get; init; }
     public string? IssuePath { get; init; }
     public int? IssueLine { get; init; }
     public string? LastError { get; init; }
-    public string? LastReviewAction { get; init; }
-    public TaskReviewAction ParsedLastReviewAction => TaskReviewAction.FromRaw(LastReviewAction);
+    [JsonIgnore]
+    public TaskReviewAction LastReviewAction { get; init; }
+    [JsonPropertyName("lastReviewAction")]
+    public string? LastReviewActionValue => LastReviewAction.OrNull();
     public string? LastReviewReason { get; init; }
     public DateTimeOffset? LastReviewedAt { get; init; }
 }

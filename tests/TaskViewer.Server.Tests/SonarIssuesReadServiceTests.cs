@@ -25,9 +25,9 @@ public sealed class SonarIssuesReadServiceTests
 
         var result = await service.ListIssuesAsync(
             mapping,
-            "code_smell",
-            "major",
-            "open",
+            [SonarIssueType.CodeSmell],
+            [SonarIssueSeverity.Major],
+            [SonarIssueStatus.Open],
             2,
             100,
             []);
@@ -39,9 +39,8 @@ public sealed class SonarIssuesReadServiceTests
 
         var issue = result.Issues[0];
         Assert.Equal("sq-1", issue.Key);
-        Assert.Equal("CODE_SMELL", issue.Type);
-        Assert.Equal(SonarIssueType.CodeSmell, issue.ParsedType);
-        Assert.Equal(SonarIssueStatus.Open, issue.ParsedStatus);
+        Assert.Equal(SonarIssueType.CodeSmell, issue.Type);
+        Assert.Equal(SonarIssueStatus.Open, issue.Status);
         Assert.Equal("src/file.js", issue.RelativePath);
         Assert.Equal("C:/Work/Alpha/src/file.js", issue.AbsolutePath);
     }

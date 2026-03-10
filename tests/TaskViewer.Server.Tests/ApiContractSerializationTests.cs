@@ -4,13 +4,17 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using TaskViewer.Domain.Orchestration;
 using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.Serialization;
 using TaskViewer.Server.Api;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -341,8 +345,8 @@ public sealed class ApiContractSerializationTests
             rulesResult: new RulesListDto
             {
                 Mapping = CreateMappingRecord(),
-                IssueType = "CODE_SMELL",
-                IssueStatus = "OPEN",
+                IssueType = SonarIssueType.CodeSmell,
+                IssueStatus = SonarIssueStatus.Open,
                 ScannedIssues = 12,
                 Truncated = false,
                 Rules =
@@ -393,13 +397,13 @@ public sealed class ApiContractSerializationTests
                     new IssueListItemDto
                     {
                         Key = "issue-1",
-                        Type = "BUG",
-                        Severity = "CRITICAL",
+                        Type = SonarIssueType.Bug,
+                        Severity = SonarIssueSeverity.Critical,
                         Rule = "csharpsquid:S1118",
                         Message = "Add a private constructor",
                         Component = "sample:src/File.cs",
                         Line = 18,
-                        Status = "OPEN",
+                        Status = SonarIssueStatus.Open,
                         RelativePath = "src/File.cs",
                         AbsolutePath = "C:/Work/src/File.cs"
                     }
@@ -690,6 +694,10 @@ public sealed class ApiContractSerializationTests
                         services =>
                         {
                             services.AddRouting();
+                            services.Configure<JsonOptions>(options =>
+                            {
+                                options.SerializerOptions.AddTaskViewerJsonConverters();
+                            });
                             configureServices?.Invoke(services);
                         })
                     .Configure(
@@ -840,9 +848,9 @@ public sealed class ApiContractSerializationTests
             return Task.FromResult(true);
         }
         public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IssuesListDto> ListIssuesAsync(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys, CancellationToken cancellationToken = default)
+        public Task<IssuesListDto> ListIssuesAsync(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueSeverity> severities, IReadOnlyList<SonarIssueStatus> issueStatuses, int? page, int? pageSize, string? ruleKeys, CancellationToken cancellationToken = default)
             => listIssuesException is null
                 ? Task.FromResult(
                     issuesResult ??
@@ -859,14 +867,14 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<IssuesListDto>(listIssuesException);
 
-        public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
+        public Task<RulesListDto> ListRulesAsync(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 rulesResult ??
                 new RulesListDto
                 {
                     Mapping = CreateMappingRecord(),
-                    IssueType = issueType,
-                    IssueStatus = issueStatus,
+                    IssueType = issueTypes.Count == 1 ? issueTypes[0] : default,
+                    IssueStatus = issueStatuses.Count == 1 ? issueStatuses[0] : default,
                     ScannedIssues = 0,
                     Truncated = false,
                     Rules = []
@@ -933,7 +941,7 @@ public sealed class ApiContractSerializationTests
             [
                 new TaskReviewHistoryDto
                 {
-                    Action = "rejected",
+                    Action = TaskReviewAction.Rejected,
                     Reason = "Needs prompt tuning",
                     CreatedAt = DateTimeOffset.Parse("2026-03-08T10:04:00Z")
                 }

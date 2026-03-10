@@ -106,6 +106,14 @@ Implemented adoption points:
 - review history and queue review transitions now use `TaskReviewAction`
 - viewer/session/todo DTOs now expose parsed typed accessors while keeping existing string fields on the wire
 
+Framework binding recommendation and implementation:
+
+- remain on minimal APIs for now; controllers are not required to get framework-native value-object handling
+- use `System.Text.Json` converters for string-backed value objects so JSON bodies and responses can bind/serialize without ad hoc `Parsed*` accessors
+- convert HTTP query/input strings to typed value objects at the endpoint boundary and pass typed collections/values through use-case and orchestration services
+- preserve API field names and wire string values by keeping typed DTO properties internal and exposing JSON string projections where needed
+- continue to treat CSV query parameters such as `OPEN,CONFIRMED,REOPENED` as a boundary concern handled by dedicated parse helpers
+
 Helper cleanup completed:
 
 - added small helper methods such as `HasValue`, `OrNull()`, `Or(...)`, and `ToFilterList()` where useful

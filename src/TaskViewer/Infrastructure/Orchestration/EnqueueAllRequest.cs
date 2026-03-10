@@ -1,9 +1,11 @@
-﻿namespace TaskViewer.Infrastructure.Orchestration;
+﻿using TaskViewer.SonarQube;
+
+namespace TaskViewer.Infrastructure.Orchestration;
 
 public sealed record EnqueueAllRequest(
     int? MappingId,
-    string? IssueType,
+    SonarIssueType IssueType,
     string? RuleKeys,
-    string? IssueStatus,
-    string? Severity,
+    IReadOnlyList<SonarIssueStatus> IssueStatuses,
+    IReadOnlyList<SonarIssueSeverity> Severities,
     string? Instructions);

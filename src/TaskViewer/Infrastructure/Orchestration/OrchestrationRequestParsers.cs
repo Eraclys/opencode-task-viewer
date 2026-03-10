@@ -33,7 +33,7 @@ public static class OrchestrationRequestParsers
     {
         return new UpsertInstructionProfileRequest(
             request?.MappingId,
-            request?.IssueType,
+            SonarIssueType.FromRaw(request?.IssueType),
             request?.Instructions);
     }
 
@@ -44,7 +44,7 @@ public static class OrchestrationRequestParsers
     {
         return new EnqueueIssuesRequest(
             request?.MappingId,
-            request?.IssueType,
+            SonarIssueType.FromRaw(request?.IssueType),
             request?.Instructions,
             request?.Issues?.Select(ParseIssue).OfType<SonarIssueTransport>().ToList());
     }
@@ -58,10 +58,10 @@ public static class OrchestrationRequestParsers
 
         return new EnqueueAllRequest(
             request?.MappingId,
-            request?.IssueType,
+            SonarIssueType.FromRaw(request?.IssueType),
             ruleKeys,
-            request?.IssueStatus,
-            request?.Severity,
+            SonarIssueStatus.ParseCsv(request?.IssueStatus),
+            SonarIssueSeverity.ParseCsv(request?.Severity),
             request?.Instructions);
     }
 

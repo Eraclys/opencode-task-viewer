@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Api;
 
@@ -56,7 +57,7 @@ public static class OrchestrationEndpoints
             "/api/orch/instructions",
             async (int? mappingId, string? issueType, IOrchestrationUseCases useCases, CancellationToken cancellationToken) =>
             {
-                var result = await useCases.GetInstructionProfileAsync(mappingId, issueType, cancellationToken);
+                var result = await useCases.GetInstructionProfileAsync(mappingId, SonarIssueType.FromRaw(issueType), cancellationToken);
 
                 return Results.Json(result);
             })
@@ -98,9 +99,9 @@ public static class OrchestrationEndpoints
 
                 var result = await useCases.ListIssuesAsync(
                     mappingId.Value,
-                    issueType,
-                    severity,
-                    issueStatus,
+                    SonarIssueType.ParseCsv(issueType),
+                    SonarIssueSeverity.ParseCsv(severity),
+                    SonarIssueStatus.ParseCsv(issueStatus),
                     page,
                     pageSize,
                     selectedRuleKeys,
@@ -128,7 +129,7 @@ public static class OrchestrationEndpoints
                         },
                         statusCode: 400);
 
-                var result = await useCases.ListRulesAsync(mappingId.Value, issueType, issueStatus, cancellationToken);
+                var result = await useCases.ListRulesAsync(mappingId.Value, SonarIssueType.ParseCsv(issueType), SonarIssueStatus.ParseCsv(issueStatus), cancellationToken);
 
                 return Results.Json(result);
             })

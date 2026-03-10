@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
@@ -5,8 +6,10 @@ namespace TaskViewer.Domain.Orchestration;
 public sealed class InstructionProfileDto
 {
     public int? MappingId { get; init; }
-    public string? IssueType { get; init; }
-    public SonarIssueType ParsedIssueType => SonarIssueType.FromRaw(IssueType);
+    [JsonIgnore]
+    public SonarIssueType IssueType { get; init; }
+    [JsonPropertyName("issueType")]
+    public string? IssueTypeValue => IssueType.OrNull();
     public string? Instructions { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
 }

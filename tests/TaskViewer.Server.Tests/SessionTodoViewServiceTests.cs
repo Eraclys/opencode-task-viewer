@@ -14,7 +14,7 @@ public sealed class SessionTodoViewServiceTests
         var todo = sut.NormalizeTodo(raw);
 
         Assert.Equal("Ship feature", todo.Content);
-        Assert.Equal("in_progress", todo.Status);
+        Assert.Equal(ViewerTaskStatus.InProgress, todo.Status);
         Assert.Equal(ViewerTaskStatus.InProgress, todo.TaskStatus);
         Assert.Equal("high", todo.Priority);
     }
@@ -25,15 +25,15 @@ public sealed class SessionTodoViewServiceTests
         var sut = new SessionTodoViewService();
         var todos = new List<SessionTodoDto>
         {
-            new("Task A", "pending", "high"),
-            new("Task B", "pending", null)
+            new("Task A", ViewerTaskStatus.Pending, "high"),
+            new("Task B", ViewerTaskStatus.Pending, null)
         };
 
         var inferred = sut.InferInProgressTodoFromRuntime(todos, "busy");
 
-        Assert.Equal("in_progress", inferred[0].Status);
+        Assert.Equal(ViewerTaskStatus.InProgress, inferred[0].Status);
         Assert.Equal(ViewerTaskStatus.InProgress, inferred[0].TaskStatus);
-        Assert.Equal("pending", inferred[1].Status);
+        Assert.Equal(ViewerTaskStatus.Pending, inferred[1].Status);
         Assert.Equal(ViewerTaskStatus.Pending, inferred[1].TaskStatus);
     }
 
@@ -43,7 +43,7 @@ public sealed class SessionTodoViewServiceTests
         var sut = new SessionTodoViewService();
         var todos = new List<SessionTodoDto>
         {
-            new("Investigate", "pending", "medium")
+            new("Investigate", ViewerTaskStatus.Pending, "medium")
         };
 
         var tasks = sut.MapTodosToViewerTasks(todos);
@@ -61,7 +61,7 @@ public sealed class SessionTodoViewServiceTests
         var sut = new SessionTodoViewService();
         var todos = new List<SessionTodoDto>
         {
-            new("Fix warning", "in_progress", null)
+            new("Fix warning", ViewerTaskStatus.InProgress, null)
         };
 
         var tasks = sut.MapTodosToGlobalViewerTasks(todos, "sess-1", "My Session", "C:/Work/Repo");

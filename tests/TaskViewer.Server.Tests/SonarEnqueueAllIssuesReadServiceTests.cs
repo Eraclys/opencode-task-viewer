@@ -15,9 +15,9 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
 
         var result = await service.CollectMatchingIssuesAsync(
             mapping,
-            "code_smell",
-            "major",
-            "open",
+            [SonarIssueType.CodeSmell],
+            [SonarIssueSeverity.Major],
+            [SonarIssueStatus.Open],
             ["javascript:S1126"],
             2);
 
@@ -37,9 +37,9 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
 
         var result = await service.CollectMatchingIssuesAsync(
             CreateMapping(),
-            null,
-            null,
-            null,
+            [],
+            [],
+            [],
             ["javascript:S1126"],
             1000);
 

@@ -1,8 +1,9 @@
 ﻿using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
 public sealed record EnqueueContext(
     MappingRecord Mapping,
-    string? Type,
+    SonarIssueType Type,
     string InstructionText);

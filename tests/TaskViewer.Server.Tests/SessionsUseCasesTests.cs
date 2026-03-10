@@ -84,7 +84,7 @@ public sealed class SessionsUseCasesTests
         var created = await orchestrator.EnqueueIssues(
             new EnqueueIssuesRequest(
                 mapping.Id,
-                "CODE_SMELL",
+                SonarIssueType.CodeSmell,
                 "Fix safely",
                 [new TaskViewer.SonarQube.SonarIssueTransport("sq-1", null, "CODE_SMELL", null, "MAJOR", "javascript:S1126", "Remove this redundant assignment.", "gamma-key:src/worker.js", null, "42", "OPEN")]));
 
@@ -98,11 +98,10 @@ public sealed class SessionsUseCasesTests
         var item = Assert.Single(result);
         Assert.Equal($"queue-{created.Items[0].Id}", item.Id);
         Assert.Equal("queued", item.RuntimeStatus.Type);
-        Assert.Equal("pending", item.Status);
-        Assert.Equal(ViewerTaskStatus.Pending, item.ParsedStatus);
-        Assert.Equal(QueueState.Queued, item.ParsedQueueState);
-        Assert.Equal(SonarIssueType.CodeSmell, item.ParsedIssueType);
-        Assert.Equal(SonarIssueSeverity.Major, item.ParsedIssueSeverity);
+        Assert.Equal(ViewerTaskStatus.Pending, item.Status);
+        Assert.Equal(QueueState.Queued, item.QueueState);
+        Assert.Equal(SonarIssueType.CodeSmell, item.IssueType);
+        Assert.Equal(SonarIssueSeverity.Major, item.IssueSeverity);
         Assert.True(item.IsQueueItem);
     }
 

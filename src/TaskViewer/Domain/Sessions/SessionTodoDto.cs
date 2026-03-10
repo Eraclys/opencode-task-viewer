@@ -1,6 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace TaskViewer.Domain.Sessions;
 
-public sealed record SessionTodoDto(string Content, string Status, string? Priority)
+public sealed record SessionTodoDto(string Content, ViewerTaskStatus Status, string? Priority)
 {
-    public ViewerTaskStatus TaskStatus => ViewerTaskStatus.FromRaw(Status);
+    [JsonIgnore]
+    public ViewerTaskStatus TaskStatus => Status;
+
+    [JsonPropertyName("status")]
+    public string StatusValue => Status.Value;
 }

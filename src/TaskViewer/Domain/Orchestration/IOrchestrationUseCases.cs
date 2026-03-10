@@ -1,5 +1,6 @@
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -9,20 +10,20 @@ public interface IOrchestrationUseCases
     Task<List<MappingRecord>> ListMappingsAsync(CancellationToken cancellationToken = default);
     Task<bool> DeleteMappingAsync(int mappingId, CancellationToken cancellationToken = default);
     Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request, CancellationToken cancellationToken = default);
-    Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType, CancellationToken cancellationToken = default);
+    Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default);
     Task<InstructionProfileDto> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default);
 
     Task<IssuesListDto> ListIssuesAsync(
         int mappingId,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         int? page,
         int? pageSize,
         string? ruleKeys,
         CancellationToken cancellationToken = default);
 
-    Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default);
+    Task<RulesListDto> ListRulesAsync(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default);
     Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request, CancellationToken cancellationToken = default);
     Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request, CancellationToken cancellationToken = default);
     Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit, CancellationToken cancellationToken = default);

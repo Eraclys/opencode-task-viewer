@@ -1,6 +1,7 @@
 using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -16,7 +17,7 @@ public sealed class EnqueueContextResolverTests
 
         var sut = new EnqueueContextResolver(repo);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(12, "CODE_SMELL", null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(12, SonarIssueType.CodeSmell, null));
 
         repo.Mapping = new MappingRecord
         {
@@ -28,7 +29,7 @@ public sealed class EnqueueContextResolverTests
             UpdatedAt = DateTimeOffset.UnixEpoch
         };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(12, "CODE_SMELL", null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(12, SonarIssueType.CodeSmell, null));
     }
 
     [Fact]
@@ -57,9 +58,9 @@ public sealed class EnqueueContextResolverTests
         };
 
         var sut = new EnqueueContextResolver(repo);
-        var result = await sut.ResolveAsync(7, "code_smell", "  ");
+        var result = await sut.ResolveAsync(7, SonarIssueType.FromRaw("code_smell"), "  ");
 
-        Assert.Equal("CODE_SMELL", result.Type);
+        Assert.Equal(SonarIssueType.CodeSmell, result.Type);
         Assert.Equal("default fix text", result.InstructionText);
         Assert.Equal(7, repo.UpsertMappingId);
         Assert.Equal("CODE_SMELL", repo.UpsertIssueType);
@@ -83,9 +84,9 @@ public sealed class EnqueueContextResolverTests
         };
 
         var sut = new EnqueueContextResolver(repo);
-        var result = await sut.ResolveAsync(3, null, " explicit ");
+        var result = await sut.ResolveAsync(3, default, " explicit ");
 
-        Assert.Null(result.Type);
+        Assert.False(result.Type.HasValue);
         Assert.Equal("explicit", result.InstructionText);
         Assert.Null(repo.UpsertMappingId);
     }

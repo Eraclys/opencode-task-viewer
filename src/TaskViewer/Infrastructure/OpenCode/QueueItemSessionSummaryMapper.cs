@@ -26,10 +26,6 @@ public sealed class QueueItemSessionSummaryMapper
 
         var taskLabel = taskState.DisplayLabel;
         var boardStatus = taskState.BoardStatus;
-        var issueType = item.ParsedIssueType.Or(item.IssueType);
-        var issueSeverity = item.ParsedSeverity.Or(item.Severity);
-        var lastReviewAction = item.ParsedLastReviewAction.Or(item.LastReviewAction);
-
         var name = titleParts.Count > 0
             ? $"[{taskLabel}] {string.Join(" - ", titleParts)}"
             : $"[{taskLabel}] Item #{item.Id}";
@@ -44,26 +40,26 @@ public sealed class QueueItemSessionSummaryMapper
             CreatedAt = item.CreatedAt,
             ModifiedAt = item.UpdatedAt,
             RuntimeStatus = SessionRuntimeStatus.FromRaw(taskState.Value),
-            Status = boardStatus,
+            Status = ViewerTaskStatus.FromRaw(boardStatus),
             HasAssistantResponse = item.SessionId is { Length: > 0 },
             OpenCodeUrl = item.OpenCodeUrl,
             IsQueueItem = true,
             QueueItemId = item.Id,
-            QueueState = taskState.Value,
+            QueueState = taskState,
             TaskId = item.Id,
-            TaskState = taskState.Value,
+            TaskState = taskState,
             TaskKey = item.TaskKey,
             TaskUnit = item.TaskUnit,
             TaskInstructions = item.Instructions,
             TaskIssueCount = item.IssueCount,
             IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
-            IssueType = issueType,
-            IssueSeverity = issueSeverity,
+            IssueType = item.ParsedIssueType,
+            IssueSeverity = item.ParsedSeverity,
             IssueRule = item.Rule,
             IssuePath = item.RelativePath ?? item.AbsolutePath,
             IssueLine = item.Line,
             LastError = item.LastError,
-            LastReviewAction = lastReviewAction,
+            LastReviewAction = item.ParsedLastReviewAction,
             LastReviewReason = item.LastReviewReason,
             LastReviewedAt = item.LastReviewedAt
         };

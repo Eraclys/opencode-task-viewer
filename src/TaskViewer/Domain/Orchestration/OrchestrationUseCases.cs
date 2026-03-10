@@ -26,14 +26,14 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 
     public Task<MappingRecord> UpsertMappingAsync(UpsertMappingRequest request, CancellationToken cancellationToken = default) => _gateway.UpsertMapping(request, cancellationToken);
 
-    public async Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, string? issueType, CancellationToken cancellationToken = default)
+    public async Task<InstructionProfileDto> GetInstructionProfileAsync(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default)
     {
         var profile = await _gateway.GetInstructionProfile(mappingId, issueType, cancellationToken);
 
         return new InstructionProfileDto
         {
             MappingId = mappingId,
-            IssueType = profile?.ParsedIssueType.OrNull() ?? SonarIssueType.FromRaw(issueType).OrNull(),
+            IssueType = profile?.ParsedIssueType ?? issueType,
             Instructions = profile?.Instructions
         };
     }
@@ -45,7 +45,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         return new InstructionProfileDto
         {
             MappingId = profile.MappingId,
-            IssueType = profile.ParsedIssueType.Or(profile.IssueType),
+            IssueType = profile.ParsedIssueType,
             Instructions = profile.Instructions,
             UpdatedAt = profile.UpdatedAt
         };
@@ -53,25 +53,25 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 
     public Task<IssuesListDto> ListIssuesAsync(
         int mappingId,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         int? page,
         int? pageSize,
         string? ruleKeys,
         CancellationToken cancellationToken = default)
         => _gateway.ListIssues(
             mappingId,
-            issueType,
-            severity,
-            issueStatus,
+            issueTypes,
+            severities,
+            issueStatuses,
             page,
             pageSize,
             ruleKeys,
             cancellationToken);
 
-    public Task<RulesListDto> ListRulesAsync(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
-        => _gateway.ListRules(mappingId, issueType, issueStatus, cancellationToken);
+    public Task<RulesListDto> ListRulesAsync(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default)
+        => _gateway.ListRules(mappingId, issueTypes, issueStatuses, cancellationToken);
 
     public Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request, CancellationToken cancellationToken = default) => _gateway.EnqueueIssues(request, cancellationToken);
 

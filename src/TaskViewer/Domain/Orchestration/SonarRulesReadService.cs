@@ -16,14 +16,11 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
 
     public async Task<SonarRulesSummary> SummarizeRulesAsync(
         MappingRecord mapping,
-        string? issueType,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         int maxScanIssues,
         CancellationToken cancellationToken = default)
     {
-        var types = SonarIssueType.ParseCsv(issueType);
-        var statuses = SonarIssueStatus.ParseCsv(issueStatus);
-
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         const int pageSize = 500;
         var page = 1;
@@ -38,8 +35,8 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
                 Branch = mapping.Branch,
                 PageIndex = page,
                 PageSize = pageSize,
-                Types = types,
-                Statuses = statuses
+                Types = issueTypes,
+                Statuses = issueStatuses
             }, cancellationToken);
 
             var issues = response.Issues;
@@ -80,8 +77,8 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
             .ToList();
 
         return new SonarRulesSummary(
-            types.Count == 0 ? null : string.Join(',', types.Select(type => type.Value)),
-            statuses.Count == 0 ? null : string.Join(',', statuses.Select(status => status.Value)),
+            issueTypes,
+            issueStatuses,
             scanned,
             scanned >= maxScanIssues,
             rules);

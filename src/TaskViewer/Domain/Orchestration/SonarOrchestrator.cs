@@ -1,6 +1,7 @@
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -108,21 +109,21 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     public async Task<MappingRecord?> GetMappingById(int? mappingId, CancellationToken cancellationToken = default) => await _orchestrationMappingService.GetMappingByIdAsync(mappingId, cancellationToken);
     public async Task<bool> DeleteMapping(int mappingId, CancellationToken cancellationToken = default) => await _orchestrationMappingService.DeleteMappingAsync(mappingId, cancellationToken);
     public async Task<MappingRecord> UpsertMapping(UpsertMappingRequest request, CancellationToken cancellationToken = default) => await _orchestrationMappingService.UpsertMappingAsync(request, cancellationToken);
-    public async Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType, CancellationToken cancellationToken = default) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType, cancellationToken);
+    public async Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default) => await _orchestrationMappingService.GetInstructionProfileAsync(mappingId, issueType, cancellationToken);
     public async Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default) => await _orchestrationMappingService.UpsertInstructionProfileAsync(request, cancellationToken);
 
-    public async Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
+    public async Task<RulesListDto> ListRules(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default)
     {
         var mapping = await GetMappingById(mappingId, cancellationToken);
 
         if (mapping is null || !mapping.Enabled)
             throw new InvalidOperationException("Mapping not found or disabled");
 
-        var summary = await _rulesReadService.SummarizeRulesAsync(mapping, issueType, issueStatus, MaxRuleScanIssues, cancellationToken);
+        var summary = await _rulesReadService.SummarizeRulesAsync(mapping, issueTypes, issueStatuses, MaxRuleScanIssues, cancellationToken);
         return OrchestrationResponseMapper.BuildRulesList(mapping, summary);
     }
 
-    public async Task<IssuesListDto> ListIssues(int mappingId, string? issueType, string? severity, string? issueStatus, int? page, int? pageSize, string? ruleKeys, CancellationToken cancellationToken = default)
+    public async Task<IssuesListDto> ListIssues(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueSeverity> severities, IReadOnlyList<SonarIssueStatus> issueStatuses, int? page, int? pageSize, string? ruleKeys, CancellationToken cancellationToken = default)
     {
         var mapping = await GetMappingById(mappingId, cancellationToken);
 
@@ -131,7 +132,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
         var rules = _orchestrationInputNormalizer.NormalizeRuleKeys(ruleKeys);
         var (p, ps) = _orchestrationInputNormalizer.ParseIssuePaging(page, pageSize);
-        var result = await _issuesReadService.ListIssuesAsync(mapping, issueType, severity, issueStatus, p, ps, rules, cancellationToken);
+        var result = await _issuesReadService.ListIssuesAsync(mapping, issueTypes, severities, issueStatuses, p, ps, rules, cancellationToken);
         return OrchestrationResponseMapper.BuildIssuesList(mapping, result);
     }
 
@@ -171,9 +172,9 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         var context = await _enqueueContextResolver.ResolveAsync(request.MappingId, request.IssueType, request.Instructions, cancellationToken);
         var collected = await _enqueueAllIssuesReadService.CollectMatchingIssuesAsync(
             context.Mapping,
-            context.Type,
-            request.Severity,
-            request.IssueStatus,
+            context.Type.ToFilterList(),
+            request.Severities,
+            request.IssueStatuses,
             rules,
             MaxEnqueueAllScanIssues,
             cancellationToken);
@@ -281,7 +282,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return history
             .Select(entry => new TaskReviewHistoryDto
             {
-                Action = entry.ParsedAction.Or(entry.Action) ?? entry.Action,
+                Action = entry.ParsedAction.HasValue ? entry.ParsedAction : TaskReviewAction.FromRaw(entry.Action),
                 Reason = entry.Reason,
                 CreatedAt = entry.CreatedAt
             })
@@ -315,7 +316,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
     async Task<QueueEnqueueBatchResult> EnqueueRawIssuesAsync(
         MappingRecord mapping,
-        string? type,
+        SonarIssueType type,
         string instructionText,
         IReadOnlyList<NormalizedIssue> issues,
         CancellationToken cancellationToken)
@@ -323,7 +324,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         var skipped = new List<QueueEnqueueSkipView>();
         var (createdItems, repoSkipped) = await _queueRepository.EnqueueIssuesBatch(
             mapping,
-            type,
+            type.OrNull(),
             instructionText,
             issues,
             _options.MaxAttempts,

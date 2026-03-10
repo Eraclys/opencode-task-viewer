@@ -1,4 +1,5 @@
 using TaskViewer.Infrastructure.Orchestration;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -38,7 +39,7 @@ public sealed class OrchestrationRequestParsersTests
             """);
 
         Assert.Equal(42, request.MappingId);
-        Assert.Equal("code_smell", request.IssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, request.IssueType);
         Assert.Equal("Do the safe change", request.Instructions);
     }
 
@@ -58,7 +59,7 @@ public sealed class OrchestrationRequestParsersTests
             """);
 
         Assert.Equal(5, request.MappingId);
-        Assert.Equal("BUG", request.IssueType);
+        Assert.Equal(SonarIssueType.Bug, request.IssueType);
         Assert.Equal("fix it", request.Instructions);
         Assert.Single(request.Issues!);
         Assert.Equal("sq-1", request.Issues![0].Key);
@@ -85,5 +86,7 @@ public sealed class OrchestrationRequestParsersTests
 
         Assert.Equal("javascript:S3776", fromRules.RuleKeys);
         Assert.Equal("csharpsquid:S1118", fromRule.RuleKeys);
+        Assert.Empty(fromRules.IssueStatuses);
+        Assert.Empty(fromRules.Severities);
     }
 }

@@ -12,7 +12,7 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
         _mappingRepository = mappingRepository;
     }
 
-    public async Task<EnqueueContext> ResolveAsync(int? mappingId, string? issueType, string? instructions, CancellationToken cancellationToken = default)
+    public async Task<EnqueueContext> ResolveAsync(int? mappingId, SonarIssueType issueType, string? instructions, CancellationToken cancellationToken = default)
     {
         var id = mappingId.GetValueOrDefault(-1);
 
@@ -25,8 +25,7 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
             !mapping.Enabled)
             throw new InvalidOperationException("Mapping not found or disabled");
 
-        var type = SonarIssueType.FromRaw(issueType);
-        var normalizedType = type.OrNull();
+        var normalizedType = issueType.OrNull();
         var profile = normalizedType is null ? null : await _mappingRepository.GetInstructionProfile(mapping.Id, normalizedType, cancellationToken);
         var defaultInstruction = profile?.Instructions;
         var instructionText = EnqueueContextPolicy.ResolveInstructionText(instructions, defaultInstruction);
@@ -39,6 +38,6 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
                 DateTimeOffset.UtcNow,
                 cancellationToken);
 
-        return new EnqueueContext(mapping, normalizedType, instructionText);
+        return new EnqueueContext(mapping, issueType, instructionText);
     }
 }

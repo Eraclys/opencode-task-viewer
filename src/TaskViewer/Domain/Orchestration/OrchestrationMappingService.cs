@@ -68,19 +68,17 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
             cancellationToken);
     }
 
-    public async Task<InstructionProfileRecord?> GetInstructionProfileAsync(int? mappingId, string? issueType, CancellationToken cancellationToken = default)
+    public async Task<InstructionProfileRecord?> GetInstructionProfileAsync(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default)
     {
         var mapping = await GetMappingByIdAsync(mappingId, cancellationToken);
 
         if (mapping is null)
             return null;
 
-        var type = SonarIssueType.FromRaw(issueType);
-
-        if (!type.HasValue)
+        if (!issueType.HasValue)
             return null;
 
-        return await _mappingRepository.GetInstructionProfile(mapping.Id, type.Value, cancellationToken);
+        return await _mappingRepository.GetInstructionProfile(mapping.Id, issueType.Value, cancellationToken);
     }
 
     public async Task<InstructionProfileRecord> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default)
@@ -90,7 +88,7 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (mapping is null)
             throw new InvalidOperationException("Mapping not found");
 
-        var type = SonarIssueType.FromRaw(request.IssueType);
+        var type = request.IssueType;
 
         if (!type.HasValue)
             throw new InvalidOperationException("Missing issueType");

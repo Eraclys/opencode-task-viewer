@@ -11,7 +11,7 @@ public sealed class SessionTodoViewService
 
         return new SessionTodoDto(
             todo.Content,
-            status.Value,
+            status,
             todo.Priority);
     }
 
@@ -31,7 +31,7 @@ public sealed class SessionTodoViewService
         var copy = todos.ToList();
         copy[idx] = copy[idx] with
         {
-            Status = ViewerTaskStatus.InProgress.Value
+            Status = ViewerTaskStatus.InProgress
         };
 
         return copy;

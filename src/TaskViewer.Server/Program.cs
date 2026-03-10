@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using TaskViewer;
 using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.OpenCode;
+using TaskViewer.Serialization;
 using TaskViewer.Server;
 using TaskViewer.Server.Api;
 using TaskViewer.Server.DependencyInjection;
@@ -17,7 +18,10 @@ var sonarMode = runtimeSettings.SonarQube.Mode;
 
 builder.WebHost.UseUrls($"http://{viewerHost}:{viewerPort}");
 builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.NumberHandling = JsonNumberHandling.AllowReadingFromString);
+{
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.AllowReadingFromString;
+    options.SerializerOptions.AddTaskViewerJsonConverters();
+});
 
 builder.Services
     .AddTaskViewerServerInfrastructure()

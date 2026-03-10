@@ -1,5 +1,6 @@
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -9,20 +10,20 @@ public interface IOrchestrationGateway
     Task<List<MappingRecord>> ListMappings(CancellationToken cancellationToken = default);
     Task<bool> DeleteMapping(int mappingId, CancellationToken cancellationToken = default);
     Task<MappingRecord> UpsertMapping(UpsertMappingRequest request, CancellationToken cancellationToken = default);
-    Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType, CancellationToken cancellationToken = default);
+    Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default);
     Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default);
 
     Task<IssuesListDto> ListIssues(
         int mappingId,
-        string? issueType,
-        string? severity,
-        string? issueStatus,
+        IReadOnlyList<SonarIssueType> issueTypes,
+        IReadOnlyList<SonarIssueSeverity> severities,
+        IReadOnlyList<SonarIssueStatus> issueStatuses,
         int? page,
         int? pageSize,
         string? ruleKeys,
         CancellationToken cancellationToken = default);
 
-    Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default);
+    Task<RulesListDto> ListRules(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default);
 
     Task<EnqueueIssuesResultDto> EnqueueIssues(EnqueueIssuesRequest request, CancellationToken cancellationToken = default);
 

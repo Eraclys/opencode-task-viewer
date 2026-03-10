@@ -26,8 +26,8 @@ public sealed class SonarRulesReadServiceTests
 
         var summary = await service.SummarizeRulesAsync(
             mapping,
-            "code_smell",
-            "open",
+            [SonarIssueType.CodeSmell],
+            [SonarIssueStatus.Open],
             5000);
 
         Assert.Equal("CODE_SMELL", summary.IssueType);

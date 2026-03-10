@@ -24,11 +24,10 @@ public sealed class OrchestrationUseCasesTests
         };
 
         var sut = new OrchestrationUseCases(gateway);
-        var result = await sut.GetInstructionProfileAsync(42, "code_smell");
+        var result = await sut.GetInstructionProfileAsync(42, SonarIssueType.FromRaw("code_smell"));
 
         Assert.Equal(42, result.MappingId);
-        Assert.Equal("CODE_SMELL", result.IssueType);
-        Assert.Equal(SonarIssueType.CodeSmell, result.ParsedIssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, result.IssueType);
         Assert.Equal("Apply safe fix", result.Instructions);
     }
 
@@ -38,10 +37,9 @@ public sealed class OrchestrationUseCasesTests
         var gateway = new FakeGateway();
         var sut = new OrchestrationUseCases(gateway);
 
-        var result = await sut.UpsertInstructionProfileAsync(new UpsertInstructionProfileRequest(42, "code_smell", "Apply safe fix"));
+        var result = await sut.UpsertInstructionProfileAsync(new UpsertInstructionProfileRequest(42, SonarIssueType.FromRaw("code_smell"), "Apply safe fix"));
 
-        Assert.Equal("CODE_SMELL", result.IssueType);
-        Assert.Equal(SonarIssueType.CodeSmell, result.ParsedIssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, result.IssueType);
     }
 
     [Fact]
@@ -65,10 +63,10 @@ public sealed class OrchestrationUseCasesTests
         await sut.EnqueueAllMatchingAsync(
             new EnqueueAllRequest(
                 MappingId: 9,
-                IssueType: "CODE_SMELL",
+                IssueType: SonarIssueType.CodeSmell,
                 RuleKeys: "javascript:S3776",
-                IssueStatus: null,
-                Severity: null,
+                IssueStatuses: [],
+                Severities: [],
                 Instructions: null));
 
         Assert.Equal("javascript:S3776", gateway.LastRuleKeys);
@@ -130,7 +128,7 @@ public sealed class OrchestrationUseCasesTests
             [
                 new TaskReviewHistoryDto
                 {
-                    Action = "rejected",
+                    Action = TaskReviewAction.Rejected,
                     Reason = "Needs manual follow-up",
                     CreatedAt = DateTimeOffset.Parse("2026-03-08T10:04:00Z")
                 }
@@ -142,8 +140,7 @@ public sealed class OrchestrationUseCasesTests
 
         Assert.Single(result);
         Assert.Equal(42, gateway.LastReviewTaskId);
-        Assert.Equal("rejected", result[0].Action);
-        Assert.Equal(TaskReviewAction.Rejected, result[0].ParsedAction);
+        Assert.Equal(TaskReviewAction.Rejected, result[0].Action);
     }
 
     [Fact]
@@ -243,7 +240,7 @@ public sealed class OrchestrationUseCasesTests
                 UpdatedAt = DateTimeOffset.UnixEpoch
             });
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, string? issueType, CancellationToken cancellationToken = default) => Task.FromResult(InstructionProfileResult);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int? mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default) => Task.FromResult(InstructionProfileResult);
 
         public Task<InstructionProfileRecord> UpsertInstructionProfile(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(
@@ -251,7 +248,7 @@ public sealed class OrchestrationUseCasesTests
                 {
                     Id = 1,
                     MappingId = 1,
-                    IssueType = request.IssueType ?? string.Empty,
+                    IssueType = request.IssueType.Value,
                     Instructions = request.Instructions ?? string.Empty,
                     CreatedAt = DateTimeOffset.UnixEpoch,
                     UpdatedAt = DateTimeOffset.UnixEpoch
@@ -259,9 +256,9 @@ public sealed class OrchestrationUseCasesTests
 
         public Task<IssuesListDto> ListIssues(
             int mappingId,
-            string? issueType,
-            string? severity,
-            string? issueStatus,
+            IReadOnlyList<SonarIssueType> issueTypes,
+            IReadOnlyList<SonarIssueSeverity> severities,
+            IReadOnlyList<SonarIssueStatus> issueStatuses,
             int? page,
             int? pageSize,
             string? ruleKeys,
@@ -286,7 +283,7 @@ public sealed class OrchestrationUseCasesTests
                     Issues = []
                 });
 
-        public Task<RulesListDto> ListRules(int mappingId, string? issueType, string? issueStatus, CancellationToken cancellationToken = default)
+        public Task<RulesListDto> ListRules(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default)
             => Task.FromResult(
                 new RulesListDto
                 {
@@ -298,8 +295,8 @@ public sealed class OrchestrationUseCasesTests
                         CreatedAt = DateTimeOffset.UnixEpoch,
                         UpdatedAt = DateTimeOffset.UnixEpoch
                     },
-                    IssueType = issueType,
-                    IssueStatus = issueStatus,
+                    IssueType = issueTypes.Count == 1 ? issueTypes[0] : default,
+                    IssueStatus = issueStatuses.Count == 1 ? issueStatuses[0] : default,
                     ScannedIssues = 0,
                     Truncated = false,
                     Rules = []

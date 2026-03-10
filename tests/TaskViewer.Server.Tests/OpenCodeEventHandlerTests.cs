@@ -17,7 +17,7 @@ public sealed class OpenCodeEventHandlerTests
     {
         var viewerState = new OpenCodeViewerState();
         var cachePolicy = new OpenCodeViewerCachePolicy();
-        viewerState.StoreTodos("C:/Work", "sess-1", [new SessionTodoDto("todo-1", "open", "task")], cachePolicy.TodoCacheTtlMs);
+        viewerState.StoreTodos("C:/Work", "sess-1", [new SessionTodoDto("todo-1", ViewerTaskStatus.FromRaw("open"), "task")], cachePolicy.TodoCacheTtlMs);
 
         using var responseBody = new MemoryStream();
         var (hub, client, cts) = CreateSseHub(responseBody);
