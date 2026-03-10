@@ -18,8 +18,8 @@ static class OrchestrationResponseMapper
         return new RulesListDto
         {
             Mapping = mapping,
-            IssueType = summary.ParsedIssueType,
-            IssueStatus = summary.ParsedIssueStatus,
+            IssueType = summary.IssueTypes.Count == 1 ? summary.IssueTypes[0] : default,
+            IssueStatus = summary.IssueStatuses.Count == 1 ? summary.IssueStatuses[0] : default,
             ScannedIssues = summary.ScannedIssues,
             Truncated = summary.Truncated,
             Rules = rules

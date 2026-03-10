@@ -101,10 +101,12 @@ Implemented domain value objects:
 Implemented adoption points:
 
 - orchestration queue lifecycle and dispatch/reconciliation logic now use `QueueState`
+- queue-state filtering now parses at the HTTP boundary and flows through use cases/gateway methods as typed `QueueState` collections
 - OpenCode runtime parsing, status overrides, and session/task derivation now use `SessionRuntimeStatus`
 - Sonar issue filtering, normalization, batching priority, and DTO parsing now use typed Sonar value objects
 - review history and queue review transitions now use `TaskReviewAction`
 - viewer/session/todo DTOs now expose parsed typed accessors while keeping existing string fields on the wire
+- `DirectoryPath` is used more directly in OpenCode cache-key generation and session/status lookup helpers instead of repeatedly normalizing raw strings inline
 
 Framework binding recommendation and implementation:
 
@@ -127,8 +129,9 @@ Verification completed:
 
 Remaining follow-up work:
 
-- `DirectoryPath` can still be pushed deeper so more services accept typed paths directly instead of raw strings
-- some boundary/request models still accept raw strings first and then normalize internally; that is acceptable for now but could be tightened further later
+- `DirectoryPath` can still be pushed deeper so more service and persistence boundaries accept typed paths directly instead of raw strings
+- some HTTP/query boundaries still begin as raw strings before being parsed into typed values; that remains acceptable boundary handling but could be tightened further later
+- persistence bridge models still retain a few `Parsed*` helpers where they adapt SQLite text columns into typed values for domain consumers
 
 ## Guardrails
 

@@ -68,12 +68,12 @@ public sealed class OpenCodeSessionSearchService
 
     public async Task<Dictionary<string, SessionRuntimeStatus>> GetStatusMapForDirectoryAsync(string? directory, CancellationToken cancellationToken = default)
     {
-        var normalizedDirectory = DirectoryPath.Normalize(directory);
+        var parsedDirectory = DirectoryPath.Parse(directory);
 
-        if (string.IsNullOrWhiteSpace(normalizedDirectory))
+        if (!parsedDirectory.HasValue)
             return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
-        var directoryKey = OpenCodeCacheKeys.Directory(normalizedDirectory);
+        var directoryKey = parsedDirectory.Value.CacheKey;
 
         if (string.IsNullOrWhiteSpace(directoryKey))
             return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
@@ -83,7 +83,7 @@ public sealed class OpenCodeSessionSearchService
 
         Dictionary<string, SessionRuntimeStatus> statusMap = new(StringComparer.Ordinal);
 
-        foreach (var candidateDirectory in DirectoryPath.GetVariants(normalizedDirectory))
+        foreach (var candidateDirectory in parsedDirectory.Value.Variants)
         {
             try
             {
@@ -168,14 +168,13 @@ public sealed class OpenCodeSessionSearchService
 
         foreach (var project in projects)
         {
-            var worktree = DirectoryPath.Normalize(project.Worktree);
+            var worktree = DirectoryPath.Parse(project.Worktree);
             var candidates = new List<string>();
 
-            if (!string.IsNullOrWhiteSpace(worktree) &&
-                worktree is not "/" and not "\\")
-                candidates.Add(worktree);
+            if (worktree is { Value: not "/" and not "\\" })
+                candidates.Add(worktree.Value.Value);
 
-            candidates.AddRange(project.SandboxDirectories.Select(DirectoryPath.Normalize).Where(value => !string.IsNullOrWhiteSpace(value))!);
+            candidates.AddRange(project.SandboxDirectories.Select(DirectoryPath.Parse).Where(value => value.HasValue).Select(value => value!.Value.Value));
 
             foreach (var candidate in candidates)
             {
@@ -189,7 +188,7 @@ public sealed class OpenCodeSessionSearchService
                     !seenDirectoryKeys.Add(key))
                     continue;
 
-                entries.Add((candidate, worktree ?? candidate));
+                entries.Add((candidate, worktree?.Value ?? candidate));
             }
         }
 
@@ -210,12 +209,12 @@ public sealed class OpenCodeSessionSearchService
 
     async Task<List<OpenCodeSessionDto>> ListSessionsForDirectoryAsync(string directory, string? projectWorktree, int limit, int maxSessionsPerProject, CancellationToken cancellationToken)
     {
-        var normalizedDirectory = DirectoryPath.Normalize(directory);
+        var parsedDirectory = DirectoryPath.Parse(directory);
 
-        if (string.IsNullOrWhiteSpace(normalizedDirectory))
+        if (!parsedDirectory.HasValue)
             return [];
 
-        var directoryKey = OpenCodeCacheKeys.Directory(normalizedDirectory);
+        var directoryKey = parsedDirectory.Value.CacheKey;
 
         if (string.IsNullOrWhiteSpace(directoryKey))
             return [];
@@ -228,7 +227,7 @@ public sealed class OpenCodeSessionSearchService
         var hadSuccess = false;
         Exception? lastError = null;
 
-        foreach (var candidateDirectory in DirectoryPath.GetVariants(normalizedDirectory))
+        foreach (var candidateDirectory in parsedDirectory.Value.Variants)
         {
             try
             {
@@ -241,7 +240,7 @@ public sealed class OpenCodeSessionSearchService
                         session.Id,
                         session.Name,
                         session.Directory ?? candidateDirectory,
-                        session.Project ?? DirectoryPath.Normalize(projectWorktree) ?? session.Directory ?? candidateDirectory,
+                        session.Project ?? DirectoryPath.Parse(projectWorktree)?.Value ?? session.Directory ?? candidateDirectory,
                         session.CreatedAt,
                         session.UpdatedAt))
                     .ToList();

@@ -26,7 +26,7 @@ public interface IOrchestrationUseCases
     Task<RulesListDto> ListRulesAsync(int mappingId, IReadOnlyList<SonarIssueType> issueTypes, IReadOnlyList<SonarIssueStatus> issueStatuses, CancellationToken cancellationToken = default);
     Task<EnqueueIssuesResultDto> EnqueueIssuesAsync(EnqueueIssuesRequest request, CancellationToken cancellationToken = default);
     Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request, CancellationToken cancellationToken = default);
-    Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit, CancellationToken cancellationToken = default);
+    Task<QueueOverviewDto> GetQueueAsync(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default);
     Task<bool> CancelQueueItemAsync(int queueId, CancellationToken cancellationToken = default);
     Task<int> RetryFailedAsync(CancellationToken cancellationToken = default);
     Task<int> ClearQueuedAsync(CancellationToken cancellationToken = default);

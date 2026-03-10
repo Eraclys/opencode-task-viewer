@@ -32,7 +32,7 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
 
         foreach (var dir in dirs)
         {
-            var map = await FetchStatusMapForDirectory(dir);
+            var map = await FetchStatusMapForDirectory(DirectoryPath.Parse(dir));
             totalRunning += map.Values.Count(status => status.IsRunning);
         }
 
@@ -41,7 +41,7 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         return new WorkingSessionsSample(now, totalRunning);
     }
 
-    async Task<Dictionary<string, SessionRuntimeStatus>> FetchStatusMapForDirectory(string directory)
+    async Task<Dictionary<string, SessionRuntimeStatus>> FetchStatusMapForDirectory(DirectoryPath? directory)
     {
         var variants = GetDirectoryVariants(directory);
 
@@ -70,6 +70,6 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         return fallback;
     }
 
-    static List<string> GetDirectoryVariants(string? directory)
-        => DirectoryPath.GetVariants(directory);
+    static List<string> GetDirectoryVariants(DirectoryPath? directory)
+        => directory?.Variants ?? [];
 }

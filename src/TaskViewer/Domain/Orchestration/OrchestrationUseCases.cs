@@ -77,7 +77,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
 
     public Task<EnqueueAllResultDto> EnqueueAllMatchingAsync(EnqueueAllRequest request, CancellationToken cancellationToken = default) => _gateway.EnqueueAllMatching(request, cancellationToken);
 
-    public async Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit, CancellationToken cancellationToken = default)
+    public async Task<QueueOverviewDto> GetQueueAsync(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default)
     {
         var items = await _gateway.ListQueue(states, limit, cancellationToken);
         var stats = await _gateway.GetQueueStats(cancellationToken);

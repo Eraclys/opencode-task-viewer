@@ -72,7 +72,7 @@ public sealed class SessionsUseCases : ISessionsUseCases
 
         try
         {
-            var queueItems = await _orchestrator.ListQueue("queued,dispatching,leased,running,awaiting_review,rejected,failed,cancelled", requestedLimit, cancellationToken);
+            var queueItems = await _orchestrator.ListQueue(QueueState.SessionVisibleStates, requestedLimit, cancellationToken);
             var queueSummaries = queueItems
                 .Select(item => _mapQueueItemToSessionSummary(item))
                 .Where(x => x is not null)

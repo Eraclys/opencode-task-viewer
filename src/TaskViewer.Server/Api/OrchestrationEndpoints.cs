@@ -173,7 +173,7 @@ public static class OrchestrationEndpoints
             {
                 SetNoStore(ctx.Response);
 
-                var result = await useCases.GetQueueAsync(states, limit, cancellationToken);
+                var result = await useCases.GetQueueAsync(SonarOrchestrator.ParseQueueStates(states), limit, cancellationToken);
 
                 return Results.Json(result);
             })

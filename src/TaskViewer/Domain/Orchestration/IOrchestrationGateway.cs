@@ -29,7 +29,7 @@ public interface IOrchestrationGateway
 
     Task<EnqueueAllResultDto> EnqueueAllMatching(EnqueueAllRequest request, CancellationToken cancellationToken = default);
 
-    Task<List<QueueItemRecord>> ListQueue(string? states, int? limit, CancellationToken cancellationToken = default);
+    Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default);
     Task<QueueStatsDto> GetQueueStats(CancellationToken cancellationToken = default);
     Task<OrchestrationWorkerStateDto> GetWorkerState(CancellationToken cancellationToken = default);
     Task<bool> CancelQueueItem(int queueId, CancellationToken cancellationToken = default);

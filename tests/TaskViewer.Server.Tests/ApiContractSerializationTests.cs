@@ -906,7 +906,7 @@ public sealed class ApiContractSerializationTests
                     })
                 : Task.FromException<EnqueueAllResultDto>(enqueueAllException);
 
-        public Task<QueueOverviewDto> GetQueueAsync(string? states, int? limit, CancellationToken cancellationToken = default)
+        public Task<QueueOverviewDto> GetQueueAsync(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default)
             => queueException is null
                 ? Task.FromResult(queueResult ?? CreateQueueOverviewDto())
                 : Task.FromException<QueueOverviewDto>(queueException);

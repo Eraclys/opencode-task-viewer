@@ -185,11 +185,10 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return result;
     }
 
-    public async Task<List<QueueItemRecord>> ListQueue(string? states, int? limit, CancellationToken cancellationToken = default)
+    public async Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default)
     {
-        var normalizedStates = NormalizeQueueStateList(states);
         var normalizedLimit = Math.Clamp(limit.GetValueOrDefault(250), 1, 5000);
-        return await _queueRepository.ListQueue(normalizedStates, normalizedLimit, cancellationToken);
+        return await _queueRepository.ListQueue(states, normalizedLimit, cancellationToken);
     }
 
     public async Task<QueueStatsDto> GetQueueStats(CancellationToken cancellationToken = default)
@@ -282,7 +281,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return history
             .Select(entry => new TaskReviewHistoryDto
             {
-                Action = entry.ParsedAction.HasValue ? entry.ParsedAction : TaskReviewAction.FromRaw(entry.Action),
+                Action = entry.ParsedAction,
                 Reason = entry.Reason,
                 CreatedAt = entry.CreatedAt
             })
@@ -337,7 +336,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return new QueueEnqueueBatchResult(createdItems, skipped);
     }
 
-    static List<QueueState> NormalizeQueueStateList(string? statesCsv)
+    public static IReadOnlyList<QueueState> ParseQueueStates(string? statesCsv)
     {
         var result = new List<QueueState>();
         var seen = new HashSet<string>(StringComparer.Ordinal);

@@ -6,8 +6,8 @@ public static class OpenCodeCacheKeys
 {
     public static string? Directory(string? directory)
     {
-        var normalizedDirectory = DirectoryPath.Normalize(directory) ?? directory;
-        return string.IsNullOrWhiteSpace(normalizedDirectory) ? null : DirectoryPath.GetCacheKey(normalizedDirectory);
+        var parsedDirectory = DirectoryPath.Parse(directory);
+        return parsedDirectory?.CacheKey;
     }
 
     public static string DirectorySession(string? directory, string sessionId)

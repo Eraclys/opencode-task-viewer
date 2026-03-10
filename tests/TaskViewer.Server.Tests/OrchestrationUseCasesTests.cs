@@ -112,7 +112,7 @@ public sealed class OrchestrationUseCasesTests
         };
 
         var sut = new OrchestrationUseCases(gateway);
-        var result = await sut.GetQueueAsync("queued", 100);
+        var result = await sut.GetQueueAsync([QueueState.Queued], 100);
 
         Assert.NotNull(result.Items);
         Assert.NotNull(result.Stats);
@@ -326,7 +326,7 @@ public sealed class OrchestrationUseCasesTests
                 });
         }
 
-        public Task<List<QueueItemRecord>> ListQueue(string? states, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(QueueItemsResult);
+        public Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<QueueState> states, int? limit, CancellationToken cancellationToken = default) => Task.FromResult(QueueItemsResult);
         public Task<QueueStatsDto> GetQueueStats(CancellationToken cancellationToken = default) => Task.FromResult(QueueStatsResult);
         public Task<OrchestrationWorkerStateDto> GetWorkerState(CancellationToken cancellationToken = default) => Task.FromResult(WorkerStateResult);
         public Task<bool> CancelQueueItem(int queueId, CancellationToken cancellationToken = default) => Task.FromResult(true);
