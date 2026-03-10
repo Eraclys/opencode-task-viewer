@@ -1,4 +1,5 @@
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -24,26 +25,20 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
             !mapping.Enabled)
             throw new InvalidOperationException("Mapping not found or disabled");
 
-        var type = NormalizeIssueType(issueType);
-        var profile = type is null ? null : await _mappingRepository.GetInstructionProfile(mapping.Id, type, cancellationToken);
+        var type = SonarIssueType.FromRaw(issueType);
+        var normalizedType = type.OrNull();
+        var profile = normalizedType is null ? null : await _mappingRepository.GetInstructionProfile(mapping.Id, normalizedType, cancellationToken);
         var defaultInstruction = profile?.Instructions;
         var instructionText = EnqueueContextPolicy.ResolveInstructionText(instructions, defaultInstruction);
 
-        if (EnqueueContextPolicy.ShouldPersistInstructionProfile(type, instructionText))
+        if (EnqueueContextPolicy.ShouldPersistInstructionProfile(normalizedType, instructionText))
             await _mappingRepository.UpsertInstructionProfile(
                 mapping.Id,
-                type!,
+                normalizedType!,
                 instructionText,
                 DateTimeOffset.UtcNow,
                 cancellationToken);
 
-        return new EnqueueContext(mapping, type, instructionText);
-    }
-
-    static string? NormalizeIssueType(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+        return new EnqueueContext(mapping, normalizedType, instructionText);
     }
 }

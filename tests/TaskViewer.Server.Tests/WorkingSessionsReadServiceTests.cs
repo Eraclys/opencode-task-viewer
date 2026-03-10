@@ -1,4 +1,5 @@
 using TaskViewer.Domain.Orchestration;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
@@ -15,9 +16,9 @@ public sealed class WorkingSessionsReadServiceTests
             readMap: directory =>
             {
                 Assert.Equal("C:/Work/Alpha", directory);
-                return new Dictionary<string, string>(StringComparer.Ordinal)
+                return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal)
                 {
-                    ["s1"] = "busy"
+                    ["s1"] = SessionRuntimeStatus.FromRaw("busy")
                 };
             });
 
@@ -49,11 +50,11 @@ public sealed class WorkingSessionsReadServiceTests
                 if (string.Equals(dir, "C:/Work/Alpha", StringComparison.Ordinal))
                     throw new InvalidOperationException("first variant fails");
 
-                return new Dictionary<string, string>(StringComparer.Ordinal)
+                return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal)
                 {
-                    ["s1"] = "running",
-                    ["s2"] = "retry",
-                    ["s3"] = "done"
+                    ["s1"] = SessionRuntimeStatus.FromRaw("running"),
+                    ["s2"] = SessionRuntimeStatus.FromRaw("retry"),
+                    ["s3"] = SessionRuntimeStatus.FromRaw("done")
                 };
             }));
 
@@ -99,16 +100,16 @@ public sealed class WorkingSessionsReadServiceTests
 
     sealed class FakeOpenCodeService : DisabledOpenCodeService
     {
-        readonly Func<string, Dictionary<string, string>> _readMap;
+        readonly Func<string, Dictionary<string, SessionRuntimeStatus>> _readMap;
 
-        public FakeOpenCodeService(Func<string, Dictionary<string, string>> readMap)
+        public FakeOpenCodeService(Func<string, Dictionary<string, SessionRuntimeStatus>> readMap)
         {
             _readMap = readMap;
         }
 
         public int RequestCount { get; private set; }
 
-        public override Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+        public override Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
         {
             RequestCount += 1;
             return Task.FromResult(_readMap(directory));

@@ -7,9 +7,11 @@ public sealed class SessionTodoViewService
 {
     public SessionTodoDto NormalizeTodo(OpenCodeTodo todo)
     {
+        var status = ViewerTaskStatus.FromRaw(todo.Status);
+
         return new SessionTodoDto(
             todo.Content,
-            todo.Status,
+            status.Value,
             todo.Priority);
     }
 
@@ -18,10 +20,10 @@ public sealed class SessionTodoViewService
         if (!SessionStatusPolicy.IsRuntimeRunning(runtimeType))
             return todos;
 
-        if (todos.Any(t => string.Equals(t.Status, "in_progress", StringComparison.Ordinal)))
+        if (todos.Any(t => t.TaskStatus.IsInProgress))
             return todos;
 
-        var idx = todos.FindIndex(t => string.Equals(t.Status, "pending", StringComparison.Ordinal));
+        var idx = todos.FindIndex(t => t.TaskStatus.IsPending);
 
         if (idx < 0)
             return todos;
@@ -29,7 +31,7 @@ public sealed class SessionTodoViewService
         var copy = todos.ToList();
         copy[idx] = copy[idx] with
         {
-            Status = "in_progress"
+            Status = ViewerTaskStatus.InProgress.Value
         };
 
         return copy;
@@ -48,7 +50,7 @@ public sealed class SessionTodoViewService
                 {
                     Id = (i + 1).ToString(CultureInfo.InvariantCulture),
                     Subject = todo.Content,
-                    Status = todo.Status,
+                    Status = todo.TaskStatus.Value,
                     Priority = todo.Priority
                 });
         }
@@ -69,7 +71,7 @@ public sealed class SessionTodoViewService
                 {
                     Id = (i + 1).ToString(CultureInfo.InvariantCulture),
                     Subject = todo.Content,
-                    Status = todo.Status,
+                    Status = todo.TaskStatus.Value,
                     Priority = todo.Priority,
                     SessionId = sessionId,
                     SessionName = sessionName,

@@ -1,3 +1,4 @@
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
 
@@ -32,7 +33,7 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         foreach (var dir in dirs)
         {
             var map = await FetchStatusMapForDirectory(dir);
-            totalRunning += map.Values.Count(IsRunningStatusType);
+            totalRunning += map.Values.Count(status => status.IsRunning);
         }
 
         _cachedSample = (now, totalRunning);
@@ -40,14 +41,14 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
         return new WorkingSessionsSample(now, totalRunning);
     }
 
-    async Task<Dictionary<string, string>> FetchStatusMapForDirectory(string directory)
+    async Task<Dictionary<string, SessionRuntimeStatus>> FetchStatusMapForDirectory(string directory)
     {
         var variants = GetDirectoryVariants(directory);
 
         if (variants.Count == 0)
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
-        Dictionary<string, string> fallback = new(StringComparer.Ordinal);
+        Dictionary<string, SessionRuntimeStatus> fallback = new(StringComparer.Ordinal);
 
         foreach (var variant in variants)
         {
@@ -70,38 +71,5 @@ public sealed class WorkingSessionsReadService : IWorkingSessionsReadService
     }
 
     static List<string> GetDirectoryVariants(string? directory)
-    {
-        var dir = (directory ?? string.Empty).Trim();
-
-        if (string.IsNullOrWhiteSpace(dir))
-            return [];
-
-        if (dir.Length > 1 &&
-            (dir.EndsWith('/') || dir.EndsWith('\\')))
-            dir = dir.TrimEnd('/', '\\');
-
-        var variants = new List<string>
-        {
-            dir
-        };
-
-        var forward = dir.Replace('\\', '/');
-        var backward = dir.Replace('/', '\\');
-
-        if (!variants.Contains(forward, StringComparer.Ordinal))
-            variants.Add(forward);
-
-        if (!variants.Contains(backward, StringComparer.Ordinal))
-            variants.Add(backward);
-
-        return variants;
-    }
-
-    static bool IsRunningStatusType(string? value)
-    {
-        var t = (value ?? string.Empty).Trim().ToLowerInvariant();
-
-        return t is "busy" or "retry" or "running";
-    }
-
+        => DirectoryPath.GetVariants(directory);
 }

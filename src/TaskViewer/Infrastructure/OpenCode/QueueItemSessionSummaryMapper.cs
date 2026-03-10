@@ -1,3 +1,4 @@
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Persistence;
 
@@ -7,9 +8,9 @@ public sealed class QueueItemSessionSummaryMapper
 {
     public SessionSummaryDto? Map(QueueItemRecord item)
     {
-        var taskState = (item.State ?? string.Empty).Trim().ToLowerInvariant();
+        var taskState = item.QueueState;
 
-        if (taskState is not ("queued" or "dispatching" or "leased" or "running" or "awaiting_review" or "rejected" or "failed" or "cancelled"))
+        if (!QueueState.SessionVisibleStates.Contains(taskState))
             return null;
 
         var titleParts = new List<string>();
@@ -23,25 +24,11 @@ public sealed class QueueItemSessionSummaryMapper
         if (!string.IsNullOrWhiteSpace(item.Message))
             titleParts.Add(item.Message);
 
-        var taskLabel = taskState switch
-        {
-            "leased" => "Leased",
-            "running" => "Running",
-            "awaiting_review" => "Review",
-            "rejected" => "Rejected",
-            "failed" => "Failed",
-            "cancelled" => "Cancelled",
-            _ => "Task"
-        };
-
-        var boardStatus = taskState switch
-        {
-            "dispatching" or "leased" or "running" => "in_progress",
-            "awaiting_review" => "completed",
-            "rejected" => "cancelled",
-            "failed" or "cancelled" => "cancelled",
-            _ => "pending"
-        };
+        var taskLabel = taskState.DisplayLabel;
+        var boardStatus = taskState.BoardStatus;
+        var issueType = item.ParsedIssueType.Or(item.IssueType);
+        var issueSeverity = item.ParsedSeverity.Or(item.Severity);
+        var lastReviewAction = item.ParsedLastReviewAction.Or(item.LastReviewAction);
 
         var name = titleParts.Count > 0
             ? $"[{taskLabel}] {string.Join(" - ", titleParts)}"
@@ -56,27 +43,27 @@ public sealed class QueueItemSessionSummaryMapper
             GitBranch = null,
             CreatedAt = item.CreatedAt,
             ModifiedAt = item.UpdatedAt,
-            RuntimeStatus = new SessionRuntimeStatus(taskState),
+            RuntimeStatus = SessionRuntimeStatus.FromRaw(taskState.Value),
             Status = boardStatus,
             HasAssistantResponse = item.SessionId is { Length: > 0 },
             OpenCodeUrl = item.OpenCodeUrl,
             IsQueueItem = true,
             QueueItemId = item.Id,
-            QueueState = taskState,
+            QueueState = taskState.Value,
             TaskId = item.Id,
-            TaskState = taskState,
+            TaskState = taskState.Value,
             TaskKey = item.TaskKey,
             TaskUnit = item.TaskUnit,
             TaskInstructions = item.Instructions,
             TaskIssueCount = item.IssueCount,
             IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
-            IssueType = item.IssueType,
-            IssueSeverity = item.Severity,
+            IssueType = issueType,
+            IssueSeverity = issueSeverity,
             IssueRule = item.Rule,
             IssuePath = item.RelativePath ?? item.AbsolutePath,
             IssueLine = item.Line,
             LastError = item.LastError,
-            LastReviewAction = item.LastReviewAction,
+            LastReviewAction = lastReviewAction,
             LastReviewReason = item.LastReviewReason,
             LastReviewedAt = item.LastReviewedAt
         };

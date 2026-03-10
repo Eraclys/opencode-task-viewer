@@ -21,10 +21,8 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
         int maxScanIssues,
         CancellationToken cancellationToken = default)
     {
-        var type = NormalizeUpper(issueType);
-        var status = NormalizeUpper(issueStatus) ?? string.Empty;
-        var types = string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
-        var statuses = string.IsNullOrWhiteSpace(status) ? Array.Empty<string>() : new[] { status };
+        var types = SonarIssueType.ParseCsv(issueType);
+        var statuses = SonarIssueStatus.ParseCsv(issueStatus);
 
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         const int pageSize = 500;
@@ -82,17 +80,10 @@ public sealed class SonarRulesReadService : ISonarRulesReadService
             .ToList();
 
         return new SonarRulesSummary(
-            type,
-            string.IsNullOrWhiteSpace(status) ? null : status,
+            types.Count == 0 ? null : string.Join(',', types.Select(type => type.Value)),
+            statuses.Count == 0 ? null : string.Join(',', statuses.Select(status => status.Value)),
             scanned,
             scanned >= maxScanIssues,
             rules);
-    }
-
-    static string? NormalizeUpper(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 }

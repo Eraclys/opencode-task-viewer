@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.OpenCode;
 
@@ -10,9 +11,9 @@ public static class OpenCodeStatusParsers
         PropertyNameCaseInsensitive = true
     };
 
-    public static Dictionary<string, string> ParseWorkingStatusMap(string? data)
+    public static Dictionary<string, SessionRuntimeStatus> ParseWorkingStatusMap(string? data)
     {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var map = new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
 
         if (string.IsNullOrWhiteSpace(data))
             return map;
@@ -33,10 +34,14 @@ public static class OpenCodeStatusParsers
 
         foreach (var kv in parsed)
         {
-            var statusType = kv.Value?.Type?.Trim().ToLowerInvariant();
+            var raw = kv.Value?.Type;
 
-            if (!string.IsNullOrWhiteSpace(statusType))
-                map[kv.Key] = statusType;
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var status = SessionRuntimeStatus.FromRaw(raw);
+
+            map[kv.Key] = status;
         }
 
         return map;

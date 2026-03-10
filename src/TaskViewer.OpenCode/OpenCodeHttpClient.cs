@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.OpenCode;
 
@@ -22,7 +23,7 @@ public sealed class OpenCodeHttpClient
         _options = options;
     }
 
-    public async Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
     {
         var responseText = await SendAsync(
             "/session/status",
@@ -298,9 +299,9 @@ public sealed class OpenCodeHttpClient
         return envelope?.Items ?? envelope?.Sessions ?? envelope?.Data ?? [];
     }
 
-    static Dictionary<string, string> ParseWorkingStatusMap(string? value)
+    static Dictionary<string, SessionRuntimeStatus> ParseWorkingStatusMap(string? value)
     {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var map = new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
         var parsed = Deserialize<Dictionary<string, OpenCodeStatusPayload>>(value);
 
         if (parsed is null)
@@ -308,10 +309,14 @@ public sealed class OpenCodeHttpClient
 
         foreach (var kv in parsed)
         {
-            var statusType = kv.Value?.Type?.Trim().ToLowerInvariant();
+            var raw = kv.Value?.Type;
 
-            if (!string.IsNullOrWhiteSpace(statusType))
-                map[kv.Key] = statusType;
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var status = SessionRuntimeStatus.FromRaw(raw);
+
+            map[kv.Key] = status;
         }
 
         return map;

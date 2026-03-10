@@ -5,6 +5,7 @@ using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
 using TaskViewer.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
@@ -98,6 +99,10 @@ public sealed class SessionsUseCasesTests
         Assert.Equal($"queue-{created.Items[0].Id}", item.Id);
         Assert.Equal("queued", item.RuntimeStatus.Type);
         Assert.Equal("pending", item.Status);
+        Assert.Equal(ViewerTaskStatus.Pending, item.ParsedStatus);
+        Assert.Equal(QueueState.Queued, item.ParsedQueueState);
+        Assert.Equal(SonarIssueType.CodeSmell, item.ParsedIssueType);
+        Assert.Equal(SonarIssueSeverity.Major, item.ParsedIssueSeverity);
         Assert.True(item.IsQueueItem);
     }
 

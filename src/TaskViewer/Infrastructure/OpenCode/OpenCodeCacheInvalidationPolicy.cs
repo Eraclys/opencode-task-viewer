@@ -15,8 +15,8 @@ public sealed class OpenCodeCacheInvalidationPolicy
         if (parsed.Type == "session.status")
         {
             if (!string.IsNullOrWhiteSpace(parsed.SessionId) &&
-                !string.IsNullOrWhiteSpace(parsed.StatusType))
-                return new OpenCodeCacheInvalidationDecision(false, false, true, true, true, parsed.SessionId, parsed.Directory, parsed.StatusType);
+                parsed.StatusType is { } statusType)
+                return new OpenCodeCacheInvalidationDecision(false, false, true, true, true, parsed.SessionId, parsed.Directory, statusType);
 
             return new OpenCodeCacheInvalidationDecision(false, false, false, false, true, null);
         }

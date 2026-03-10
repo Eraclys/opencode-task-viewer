@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
 
@@ -16,7 +17,7 @@ public sealed class SqliteQueueRepository : IQueueRepository
         _onChange = onChange;
     }
 
-    public async Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit, CancellationToken cancellationToken = default)
+    public async Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<QueueState> states, int limit, CancellationToken cancellationToken = default)
     {
         using var conn = _openConnection();
         var sql = states.Count > 0
@@ -32,7 +33,7 @@ LIMIT @Limit";
         parameters.Add("Limit", limit);
 
         if (states.Count > 0)
-            parameters.Add("States", states.ToArray());
+            parameters.Add("States", states.Select(state => state.Value).ToArray());
 
         var rows = await conn.QueryAsync<QueueItemRow>(Cmd(sql, parameters, cancellationToken: cancellationToken));
         return rows.Select(MapTask).ToList();
@@ -75,7 +76,7 @@ WHERE task_key = @TaskKey
                 if (existing is not null)
                 {
                     foreach (var issue in groupedIssues)
-                        skipped.Add(new QueueSkip(issue.Key, $"already-{existing.State}"));
+                        skipped.Add(new QueueSkip(issue.Key, $"already-{QueueState.Parse(existing.State).Value}"));
 
                     continue;
                 }
@@ -410,12 +411,12 @@ WHERE id = @Id AND state = 'running'", new { Id = id, Timestamp = timestamp.ToSt
 
     public async Task<bool> ApproveTask(int id, DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
-        return await UpdateTerminalReviewState(id, "done", null, timestamp, ["awaiting_review"]);
+        return await UpdateTerminalReviewState(id, QueueState.Done, TaskReviewAction.Approved, null, timestamp, [QueueState.AwaitingReview]);
     }
 
     public async Task<bool> RejectTask(int id, string? reason, DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
-        return await UpdateTerminalReviewState(id, "rejected", reason, timestamp, ["awaiting_review"]);
+        return await UpdateTerminalReviewState(id, QueueState.Rejected, TaskReviewAction.Rejected, reason, timestamp, [QueueState.AwaitingReview]);
     }
 
     public async Task<bool> RequeueTask(int id, string? reason, DateTimeOffset timestamp, CancellationToken cancellationToken = default)
@@ -444,7 +445,7 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
 
         if (changed > 0)
         {
-            await AppendReviewHistoryAsync(conn, tx, id, "requeue", reason, timestamp);
+            await AppendReviewHistoryAsync(conn, tx, id, TaskReviewAction.Requeue, reason, timestamp);
             tx.Commit();
             _onChange();
         }
@@ -483,7 +484,7 @@ WHERE id = @Id AND state IN ('awaiting_review', 'rejected')", new
 
         if (changed > 0)
         {
-            await AppendReviewHistoryAsync(conn, tx, id, "reprompt", reason, timestamp);
+            await AppendReviewHistoryAsync(conn, tx, id, TaskReviewAction.Reprompt, reason, timestamp);
             tx.Commit();
             _onChange();
         }
@@ -509,7 +510,7 @@ WHERE id = @Id", new { Id = id });
 
     public async Task<bool> MarkDispatchFailure(
         int id,
-        string state,
+        QueueState state,
         DateTimeOffset? nextAttemptAt,
         string lastError,
         DateTimeOffset updatedAt,
@@ -529,7 +530,7 @@ SET state = @State,
 WHERE id = @Id AND state IN ('leased', 'running')", new
             {
                 Id = id,
-                State = state,
+                State = state.Value,
                 NextAttemptAt = nextAttemptAt?.ToString("O"),
                 LastError = lastError,
                 UpdatedAt = updatedAt.ToString("O")
@@ -729,7 +730,7 @@ WHERE queue_items.id = @Id";
         public string CreatedAt { get; init; } = string.Empty;
     }
 
-    async Task<bool> UpdateTerminalReviewState(int id, string state, string? reason, DateTimeOffset timestamp, IReadOnlyList<string> allowedStates)
+    async Task<bool> UpdateTerminalReviewState(int id, QueueState state, TaskReviewAction action, string? reason, DateTimeOffset timestamp, IReadOnlyList<QueueState> allowedStates)
     {
         using var conn = _openConnection();
         using var tx = conn.BeginTransaction();
@@ -745,15 +746,15 @@ SET state = @State,
 WHERE id = @Id AND state IN @AllowedStates", new
             {
                 Id = id,
-                State = state,
+                State = state.Value,
                 Timestamp = timestamp.ToString("O"),
                 Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
-                AllowedStates = allowedStates.ToArray()
+                AllowedStates = allowedStates.Select(queueState => queueState.Value).ToArray()
             }, tx);
 
         if (changed > 0)
         {
-            await AppendReviewHistoryAsync(conn, tx, id, state, reason, timestamp);
+            await AppendReviewHistoryAsync(conn, tx, id, action, reason, timestamp);
             tx.Commit();
             _onChange();
         }
@@ -763,14 +764,14 @@ WHERE id = @Id AND state IN @AllowedStates", new
         return changed > 0;
     }
 
-    async Task AppendReviewHistoryAsync(SqliteConnection conn, SqliteTransaction tx, int taskId, string action, string? reason, DateTimeOffset timestamp)
+    async Task AppendReviewHistoryAsync(SqliteConnection conn, SqliteTransaction tx, int taskId, TaskReviewAction action, string? reason, DateTimeOffset timestamp)
     {
         await conn.ExecuteAsync(@"
 INSERT INTO task_review_history (task_id, action, reason, created_at)
 VALUES (@TaskId, @Action, @Reason, @CreatedAt)", new
         {
             TaskId = taskId,
-            Action = action,
+            Action = action.Value,
             Reason = SqliteOrchestrationDataMapper.NullIfWhiteSpace(reason),
             CreatedAt = timestamp.ToString("O")
         }, tx);

@@ -1,3 +1,3 @@
-﻿namespace TaskViewer.Domain.Orchestration;
+namespace TaskViewer.Domain.Orchestration;
 
-public sealed record DispatchFailureDecision(string State, DateTimeOffset? NextAttemptAt);
+public sealed record DispatchFailureDecision(QueueState State, DateTimeOffset? NextAttemptAt);

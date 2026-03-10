@@ -33,8 +33,8 @@ public sealed class OpenCodeEventHandler
         if (decision.InvalidateSessionTodos && !string.IsNullOrWhiteSpace(parsed.SessionId))
             _viewerState.InvalidateTodos(parsed.Directory, parsed.SessionId);
 
-        if (!string.IsNullOrWhiteSpace(parsed.SessionId) && !string.IsNullOrWhiteSpace(decision.StatusType))
-            _viewerState.NoteStatusOverride(decision.StatusDirectory, parsed.SessionId, decision.StatusType, _cachePolicy.StatusOverrideTtlMs);
+        if (!string.IsNullOrWhiteSpace(parsed.SessionId) && decision.StatusType is { } statusType)
+            _viewerState.NoteStatusOverride(decision.StatusDirectory, parsed.SessionId, statusType, _cachePolicy.StatusOverrideTtlMs);
 
         if (decision.ClearAssistantPresence)
             _viewerState.ClearAssistantPresence();

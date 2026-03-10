@@ -21,7 +21,7 @@ public sealed class DispatchFailurePolicyTests
                 0,
                 TimeSpan.Zero));
 
-        Assert.Equal("failed", result.State);
+        Assert.Equal(QueueState.Failed, result.State);
         Assert.Null(result.NextAttemptAt);
     }
 
@@ -41,7 +41,7 @@ public sealed class DispatchFailurePolicyTests
 
         var result = sut.Decide(1, 3, now);
 
-        Assert.Equal("queued", result.State);
+        Assert.Equal(QueueState.Queued, result.State);
         Assert.Equal(now.AddMilliseconds(2500), result.NextAttemptAt);
     }
 

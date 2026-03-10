@@ -234,7 +234,7 @@ public sealed class OpenCodeViewerState
         _assistantPresenceInFlight.Clear();
     }
 
-    public void NoteStatusOverride(string? directory, string sessionId, string type, int ttlMs)
+    public void NoteStatusOverride(string? directory, string sessionId, SessionRuntimeStatus type, int ttlMs)
     {
         var cacheKey = StatusOverrideCacheKey(directory, sessionId);
 
@@ -247,15 +247,15 @@ public sealed class OpenCodeViewerState
         _cache.Set(cacheKey, type, CreateCacheOptions(ttlMs));
     }
 
-    public bool TryGetRecentStatusOverride(string? directory, string sessionId, out string type)
+    public bool TryGetRecentStatusOverride(string? directory, string sessionId, out SessionRuntimeStatus type)
     {
-        if (_cache.TryGetValue<string>(StatusOverrideCacheKey(directory, sessionId), out var cached) && cached is not null)
+        if (_cache.TryGetValue<SessionRuntimeStatus>(StatusOverrideCacheKey(directory, sessionId), out var cached))
         {
             type = cached;
             return true;
         }
 
-        type = string.Empty;
+        type = SessionRuntimeStatus.Idle;
         return false;
     }
 

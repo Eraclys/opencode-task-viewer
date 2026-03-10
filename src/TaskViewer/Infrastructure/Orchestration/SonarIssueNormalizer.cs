@@ -15,12 +15,15 @@ public static class SonarIssueNormalizer
         if (string.IsNullOrWhiteSpace(key))
             return null;
 
-        var type = NormalizeIssueType(rawIssue.Type ?? rawIssue.IssueType ?? "CODE_SMELL") ?? "CODE_SMELL";
-        var severity = rawIssue.Severity?.Trim()?.ToUpperInvariant();
+        var type = SonarIssueType.FromRaw(rawIssue.Type ?? rawIssue.IssueType ?? SonarIssueType.CodeSmell.Value);
+
+        if (!type.HasValue)
+            type = SonarIssueType.CodeSmell;
+        var severity = SonarIssueSeverity.FromRaw(rawIssue.Severity);
         var rule = rawIssue.Rule?.Trim();
         var message = rawIssue.Message?.Trim();
         var line = ParseIntNullable(rawIssue.Line);
-        var status = rawIssue.Status?.Trim();
+        var status = SonarIssueStatus.FromRaw(rawIssue.Status);
         var component = rawIssue.Component?.Trim() ?? rawIssue.File?.Trim();
 
         var projectKey = mapping.SonarProjectKey?.Trim() ?? string.Empty;
@@ -47,23 +50,16 @@ public static class SonarIssueNormalizer
         return new NormalizedIssue
         {
             Key = key,
-            Type = type,
-            Severity = string.IsNullOrWhiteSpace(severity) ? null : severity,
+            Type = type.Value,
+            Severity = severity.OrNull(),
             Rule = string.IsNullOrWhiteSpace(rule) ? null : rule,
             Message = string.IsNullOrWhiteSpace(message) ? null : message,
             Line = line,
-            Status = string.IsNullOrWhiteSpace(status) ? null : status,
+            Status = status.OrNull(),
             Component = string.IsNullOrWhiteSpace(component) ? null : component,
             RelativePath = string.IsNullOrWhiteSpace(relativePath) ? null : relativePath,
             AbsolutePath = string.IsNullOrWhiteSpace(absolutePath) ? null : absolutePath
         };
-    }
-
-    static string? NormalizeIssueType(string? value)
-    {
-        var v = (value ?? string.Empty).Trim().ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 
     static int? ParseIntNullable(string? value)

@@ -1,4 +1,6 @@
-﻿namespace TaskViewer.Infrastructure.OpenCode;
+using TaskViewer.Domain.Sessions;
+
+namespace TaskViewer.Infrastructure.OpenCode;
 
 public sealed record OpenCodeCacheInvalidationDecision(
     bool InvalidateSessionTodos,
@@ -8,7 +10,7 @@ public sealed record OpenCodeCacheInvalidationDecision(
     bool BroadcastUpdate,
     string? BroadcastSessionId,
     string? StatusDirectory = null,
-    string? StatusType = null,
+    SessionRuntimeStatus? StatusType = null,
     bool ClearAssistantPresence = false)
 {
     public static OpenCodeCacheInvalidationDecision None { get; } = new(false, false, false, false, false, null);

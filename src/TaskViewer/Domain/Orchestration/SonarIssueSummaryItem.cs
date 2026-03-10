@@ -1,4 +1,6 @@
-﻿namespace TaskViewer.Domain.Orchestration;
+using TaskViewer.SonarQube;
+
+namespace TaskViewer.Domain.Orchestration;
 
 public sealed record SonarIssueSummaryItem(
     string Key,
@@ -10,4 +12,9 @@ public sealed record SonarIssueSummaryItem(
     int? Line,
     string? Status,
     string? RelativePath,
-    string? AbsolutePath);
+    string? AbsolutePath)
+{
+    public SonarIssueType ParsedType => SonarIssueType.FromRaw(Type);
+    public SonarIssueSeverity ParsedSeverity => SonarIssueSeverity.FromRaw(Severity);
+    public SonarIssueStatus ParsedStatus => SonarIssueStatus.FromRaw(Status);
+}

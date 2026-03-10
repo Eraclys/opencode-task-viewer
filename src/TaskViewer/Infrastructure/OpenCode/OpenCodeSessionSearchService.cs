@@ -9,16 +9,19 @@ public sealed class OpenCodeSessionSearchService
 {
     readonly IOpenCodeService _openCodeService;
     readonly OpenCodeViewerCachePolicy _cachePolicy;
+    readonly SessionTodoViewService _sessionTodoViewService;
     readonly OpenCodeViewerState _viewerState;
 
     public OpenCodeSessionSearchService(
         IOpenCodeService openCodeService,
         OpenCodeViewerState viewerState,
-        OpenCodeViewerCachePolicy cachePolicy)
+        OpenCodeViewerCachePolicy cachePolicy,
+        SessionTodoViewService sessionTodoViewService)
     {
         _openCodeService = openCodeService;
         _viewerState = viewerState;
         _cachePolicy = cachePolicy;
+        _sessionTodoViewService = sessionTodoViewService;
     }
 
     public string? BuildOpenCodeSessionUrl(string sessionId, string? directory) => _openCodeService.BuildSessionUrl(sessionId, directory);
@@ -85,7 +88,7 @@ public sealed class OpenCodeSessionSearchService
             try
             {
                 var result = await _openCodeService.ReadWorkingStatusMapAsync(candidateDirectory, cancellationToken);
-                var normalized = result.ToDictionary(pair => pair.Key, pair => new SessionRuntimeStatus(pair.Value), StringComparer.Ordinal);
+                var normalized = result.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
                 if (normalized.Count > 0)
                 {
@@ -111,7 +114,7 @@ public sealed class OpenCodeSessionSearchService
             return cachedTodos;
 
         var rawTodos = await _openCodeService.ReadTodosAsync(sessionId, directory, cancellationToken);
-        var normalized = rawTodos.Select(todo => new SessionTodoDto(todo.Content, todo.Status, todo.Priority)).ToList();
+        var normalized = rawTodos.Select(_sessionTodoViewService.NormalizeTodo).ToList();
         _viewerState.StoreTodos(directory, sessionId, normalized, _cachePolicy.TodoCacheTtlMs);
         return normalized;
     }

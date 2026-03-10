@@ -20,7 +20,7 @@ public static class OrchestrationTaskBatchingPolicy
 
     public static int ComputePriorityScore(IReadOnlyList<NormalizedIssue> issues, string? branch)
     {
-        var severityScore = issues.Max(issue => SeverityScore(issue.Severity));
+        var severityScore = issues.Max(issue => issue.IssueSeverity.PriorityScore);
         var cheapFixBonus = issues.Count <= 3 ? 8 : 0;
         var branchBonus = string.IsNullOrWhiteSpace(branch) ? 0 : 2;
         return severityScore + cheapFixBonus + branchBonus;
@@ -48,17 +48,5 @@ public static class OrchestrationTaskBatchingPolicy
     {
         var normalized = (rule ?? string.Empty).Trim();
         return string.IsNullOrWhiteSpace(normalized) ? "<unknown-rule>" : normalized;
-    }
-
-    static int SeverityScore(string? severity)
-    {
-        return (severity ?? string.Empty).Trim().ToUpperInvariant() switch
-        {
-            "BLOCKER" => 60,
-            "CRITICAL" => 45,
-            "MAJOR" => 30,
-            "MINOR" => 15,
-            _ => 5
-        };
     }
 }

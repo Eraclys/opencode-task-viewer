@@ -1,3 +1,4 @@
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
 using TaskViewer.OpenCode;
 
@@ -63,7 +64,7 @@ public sealed class OpenCodeEventParserTests
 
         Assert.NotNull(result);
         Assert.Equal("sess-1", result.SessionId);
-        Assert.Equal("busy", result.StatusType);
+        Assert.Equal(SessionRuntimeStatus.FromRaw("busy"), result.StatusType);
     }
 
     [Fact]
@@ -84,6 +85,6 @@ public sealed class OpenCodeEventParserTests
             });
 
         Assert.NotNull(result);
-        Assert.Equal("idle", result.StatusType);
+        Assert.Equal(SessionRuntimeStatus.FromRaw("idle"), result.StatusType);
     }
 }

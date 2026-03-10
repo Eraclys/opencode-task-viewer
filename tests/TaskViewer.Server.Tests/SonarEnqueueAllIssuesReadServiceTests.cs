@@ -85,9 +85,9 @@ public sealed class SonarEnqueueAllIssuesReadServiceTests
         public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
         {
             RequestCount += 1;
-            LastIssueType = query.Types.FirstOrDefault();
-            LastSeverity = query.Severities.FirstOrDefault();
-            LastIssueStatus = query.Statuses.FirstOrDefault();
+            LastIssueType = query.Types.FirstOrDefault().Value;
+            LastSeverity = query.Severities.FirstOrDefault().Value;
+            LastIssueStatus = query.Statuses.FirstOrDefault().Value;
 
             if (RequestCount == 1)
             {

@@ -1,4 +1,5 @@
 using TaskViewer.Domain;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.OpenCode;
 
 namespace TaskViewer.Infrastructure.OpenCode;
@@ -24,6 +25,9 @@ public static class OpenCodeEventParser
     static string? ReadSessionId(OpenCodeSseProperties? properties)
         => properties?.LegacySessionId ?? properties?.SessionId;
 
-    static string? ReadStatusType(OpenCodeSseProperties? properties)
-        => properties?.Status?.Type ?? properties?.Type;
+    static SessionRuntimeStatus? ReadStatusType(OpenCodeSseProperties? properties)
+    {
+        var raw = properties?.Status?.Type ?? properties?.Type;
+        return string.IsNullOrWhiteSpace(raw) ? null : SessionRuntimeStatus.FromRaw(raw);
+    }
 }

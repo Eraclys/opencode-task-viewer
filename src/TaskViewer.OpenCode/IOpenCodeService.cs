@@ -1,9 +1,11 @@
+using TaskViewer.Domain.Sessions;
+
 namespace TaskViewer.OpenCode;
 
 public interface IOpenCodeService
 {
     string? BuildSessionUrl(string sessionId, string? directory);
-    Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default);
+    Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default);
     Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default);
     Task<List<OpenCodeMessage>> ReadMessagesAsync(string sessionId, int? limit = null, CancellationToken cancellationToken = default);
     Task<List<OpenCodeProject>> ReadProjectsAsync(CancellationToken cancellationToken = default);

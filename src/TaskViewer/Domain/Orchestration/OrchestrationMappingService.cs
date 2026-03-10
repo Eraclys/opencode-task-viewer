@@ -1,5 +1,6 @@
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -74,12 +75,12 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (mapping is null)
             return null;
 
-        var type = NormalizeIssueType(issueType);
+        var type = SonarIssueType.FromRaw(issueType);
 
-        if (type is null)
+        if (!type.HasValue)
             return null;
 
-        return await _mappingRepository.GetInstructionProfile(mapping.Id, type, cancellationToken);
+        return await _mappingRepository.GetInstructionProfile(mapping.Id, type.Value, cancellationToken);
     }
 
     public async Task<InstructionProfileRecord> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default)
@@ -89,9 +90,9 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (mapping is null)
             throw new InvalidOperationException("Mapping not found");
 
-        var type = NormalizeIssueType(request.IssueType);
+        var type = SonarIssueType.FromRaw(request.IssueType);
 
-        if (type is null)
+        if (!type.HasValue)
             throw new InvalidOperationException("Missing issueType");
 
         var text = (request.Instructions ?? string.Empty).Trim();
@@ -101,16 +102,9 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
 
         return await _mappingRepository.UpsertInstructionProfile(
             mapping.Id,
-            type,
+            type.Value,
             text,
             _nowUtc(),
             cancellationToken);
-    }
-
-    static string? NormalizeIssueType(string? value)
-    {
-        var v = (value ?? string.Empty).Trim().ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 }

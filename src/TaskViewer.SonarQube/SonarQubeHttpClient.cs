@@ -81,9 +81,9 @@ public sealed class SonarQubeHttpClient
         if (!string.IsNullOrWhiteSpace(query.Branch))
             parameters["branch"] = query.Branch;
 
-        AddCsv(parameters, "types", query.Types, preserveCase: false);
-        AddCsv(parameters, "severities", query.Severities, preserveCase: false);
-        AddCsv(parameters, "statuses", query.Statuses, preserveCase: false);
+        AddCsv(parameters, "types", query.Types.Select(type => type.Value).ToList(), preserveCase: false);
+        AddCsv(parameters, "severities", query.Severities.Select(severity => severity.Value).ToList(), preserveCase: false);
+        AddCsv(parameters, "statuses", query.Statuses.Select(status => status.Value).ToList(), preserveCase: false);
         AddCsv(parameters, "rules", query.RuleKeys, preserveCase: true);
         AddCsv(parameters, "issues", query.IssueKeys, preserveCase: true);
         return parameters;

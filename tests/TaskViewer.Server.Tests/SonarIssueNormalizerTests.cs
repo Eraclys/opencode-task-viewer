@@ -28,7 +28,9 @@ public sealed class SonarIssueNormalizerTests
         Assert.NotNull(result);
         Assert.Equal("sq-2", result.Key);
         Assert.Equal("BUG", result.Type);
+        Assert.Equal(SonarIssueType.Bug, result.IssueType);
         Assert.Equal("CRITICAL", result.Severity);
+        Assert.Equal(SonarIssueSeverity.Critical, result.IssueSeverity);
         Assert.Equal("src/File.cs", result.RelativePath);
         Assert.Equal("C:/Work/Alpha/src/File.cs", result.AbsolutePath);
         Assert.Equal(18, result.Line);
@@ -46,6 +48,7 @@ public sealed class SonarIssueNormalizerTests
         Assert.Equal("lib/module.js", result.RelativePath);
         Assert.Equal("C:/Work/Alpha/lib/module.js", result.AbsolutePath);
         Assert.Equal("CODE_SMELL", result.Type);
+        Assert.Equal(SonarIssueType.CodeSmell, result.IssueType);
     }
 
     static MappingRecord CreateMapping()

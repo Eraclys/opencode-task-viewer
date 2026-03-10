@@ -15,6 +15,7 @@ public sealed class SessionTodoViewServiceTests
 
         Assert.Equal("Ship feature", todo.Content);
         Assert.Equal("in_progress", todo.Status);
+        Assert.Equal(ViewerTaskStatus.InProgress, todo.TaskStatus);
         Assert.Equal("high", todo.Priority);
     }
 
@@ -31,7 +32,9 @@ public sealed class SessionTodoViewServiceTests
         var inferred = sut.InferInProgressTodoFromRuntime(todos, "busy");
 
         Assert.Equal("in_progress", inferred[0].Status);
+        Assert.Equal(ViewerTaskStatus.InProgress, inferred[0].TaskStatus);
         Assert.Equal("pending", inferred[1].Status);
+        Assert.Equal(ViewerTaskStatus.Pending, inferred[1].TaskStatus);
     }
 
     [Fact]
@@ -67,5 +70,16 @@ public sealed class SessionTodoViewServiceTests
         Assert.Equal("sess-1", task.SessionId);
         Assert.Equal("My Session", task.SessionName);
         Assert.Equal("C:/Work/Repo", task.Project);
+    }
+
+    [Theory]
+    [InlineData("done", "pending")]
+    [InlineData("", "pending")]
+    [InlineData("completed", "completed")]
+    [InlineData("cancelled", "cancelled")]
+    public void ViewerTaskStatus_FromRaw_NormalizesExpectedValues(string raw, string expected)
+    {
+        var status = ViewerTaskStatus.FromRaw(raw);
+        Assert.Equal(expected, status.Value);
     }
 }

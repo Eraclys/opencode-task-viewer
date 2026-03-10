@@ -1,3 +1,6 @@
+using TaskViewer.Domain.Orchestration;
+using TaskViewer.SonarQube;
+
 namespace TaskViewer.Domain.Sessions;
 
 public sealed class SessionSummaryDto
@@ -11,26 +14,32 @@ public sealed class SessionSummaryDto
     public required DateTimeOffset ModifiedAt { get; init; }
     public required SessionRuntimeStatus RuntimeStatus { get; init; }
     public required string Status { get; init; }
+    public ViewerTaskStatus ParsedStatus => ViewerTaskStatus.FromRaw(Status);
     public bool? HasAssistantResponse { get; init; }
     public string? OpenCodeUrl { get; init; }
 
     public bool? IsQueueItem { get; init; }
     public long? QueueItemId { get; init; }
     public string? QueueState { get; init; }
+    public QueueState? ParsedQueueState => TaskViewer.Domain.Orchestration.QueueState.TryParse(QueueState, out var state) ? state : null;
     public long? TaskId { get; init; }
     public string? TaskState { get; init; }
+    public QueueState? ParsedTaskState => TaskViewer.Domain.Orchestration.QueueState.TryParse(TaskState, out var state) ? state : null;
     public string? TaskKey { get; init; }
     public string? TaskUnit { get; init; }
     public string? TaskInstructions { get; init; }
     public int? TaskIssueCount { get; init; }
     public string? IssueKey { get; init; }
     public string? IssueType { get; init; }
+    public SonarIssueType ParsedIssueType => SonarIssueType.FromRaw(IssueType);
     public string? IssueSeverity { get; init; }
+    public SonarIssueSeverity ParsedIssueSeverity => SonarIssueSeverity.FromRaw(IssueSeverity);
     public string? IssueRule { get; init; }
     public string? IssuePath { get; init; }
     public int? IssueLine { get; init; }
     public string? LastError { get; init; }
     public string? LastReviewAction { get; init; }
+    public TaskReviewAction ParsedLastReviewAction => TaskReviewAction.FromRaw(LastReviewAction);
     public string? LastReviewReason { get; init; }
     public DateTimeOffset? LastReviewedAt { get; init; }
 }

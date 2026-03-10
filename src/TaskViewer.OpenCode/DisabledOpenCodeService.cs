@@ -1,13 +1,15 @@
+using TaskViewer.Domain.Sessions;
+
 namespace TaskViewer.OpenCode;
 
 public class DisabledOpenCodeService : IOpenCodeService
 {
     public virtual string? BuildSessionUrl(string sessionId, string? directory) => null;
 
-    public virtual async Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+    public virtual async Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
     {
         await Task.CompletedTask;
-        return new Dictionary<string, string>(StringComparer.Ordinal);
+        return new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
     }
 
     public virtual Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)

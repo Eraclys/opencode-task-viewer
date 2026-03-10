@@ -87,7 +87,7 @@ public sealed class OpenCodeEventHandlerTests
         await DrainClientAsync(client, cts);
 
         Assert.True(viewerState.TryGetRecentStatusOverride("C:/Work", "sess-1", out var type));
-        Assert.Equal("working", type);
+        Assert.Equal(SessionRuntimeStatus.FromRaw("working"), type);
         Assert.Null(viewerState.GetFreshAllTasks());
         var payload = ReadBroadcastPayload(responseBody);
         Assert.Equal("sess-1", payload?.SessionId);

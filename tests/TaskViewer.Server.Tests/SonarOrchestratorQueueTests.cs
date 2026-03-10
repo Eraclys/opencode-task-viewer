@@ -117,7 +117,7 @@ public sealed class SonarOrchestratorQueueTests
         Assert.Equal(1, retried);
 
         var queuedAgain = await WaitForSingleQueueItem(orchestrator, "queued", TimeSpan.FromSeconds(2));
-        Assert.Equal("queued", queuedAgain.State);
+        Assert.Equal(QueueState.Queued, queuedAgain.QueueState);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public sealed class SonarOrchestratorQueueTests
         await orchestrator.Tick();
 
         var final = await WaitForSingleQueueItem(orchestrator, "cancelled", TimeSpan.FromSeconds(2));
-        Assert.Equal("cancelled", final.State);
+        Assert.Equal(QueueState.Cancelled, final.QueueState);
     }
 
     [Fact]

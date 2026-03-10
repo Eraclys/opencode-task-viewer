@@ -200,9 +200,9 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
     public async Task<OrchestrationWorkerStateDto> GetWorkerState(CancellationToken cancellationToken = default)
     {
         var backpressure = await EvaluateWorkloadBackpressure(false);
-        var tasks = await _queueRepository.ListQueue(["leased", "running"], 5000, cancellationToken);
-        var inFlightLeases = tasks.Count(task => string.Equals(task.State, "leased", StringComparison.Ordinal));
-        var runningTasks = tasks.Count(task => string.Equals(task.State, "running", StringComparison.Ordinal));
+        var tasks = await _queueRepository.ListQueue([QueueState.Leased, QueueState.Running], 5000, cancellationToken);
+        var inFlightLeases = tasks.Count(task => task.QueueState == QueueState.Leased);
+        var runningTasks = tasks.Count(task => task.QueueState == QueueState.Running);
 
         return _orchestrationStatusService.BuildWorkerState(
             inFlightLeases,
@@ -232,7 +232,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         if (taskId <= 0)
             throw new InvalidOperationException("Invalid task id");
 
-        var task = (await _queueRepository.ListQueue(["awaiting_review"], 5000, cancellationToken)).FirstOrDefault(item => item.Id == taskId);
+        var task = (await _queueRepository.ListQueue([QueueState.AwaitingReview], 5000, cancellationToken)).FirstOrDefault(item => item.Id == taskId);
 
         if (task is null)
             return false;
@@ -281,7 +281,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return history
             .Select(entry => new TaskReviewHistoryDto
             {
-                Action = entry.Action,
+                Action = entry.ParsedAction.Or(entry.Action) ?? entry.Action,
                 Reason = entry.Reason,
                 CreatedAt = entry.CreatedAt
             })
@@ -336,34 +336,21 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return new QueueEnqueueBatchResult(createdItems, skipped);
     }
 
-    static List<string> NormalizeQueueStateList(string? statesCsv)
+    static List<QueueState> NormalizeQueueStateList(string? statesCsv)
     {
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "queued",
-            "dispatching",
-            "leased",
-            "running",
-            "awaiting_review",
-            "rejected",
-            "session_created",
-            "done",
-            "failed",
-            "cancelled"
-        };
-
-        var result = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<QueueState>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var csv = statesCsv ?? string.Empty;
 
         foreach (var part in csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var normalized = part.ToLowerInvariant();
+            if (!QueueState.TryParse(part, out var state) || !seen.Add(state.Value))
+                continue;
 
-            if (allowed.Contains(normalized))
-                result.Add(normalized);
+            result.Add(state);
         }
 
-        return [.. result];
+        return result;
     }
 
     async Task ProcessNextTaskAsync()
@@ -380,7 +367,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         {
             await _queueRepository.MarkDispatchFailure(
                 leased.Id,
-                "failed",
+                QueueState.Failed,
                 null,
                 readiness.Reason ?? "Task failed readiness checks.",
                 NowUtc());

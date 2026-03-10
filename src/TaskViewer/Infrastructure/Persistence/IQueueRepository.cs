@@ -1,3 +1,5 @@
+using TaskViewer.Domain.Orchestration;
+
 namespace TaskViewer.Infrastructure.Persistence;
 
 public interface IQueueRepository
@@ -11,7 +13,7 @@ public interface IQueueRepository
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
-    Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<string> states, int limit, CancellationToken cancellationToken = default);
+    Task<List<QueueItemRecord>> ListQueue(IReadOnlyList<QueueState> states, int limit, CancellationToken cancellationToken = default);
     Task<QueueStats> GetQueueStats(CancellationToken cancellationToken = default);
     Task<bool> CancelQueueItem(int id, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<int> RetryFailed(DateTimeOffset now, CancellationToken cancellationToken = default);
@@ -40,7 +42,7 @@ public interface IQueueRepository
 
     Task<bool> MarkDispatchFailure(
         int id,
-        string state,
+        QueueState state,
         DateTimeOffset? nextAttemptAt,
         string lastError,
         DateTimeOffset updatedAt,

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.OpenCode;
 
@@ -13,7 +14,7 @@ public sealed class DelegateOpenCodeService : IOpenCodeService
 
     public string? BuildSessionUrl(string sessionId, string? directory) => null;
 
-    public async Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
     {
         var data = await _openCodeFetch(
             "/session/status",

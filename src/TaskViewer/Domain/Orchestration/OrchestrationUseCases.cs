@@ -1,5 +1,6 @@
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Domain.Orchestration;
 
@@ -32,7 +33,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         return new InstructionProfileDto
         {
             MappingId = mappingId,
-            IssueType = string.IsNullOrWhiteSpace(issueType) ? null : issueType.ToUpperInvariant(),
+            IssueType = profile?.ParsedIssueType.OrNull() ?? SonarIssueType.FromRaw(issueType).OrNull(),
             Instructions = profile?.Instructions
         };
     }
@@ -44,7 +45,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         return new InstructionProfileDto
         {
             MappingId = profile.MappingId,
-            IssueType = profile.IssueType,
+            IssueType = profile.ParsedIssueType.Or(profile.IssueType),
             Instructions = profile.Instructions,
             UpdatedAt = profile.UpdatedAt
         };

@@ -1,4 +1,5 @@
 using System.Text;
+using TaskViewer.Domain.Sessions;
 
 namespace TaskViewer.OpenCode;
 
@@ -40,7 +41,7 @@ public sealed class OpenCodeService : IOpenCodeService
         return $"{baseUrl}/{slug}/session/{Uri.EscapeDataString(sid)}";
     }
 
-    public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+    public Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
         => _createClient().ReadWorkingStatusMapAsync(directory, cancellationToken);
 
     public Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)

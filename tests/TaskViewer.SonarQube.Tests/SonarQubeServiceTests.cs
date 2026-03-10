@@ -26,7 +26,9 @@ public sealed class SonarQubeServiceTests
             new SearchIssuesQuery
             {
                 ComponentKey = "alpha",
-                Types = ["CODE_SMELL"],
+                Types = [SonarIssueType.CodeSmell],
+                Severities = [SonarIssueSeverity.Major],
+                Statuses = [SonarIssueStatus.Open],
                 PageIndex = 1,
                 PageSize = 50
             });
@@ -38,6 +40,9 @@ public sealed class SonarQubeServiceTests
         Assert.Equal("sq-1", response.Issues[0].Key);
         Assert.NotNull(capturedRequest);
         Assert.Contains("componentKeys=alpha", capturedRequest!.RequestUri!.Query);
+        Assert.Contains("types=CODE_SMELL", capturedRequest.RequestUri.Query);
+        Assert.Contains("severities=MAJOR", capturedRequest.RequestUri.Query);
+        Assert.Contains("statuses=OPEN", capturedRequest.RequestUri.Query);
         Assert.Equal("Basic", capturedRequest.Headers.Authorization?.Scheme);
     }
 

@@ -1,3 +1,6 @@
+using TaskViewer.Domain.Orchestration;
+using TaskViewer.SonarQube;
+
 namespace TaskViewer.Infrastructure.Persistence;
 
 public sealed class QueueItemRecord
@@ -22,7 +25,11 @@ public sealed class QueueItemRecord
     public int? Line { get; init; }
     public string? IssueStatus { get; init; }
     public string? Instructions { get; init; }
-    public string State { get; init; } = "queued";
+    public string State { get; init; } = QueueState.QueuedValue;
+    public QueueState QueueState => QueueState.Parse(State);
+    public SonarIssueType ParsedIssueType => SonarIssueType.FromRaw(IssueType);
+    public SonarIssueSeverity ParsedSeverity => SonarIssueSeverity.FromRaw(Severity);
+    public SonarIssueStatus ParsedIssueStatus => SonarIssueStatus.FromRaw(IssueStatus);
     public int PriorityScore { get; init; }
     public int AttemptCount { get; init; }
     public int MaxAttempts { get; init; }
@@ -34,6 +41,7 @@ public sealed class QueueItemRecord
     public string? OpenCodeUrl { get; init; }
     public string? LastError { get; init; }
     public string? LastReviewAction { get; init; }
+    public TaskReviewAction ParsedLastReviewAction => TaskReviewAction.FromRaw(LastReviewAction);
     public string? LastReviewReason { get; init; }
     public DateTimeOffset? LastReviewedAt { get; init; }
     public DateTimeOffset CreatedAt { get; init; }

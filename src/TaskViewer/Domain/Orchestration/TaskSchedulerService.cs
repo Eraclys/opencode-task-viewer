@@ -19,12 +19,12 @@ sealed class TaskSchedulerService : ITaskSchedulerService
             return null;
 
         var now = _nowUtc();
-        var active = await _queueRepository.ListQueue(["leased", "running"], 5000);
+        var active = await _queueRepository.ListQueue([QueueState.Leased, QueueState.Running], 5000);
 
         if (active.Count >= globalMaxActive)
             return null;
 
-        var ready = await _queueRepository.ListQueue(["queued"], 5000);
+        var ready = await _queueRepository.ListQueue([QueueState.Queued], 5000);
 
         if (ready.Count == 0)
             return null;

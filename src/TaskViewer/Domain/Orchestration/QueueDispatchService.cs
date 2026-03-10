@@ -32,7 +32,8 @@ public sealed class QueueDispatchService : IQueueDispatchService
     {
         var rule = string.IsNullOrWhiteSpace(item.Rule) ? "RULE" : item.Rule;
         var path = string.IsNullOrWhiteSpace(item.RelativePath) ? item.AbsolutePath ?? item.IssueKey : item.RelativePath;
-        return $"[{item.IssueType ?? "ISSUE"}] {rule} :: {path}";
+        var issueType = item.ParsedIssueType.Or("ISSUE") ?? "ISSUE";
+        return $"[{issueType}] {rule} :: {path}";
     }
 
     static string ComposePrompt(QueueItemRecord item, IReadOnlyList<NormalizedIssue> issues)
@@ -44,7 +45,7 @@ public sealed class QueueDispatchService : IQueueDispatchService
             $"Task key: {item.TaskKey ?? item.IssueKey}",
             $"Project: {item.SonarProjectKey}",
             $"Directory: {item.Directory}",
-            $"Issue type: {item.IssueType ?? "UNKNOWN"}",
+            $"Issue type: {item.ParsedIssueType.Or("UNKNOWN") ?? "UNKNOWN"}",
             $"Rule: {item.Rule ?? "UNKNOWN"}",
             $"Issue count: {Math.Max(1, item.IssueCount)}"
         };

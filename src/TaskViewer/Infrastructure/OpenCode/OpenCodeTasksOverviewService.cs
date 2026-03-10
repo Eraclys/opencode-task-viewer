@@ -94,12 +94,12 @@ public sealed class OpenCodeTasksOverviewService
     string NormalizeRuntimeStatus(string? directory, string sessionId, Dictionary<string, SessionRuntimeStatus> statusMap)
     {
         if (_viewerState.TryGetRecentStatusOverride(directory, sessionId, out var overrideType))
-            return string.IsNullOrWhiteSpace(overrideType) ? "idle" : overrideType;
+            return overrideType.Type;
 
         if (statusMap.TryGetValue(sessionId, out var status) &&
             !string.IsNullOrWhiteSpace(status.Type))
             return status.Type;
 
-        return "idle";
+        return SessionRuntimeStatus.Idle.Type;
     }
 }

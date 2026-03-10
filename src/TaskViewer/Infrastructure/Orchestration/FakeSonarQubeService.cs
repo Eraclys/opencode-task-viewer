@@ -24,9 +24,9 @@ public sealed class FakeSonarQubeService : ISonarQubeService
     public Task<SonarIssuesSearchResponse> SearchIssuesAsync(SearchIssuesQuery query, CancellationToken cancellationToken = default)
     {
         var componentKeys = NormalizeSet([query.ComponentKey]);
-        var types = NormalizeSet(query.Types);
-        var severities = NormalizeSet(query.Severities);
-        var statuses = NormalizeSet(query.Statuses);
+        var types = NormalizeSet(query.Types.Select(type => type.Value).ToList());
+        var severities = NormalizeSet(query.Severities.Select(severity => severity.Value).ToList());
+        var statuses = NormalizeSet(query.Statuses.Select(status => status.Value).ToList());
         var rules = NormalizeSet(query.RuleKeys, preserveCase: true);
         var issueKeys = NormalizeSet(query.IssueKeys, preserveCase: true);
         var pageIndex = Math.Max(1, query.PageIndex);
@@ -34,9 +34,9 @@ public sealed class FakeSonarQubeService : ISonarQubeService
 
         var filtered = Issues
             .Where(issue => componentKeys.Count == 0 || componentKeys.Contains(ParseProjectKey(issue.Component)))
-            .Where(issue => types.Count == 0 || types.Contains((issue.Type ?? string.Empty).Trim().ToUpperInvariant()))
-            .Where(issue => severities.Count == 0 || severities.Contains((issue.Severity ?? string.Empty).Trim().ToUpperInvariant()))
-            .Where(issue => statuses.Count == 0 || statuses.Contains((issue.Status ?? string.Empty).Trim().ToUpperInvariant()))
+            .Where(issue => types.Count == 0 || types.Contains(SonarIssueType.FromRaw(issue.Type).OrNull() ?? string.Empty))
+            .Where(issue => severities.Count == 0 || severities.Contains(SonarIssueSeverity.FromRaw(issue.Severity).OrNull() ?? string.Empty))
+            .Where(issue => statuses.Count == 0 || statuses.Contains(SonarIssueStatus.FromRaw(issue.Status).OrNull() ?? string.Empty))
             .Where(issue => rules.Count == 0 || rules.Contains((issue.Rule ?? string.Empty).Trim()))
             .Where(issue => issueKeys.Count == 0 || issueKeys.Contains((issue.Key ?? string.Empty).Trim()))
             .ToList();

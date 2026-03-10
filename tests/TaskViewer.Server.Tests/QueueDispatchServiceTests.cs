@@ -1,4 +1,5 @@
 using TaskViewer.Domain.Orchestration;
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
 
@@ -89,8 +90,8 @@ public sealed class QueueDispatchServiceTests
 
         public string? BuildSessionUrl(string sessionId, string? directory) => null;
 
-        public Task<Dictionary<string, string>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
-            => Task.FromResult(new Dictionary<string, string>(StringComparer.Ordinal));
+        public Task<Dictionary<string, SessionRuntimeStatus>> ReadWorkingStatusMapAsync(string directory, CancellationToken cancellationToken = default)
+            => Task.FromResult(new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal));
 
         public Task<List<OpenCodeTodo>> ReadTodosAsync(string sessionId, string? directory, CancellationToken cancellationToken = default)
             => Task.FromResult(new List<OpenCodeTodo>());

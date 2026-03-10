@@ -7,11 +7,11 @@ public sealed class DispatchFailurePolicy : IDispatchFailurePolicy
         var exhausted = attemptCount >= maxAttempts;
 
         if (exhausted)
-            return new DispatchFailureDecision("failed", null);
+            return new DispatchFailureDecision(QueueState.Failed, null);
 
         var nextAttemptAt = utcNow.AddMilliseconds(MakeBackoffMs(attemptCount));
 
-        return new DispatchFailureDecision("queued", nextAttemptAt);
+        return new DispatchFailureDecision(QueueState.Queued, nextAttemptAt);
     }
 
     static int MakeBackoffMs(int attempt)

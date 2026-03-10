@@ -1,3 +1,4 @@
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.OpenCode;
 
@@ -25,16 +26,16 @@ sealed class TaskReconcilerService : ITaskReconcilerService
     public async Task ReconcileAsync(int leaseSeconds)
     {
         var now = _nowUtc();
-        var activeTasks = await _queueRepository.ListQueue(["leased", "running"], 5000);
+        var activeTasks = await _queueRepository.ListQueue([QueueState.Leased, QueueState.Running], 5000);
 
         if (activeTasks.Count == 0)
             return;
 
-        var statusMaps = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var statusMaps = new Dictionary<string, Dictionary<string, SessionRuntimeStatus>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var task in activeTasks.OrderBy(item => item.Id))
         {
-            if (string.Equals(task.State, "leased", StringComparison.Ordinal))
+            if (task.QueueState == QueueState.Leased)
             {
                 if (task.LeaseExpiresAt is not null && task.LeaseExpiresAt <= now)
                     await RecoverTaskAsync(task, "Task lease expired before runner startup.", now);
@@ -42,15 +43,15 @@ sealed class TaskReconcilerService : ITaskReconcilerService
                 continue;
             }
 
-            if (!string.Equals(task.State, "running", StringComparison.Ordinal))
+            if (task.QueueState != QueueState.Running)
                 continue;
 
             var statusMap = await GetStatusMapAsync(statusMaps, task.Directory);
-            var runtimeType = string.IsNullOrWhiteSpace(task.SessionId) || !statusMap.TryGetValue(task.SessionId, out var status)
-                ? null
+            var runtimeStatus = string.IsNullOrWhiteSpace(task.SessionId) || !statusMap.TryGetValue(task.SessionId, out var status)
+                ? SessionRuntimeStatus.Idle
                 : status;
 
-            if (SessionStatusPolicy.IsRuntimeRunning(runtimeType))
+            if (runtimeStatus.IsRunning)
             {
                 if (!string.IsNullOrWhiteSpace(task.LeaseOwner))
                 {
@@ -81,8 +82,8 @@ sealed class TaskReconcilerService : ITaskReconcilerService
             now);
     }
 
-    async Task<Dictionary<string, string>> GetStatusMapAsync(
-        IDictionary<string, Dictionary<string, string>> cache,
+    async Task<Dictionary<string, SessionRuntimeStatus>> GetStatusMapAsync(
+        IDictionary<string, Dictionary<string, SessionRuntimeStatus>> cache,
         string directory)
     {
         if (cache.TryGetValue(directory, out var cached))
@@ -96,7 +97,7 @@ sealed class TaskReconcilerService : ITaskReconcilerService
         }
         catch
         {
-            var empty = new Dictionary<string, string>(StringComparer.Ordinal);
+            var empty = new Dictionary<string, SessionRuntimeStatus>(StringComparer.Ordinal);
             cache[directory] = empty;
             return empty;
         }

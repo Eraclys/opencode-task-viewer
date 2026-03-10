@@ -1,13 +1,14 @@
 using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
+using TaskViewer.SonarQube;
 
 namespace TaskViewer.Server.Tests;
 
 public sealed class OrchestrationUseCasesTests
 {
     [Fact]
-    public async Task GetInstructionProfileAsync_UppercasesIssueType()
+    public async Task GetInstructionProfileAsync_ReturnsNormalizedIssueType()
     {
         var gateway = new FakeGateway
         {
@@ -27,7 +28,20 @@ public sealed class OrchestrationUseCasesTests
 
         Assert.Equal(42, result.MappingId);
         Assert.Equal("CODE_SMELL", result.IssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, result.ParsedIssueType);
         Assert.Equal("Apply safe fix", result.Instructions);
+    }
+
+    [Fact]
+    public async Task UpsertInstructionProfileAsync_ReturnsTypedIssueTypeFromRecord()
+    {
+        var gateway = new FakeGateway();
+        var sut = new OrchestrationUseCases(gateway);
+
+        var result = await sut.UpsertInstructionProfileAsync(new UpsertInstructionProfileRequest(42, "code_smell", "Apply safe fix"));
+
+        Assert.Equal("CODE_SMELL", result.IssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, result.ParsedIssueType);
     }
 
     [Fact]
@@ -129,6 +143,7 @@ public sealed class OrchestrationUseCasesTests
         Assert.Single(result);
         Assert.Equal(42, gateway.LastReviewTaskId);
         Assert.Equal("rejected", result[0].Action);
+        Assert.Equal(TaskReviewAction.Rejected, result[0].ParsedAction);
     }
 
     [Fact]

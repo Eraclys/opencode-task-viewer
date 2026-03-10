@@ -27,8 +27,8 @@ public sealed class OpenCodeHttpClientTests
         var statuses = await client.ReadWorkingStatusMapAsync("C:/Work");
 
         Assert.Equal(2, statuses.Count);
-        Assert.Equal("working", statuses["session-a"]);
-        Assert.Equal("completed", statuses["session-b"]);
+        Assert.Equal("working", statuses["session-a"].Type);
+        Assert.Equal("completed", statuses["session-b"].Type);
     }
 
     [Fact]

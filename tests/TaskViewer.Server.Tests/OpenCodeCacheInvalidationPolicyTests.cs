@@ -1,3 +1,4 @@
+using TaskViewer.Domain.Sessions;
 using TaskViewer.Infrastructure.OpenCode;
 
 namespace TaskViewer.Server.Tests;
@@ -20,13 +21,13 @@ public sealed class OpenCodeCacheInvalidationPolicyTests
     [Fact]
     public void Decide_SessionStatusWithStatus_RecordsOverrideAndRefreshesLists()
     {
-        var result = _sut.Decide(new OpenCodeEventEnvelope("C:/Work", "session.status", "sess-1", "working"));
+        var result = _sut.Decide(new OpenCodeEventEnvelope("C:/Work", "session.status", "sess-1", SessionRuntimeStatus.FromRaw("working")));
 
         Assert.False(result.InvalidateAllCaches);
         Assert.True(result.InvalidateSessionsList);
         Assert.True(result.InvalidateTaskOverview);
         Assert.Equal("C:/Work", result.StatusDirectory);
-        Assert.Equal("working", result.StatusType);
+        Assert.Equal(SessionRuntimeStatus.FromRaw("working"), result.StatusType);
         Assert.Equal("sess-1", result.BroadcastSessionId);
     }
 

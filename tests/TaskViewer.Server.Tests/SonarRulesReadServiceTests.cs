@@ -32,6 +32,8 @@ public sealed class SonarRulesReadServiceTests
 
         Assert.Equal("CODE_SMELL", summary.IssueType);
         Assert.Equal("OPEN", summary.IssueStatus);
+        Assert.Equal(SonarIssueType.CodeSmell, summary.ParsedIssueType);
+        Assert.Equal(SonarIssueStatus.Open, summary.ParsedIssueStatus);
         Assert.Equal(3, summary.ScannedIssues);
         Assert.False(summary.Truncated);
         Assert.Equal(2, summary.Rules.Count);

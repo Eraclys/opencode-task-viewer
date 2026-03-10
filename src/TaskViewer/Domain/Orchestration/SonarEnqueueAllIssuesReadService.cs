@@ -22,12 +22,9 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
         int maxScanIssues,
         CancellationToken cancellationToken = default)
     {
-        var type = NormalizeUpper(issueType);
-        var sev = NormalizeUpper(severity);
-        var status = NormalizeUpper(issueStatus);
-        var types = string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
-        var severities = string.IsNullOrWhiteSpace(sev) ? Array.Empty<string>() : new[] { sev };
-        var statuses = string.IsNullOrWhiteSpace(status) ? Array.Empty<string>() : new[] { status };
+        var types = SonarIssueType.ParseCsv(issueType);
+        var severities = SonarIssueSeverity.ParseCsv(severity);
+        var statuses = SonarIssueStatus.ParseCsv(issueStatus);
 
         const int pageSize = 500;
         var page = 1;
@@ -78,10 +75,4 @@ public sealed class SonarEnqueueAllIssuesReadService : ISonarEnqueueAllIssuesRea
             allIssues.Count >= maxScanIssues);
     }
 
-    static string? NormalizeUpper(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
 }

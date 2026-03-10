@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using TaskViewer.Domain.Orchestration;
 using TaskViewer.Infrastructure.Orchestration;
 using TaskViewer.Infrastructure.Persistence;
 using TaskViewer.Persistence;
@@ -65,7 +66,7 @@ public sealed class SqliteQueueRepositoryTests
             3,
             DateTimeOffset.Parse("2026-03-08T10:05:00Z"));
 
-        var queuedItems = await repository.ListQueue(["queued"], 10);
+        var queuedItems = await repository.ListQueue([QueueState.Queued], 10);
         var oldest = queuedItems.OrderBy(item => item.CreatedAt).First();
         var claimed = await repository.TryLeaseTask(
             oldest.Id,
@@ -75,11 +76,11 @@ public sealed class SqliteQueueRepositoryTests
 
         Assert.NotNull(claimed);
         Assert.Equal("sq-old", claimed.IssueKey);
-        Assert.Equal("leased", claimed.State);
+        Assert.Equal(QueueState.Leased, claimed.QueueState);
         Assert.Equal("worker-1", claimed.LeaseOwner);
         Assert.NotNull(claimed.LeaseExpiresAt);
 
-        var remainingQueued = await repository.ListQueue(["queued"], 10);
+        var remainingQueued = await repository.ListQueue([QueueState.Queued], 10);
         var queued = Assert.Single(remainingQueued);
         Assert.Equal("sq-new", queued.IssueKey);
     }
@@ -99,7 +100,7 @@ public sealed class SqliteQueueRepositoryTests
             4,
             DateTimeOffset.Parse("2026-03-08T10:00:00Z"));
 
-        var queuedItems = await repository.ListQueue(["queued"], 10);
+        var queuedItems = await repository.ListQueue([QueueState.Queued], 10);
         var claimed = await repository.TryLeaseTask(
             queuedItems.Single().Id,
             "worker-1",
@@ -113,7 +114,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var failed = await repository.MarkDispatchFailure(
             claimed.Id,
-            "failed",
+            QueueState.Failed,
             null,
             "boom",
             DateTimeOffset.Parse("2026-03-08T10:02:00Z"));
@@ -126,14 +127,14 @@ public sealed class SqliteQueueRepositoryTests
             Assert.Equal("failed", state);
         }
 
-        var failedItems = await repository.ListQueue(["failed"], 10);
+        var failedItems = await repository.ListQueue([QueueState.Failed], 10);
         var failedItem = Assert.Single(failedItems);
         Assert.Equal("boom", failedItem.LastError);
 
         var retried = await repository.RetryFailed(DateTimeOffset.Parse("2026-03-08T10:03:00Z"));
         Assert.Equal(1, retried);
 
-        var queuedAgain = await repository.ListQueue(["queued"], 10);
+        var queuedAgain = await repository.ListQueue([QueueState.Queued], 10);
         var claimedAgain = await repository.TryLeaseTask(
             queuedAgain.Single().Id,
             "worker-1",
@@ -151,11 +152,11 @@ public sealed class SqliteQueueRepositoryTests
 
         Assert.True(marked);
 
-        var completedItems = await repository.ListQueue(["running"], 10);
+        var completedItems = await repository.ListQueue([QueueState.Running], 10);
         var completed = Assert.Single(completedItems);
         Assert.Equal("sess-123", completed.SessionId);
         Assert.Equal("http://opencode.local/session/sess-123", completed.OpenCodeUrl);
-        Assert.Equal("running", completed.State);
+        Assert.Equal(QueueState.Running, completed.QueueState);
     }
 
     [Fact]
@@ -234,21 +235,24 @@ public sealed class SqliteQueueRepositoryTests
         Assert.True(await repository.MarkTaskAwaitingReview(taskId, DateTimeOffset.Parse("2026-03-08T10:03:00Z")));
         Assert.True(await repository.RejectTask(taskId, "Needs manual follow-up", DateTimeOffset.Parse("2026-03-08T10:04:00Z")));
 
-        var rejected = Assert.Single(await repository.ListQueue(["rejected"], 10));
+        var rejected = Assert.Single(await repository.ListQueue([QueueState.Rejected], 10));
         Assert.Equal("rejected", rejected.LastReviewAction);
+        Assert.Equal(TaskReviewAction.Rejected, rejected.ParsedLastReviewAction);
         Assert.Equal("Needs manual follow-up", rejected.LastReviewReason);
         Assert.NotNull(rejected.LastReviewedAt);
 
         Assert.True(await repository.RequeueTask(taskId, "Retry with tuned prompt", DateTimeOffset.Parse("2026-03-08T10:05:00Z")));
 
-        var queuedAgain = Assert.Single(await repository.ListQueue(["queued"], 10));
+        var queuedAgain = Assert.Single(await repository.ListQueue([QueueState.Queued], 10));
         Assert.Equal("requeue", queuedAgain.LastReviewAction);
+        Assert.Equal(TaskReviewAction.Requeue, queuedAgain.ParsedLastReviewAction);
         Assert.Equal("Retry with tuned prompt", queuedAgain.LastReviewReason);
         Assert.NotNull(queuedAgain.LastReviewedAt);
 
         var history = await repository.GetTaskReviewHistory(taskId);
         Assert.True(history.Count >= 2);
         Assert.Equal("requeue", history[0].Action);
+        Assert.Equal(TaskReviewAction.Requeue, history[0].ParsedAction);
     }
 
     [Fact]
@@ -286,15 +290,17 @@ public sealed class SqliteQueueRepositoryTests
         Assert.True(await repository.MarkTaskAwaitingReview(taskId, DateTimeOffset.Parse("2026-03-08T10:03:00Z")));
         Assert.True(await repository.RepromptTask(taskId, "Retry with a narrower patch", "Previous patch was too broad", DateTimeOffset.Parse("2026-03-08T10:04:00Z")));
 
-        var queuedAgain = Assert.Single(await repository.ListQueue(["queued"], 10));
+        var queuedAgain = Assert.Single(await repository.ListQueue([QueueState.Queued], 10));
         Assert.Equal("Retry with a narrower patch", queuedAgain.Instructions);
         Assert.Equal("reprompt", queuedAgain.LastReviewAction);
+        Assert.Equal(TaskReviewAction.Reprompt, queuedAgain.ParsedLastReviewAction);
         Assert.Equal("Previous patch was too broad", queuedAgain.LastReviewReason);
         Assert.Null(queuedAgain.SessionId);
         Assert.Equal(0, queuedAgain.AttemptCount);
 
         var history = await repository.GetTaskReviewHistory(taskId);
         Assert.Equal("reprompt", history[0].Action);
+        Assert.Equal(TaskReviewAction.Reprompt, history[0].ParsedAction);
     }
 
     static SqliteQueueRepository CreateRepository(string dbPath)
