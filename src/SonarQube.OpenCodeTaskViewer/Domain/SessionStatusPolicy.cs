@@ -4,6 +4,5 @@ namespace SonarQube.OpenCodeTaskViewer.Domain;
 
 public static class SessionStatusPolicy
 {
-    public static bool IsRuntimeRunning(string? type)
-        => SessionRuntimeStatus.FromRaw(type).IsRunning;
+    public static bool IsRuntimeRunning(SessionRuntimeStatus status) => status.IsRunning;
 }

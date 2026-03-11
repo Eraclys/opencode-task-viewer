@@ -30,7 +30,7 @@ public sealed class SessionTodoViewServiceTests
             new("Task B", ViewerTaskStatus.Pending, null)
         };
 
-        var inferred = sut.InferInProgressTodoFromRuntime(todos, "busy");
+        var inferred = sut.InferInProgressTodoFromRuntime(todos, SessionRuntimeStatus.FromRaw("busy"));
 
         Assert.Equal(ViewerTaskStatus.InProgress, inferred[0].Status);
         Assert.Equal(ViewerTaskStatus.InProgress, inferred[0].TaskStatus);

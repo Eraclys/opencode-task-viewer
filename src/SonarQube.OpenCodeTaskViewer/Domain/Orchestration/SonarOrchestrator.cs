@@ -374,7 +374,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
         return history
             .Select(entry => new TaskReviewHistoryDto
             {
-                Action = entry.ParsedAction,
+                Action = entry.ReviewAction,
                 Reason = entry.Reason,
                 CreatedAt = entry.CreatedAt
             })
@@ -422,7 +422,7 @@ public sealed class SonarOrchestrator : IOrchestrationGateway, IAsyncDisposable
 
         var (createdItems, repoSkipped) = await _queueRepository.EnqueueIssuesBatch(
             mapping,
-            type.OrNull(),
+            type,
             instructionText,
             issues,
             _options.MaxAttempts,

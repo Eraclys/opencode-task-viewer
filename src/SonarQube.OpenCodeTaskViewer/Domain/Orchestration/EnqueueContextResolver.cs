@@ -29,16 +29,15 @@ public sealed class EnqueueContextResolver : IEnqueueContextResolver
             !mapping.Enabled)
             throw new InvalidOperationException("Mapping not found or disabled");
 
-        var normalizedType = issueType.OrNull();
-        var profile = normalizedType is null ? null : await _mappingRepository.GetInstructionProfile(mapping.Id, normalizedType, cancellationToken);
+        var profile = issueType.HasValue ? await _mappingRepository.GetInstructionProfile(mapping.Id, issueType, cancellationToken) : null;
         var defaultInstruction = profile?.Instructions;
         var instructionText = EnqueueContextPolicy.ResolveInstructionText(instructions, defaultInstruction);
 
-        if (EnqueueContextPolicy.ShouldPersistInstructionProfile(normalizedType, instructionText))
+        if (EnqueueContextPolicy.ShouldPersistInstructionProfile(issueType, instructionText))
         {
             await _mappingRepository.UpsertInstructionProfile(
                 mapping.Id,
-                normalizedType!,
+                issueType,
                 instructionText,
                 DateTimeOffset.UtcNow,
                 cancellationToken);

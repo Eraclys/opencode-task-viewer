@@ -27,9 +27,9 @@ public sealed class QueueItemRecord
     public string? Instructions { get; init; }
     public string State { get; init; } = QueueState.QueuedValue;
     public QueueState QueueState => QueueState.Parse(State);
-    public SonarIssueType ParsedIssueType => SonarIssueType.FromRaw(IssueType);
-    public SonarIssueSeverity ParsedSeverity => SonarIssueSeverity.FromRaw(Severity);
-    public SonarIssueStatus ParsedIssueStatus => SonarIssueStatus.FromRaw(IssueStatus);
+    public SonarIssueType IssueTypeValue => SonarIssueType.FromRaw(IssueType);
+    public SonarIssueSeverity SeverityValue => SonarIssueSeverity.FromRaw(Severity);
+    public SonarIssueStatus IssueStatusValue => SonarIssueStatus.FromRaw(IssueStatus);
     public int PriorityScore { get; init; }
     public int AttemptCount { get; init; }
     public int MaxAttempts { get; init; }
@@ -41,7 +41,7 @@ public sealed class QueueItemRecord
     public string? OpenCodeUrl { get; init; }
     public string? LastError { get; init; }
     public string? LastReviewAction { get; init; }
-    public TaskReviewAction ParsedLastReviewAction => TaskReviewAction.FromRaw(LastReviewAction);
+    public TaskReviewAction ReviewAction => TaskReviewAction.FromRaw(LastReviewAction);
     public string? LastReviewReason { get; init; }
     public DateTimeOffset? LastReviewedAt { get; init; }
     public DateTimeOffset CreatedAt { get; init; }

@@ -78,7 +78,7 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
         if (!issueType.HasValue)
             return null;
 
-        return await _mappingRepository.GetInstructionProfile(mapping.Id, issueType.Value, cancellationToken);
+        return await _mappingRepository.GetInstructionProfile(mapping.Id, issueType, cancellationToken);
     }
 
     public async Task<InstructionProfileRecord> UpsertInstructionProfileAsync(UpsertInstructionProfileRequest request, CancellationToken cancellationToken = default)
@@ -100,7 +100,7 @@ sealed class OrchestrationMappingService : IOrchestrationMappingService
 
         return await _mappingRepository.UpsertInstructionProfile(
             mapping.Id,
-            type.Value,
+            type,
             text,
             _nowUtc(),
             cancellationToken);

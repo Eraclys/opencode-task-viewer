@@ -105,8 +105,11 @@ Implemented adoption points:
 - OpenCode runtime parsing, status overrides, and session/task derivation now use `SessionRuntimeStatus`
 - Sonar issue filtering, normalization, batching priority, and DTO parsing now use typed Sonar value objects
 - review history and queue review transitions now use `TaskReviewAction`
+- queue persistence now accepts typed issue-type input and projects value objects back to SQLite text at the repository boundary
+- persistence records and normalized issue models now expose canonical typed properties instead of legacy `Parsed*` accessors
 - viewer/session/todo DTOs now expose parsed typed accessors while keeping existing string fields on the wire
 - `DirectoryPath` is used more directly in OpenCode cache-key generation and session/status lookup helpers instead of repeatedly normalizing raw strings inline
+- small domain helper policies now consume typed value objects instead of raw strings where practical
 
 Framework binding recommendation and implementation:
 
@@ -131,7 +134,7 @@ Remaining follow-up work:
 
 - `DirectoryPath` can still be pushed deeper so more service and persistence boundaries accept typed paths directly instead of raw strings
 - some HTTP/query boundaries still begin as raw strings before being parsed into typed values; that remains acceptable boundary handling but could be tightened further later
-- persistence bridge models still retain a few `Parsed*` helpers where they adapt SQLite text columns into typed values for domain consumers
+- persistence and transport models still keep raw string fields where SQLite storage or upstream JSON contracts require them
 
 ## Guardrails
 

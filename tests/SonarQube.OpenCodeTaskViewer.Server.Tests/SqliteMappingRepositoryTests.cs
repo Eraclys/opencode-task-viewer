@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
 using SonarQube.OpenCodeTaskViewer.Persistence;
 
@@ -53,13 +54,13 @@ public sealed class SqliteMappingRepositoryTests
 
         var saved = await repository.UpsertInstructionProfile(
             mapping.Id,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Fix only this issue",
             DateTimeOffset.UtcNow);
 
         Assert.Equal("CODE_SMELL", saved.IssueType);
 
-        var loaded = await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL");
+        var loaded = await repository.GetInstructionProfile(mapping.Id, SonarIssueType.CodeSmell);
         Assert.NotNull(loaded);
         Assert.Equal("Fix only this issue", loaded.Instructions);
     }
@@ -107,13 +108,13 @@ public sealed class SqliteMappingRepositoryTests
 
         await repository.UpsertInstructionProfile(
             mapping.Id,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Fix only this issue",
             DateTimeOffset.UtcNow);
 
         Assert.True(await repository.DeleteMapping(mapping.Id));
         Assert.Null(await repository.GetMappingById(mapping.Id));
-        Assert.Null(await repository.GetInstructionProfile(mapping.Id, "CODE_SMELL"));
+        Assert.Null(await repository.GetInstructionProfile(mapping.Id, SonarIssueType.CodeSmell));
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public sealed class SqliteMappingRepositoryTests
                 CreatedAt = mapping.CreatedAt,
                 UpdatedAt = mapping.UpdatedAt
             },
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Fix only this issue",
             [
                 new NormalizedIssue

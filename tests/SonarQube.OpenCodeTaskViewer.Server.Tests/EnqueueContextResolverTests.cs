@@ -62,7 +62,7 @@ public sealed class EnqueueContextResolverTests
         Assert.Equal(SonarIssueType.CodeSmell, result.Type);
         Assert.Equal("default fix text", result.InstructionText);
         Assert.Equal(7, repo.UpsertMappingId);
-        Assert.Equal("CODE_SMELL", repo.UpsertIssueType);
+        Assert.Equal(SonarIssueType.CodeSmell, repo.UpsertIssueType);
         Assert.Equal("default fix text", repo.UpsertInstructions);
     }
 
@@ -95,7 +95,7 @@ public sealed class EnqueueContextResolverTests
         public MappingRecord? Mapping { get; set; }
         public InstructionProfileRecord? Profile { get; set; }
         public int? UpsertMappingId { get; private set; }
-        public string? UpsertIssueType { get; private set; }
+        public SonarIssueType UpsertIssueType { get; private set; }
         public string? UpsertInstructions { get; private set; }
 
         public Task<List<MappingRecord>> ListMappings(CancellationToken cancellationToken = default) => Task.FromResult(new List<MappingRecord>());
@@ -113,11 +113,11 @@ public sealed class EnqueueContextResolverTests
             DateTimeOffset now,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default) => Task.FromResult(Profile);
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default) => Task.FromResult(Profile);
 
         public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
-            string issueType,
+            SonarIssueType issueType,
             string instructions,
             DateTimeOffset now,
             CancellationToken cancellationToken = default)
@@ -131,7 +131,7 @@ public sealed class EnqueueContextResolverTests
                 {
                     Id = 1,
                     MappingId = mappingId,
-                    IssueType = issueType,
+                    IssueType = issueType.Value,
                     Instructions = instructions,
                     CreatedAt = now,
                     UpdatedAt = now

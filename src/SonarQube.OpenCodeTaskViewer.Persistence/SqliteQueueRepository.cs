@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Orchestration;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
@@ -101,7 +102,7 @@ LIMIT @Limit";
 
     public async Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
         MappingRecord mapping,
-        string? type,
+        SonarIssueType type,
         string instructionText,
         IReadOnlyList<NormalizedIssue> issues,
         int maxAttempts,
@@ -184,8 +185,8 @@ SELECT last_insert_rowid();",
                         mapping.SonarProjectKey,
                         mapping.Directory,
                         Branch = SqliteOrchestrationDataMapper.NullIfWhiteSpace(mapping.Branch),
-                        IssueType = SqliteOrchestrationDataMapper.NullIfWhiteSpace(type ?? representative.Type),
-                        representative.Severity,
+                        IssueType = SqliteOrchestrationDataMapper.NullIfWhiteSpace(type.OrNull() ?? representative.IssueTypeValue.OrNull()),
+                        Severity = representative.SeverityValue.OrNull(),
                         Rule = rule,
                         Message = OrchestrationTaskBatchingPolicy.BuildRepresentativeMessage(groupedIssues, path, rule),
                         representative.Component,
@@ -220,15 +221,15 @@ INSERT INTO task_issue_links (
                         {
                             TaskId = taskId,
                             IssueKey = issue.Key,
-                            IssueType = issue.Type,
-                            issue.Severity,
+                            IssueType = issue.IssueTypeValue.OrNull(),
+                            Severity = issue.SeverityValue.OrNull(),
                             issue.Rule,
                             issue.Message,
                             issue.Component,
                             issue.RelativePath,
                             issue.AbsolutePath,
                             issue.Line,
-                            IssueStatus = issue.Status,
+                            IssueStatus = issue.IssueStatusValue.OrNull(),
                             CreatedAt = nowIso
                         },
                         tx,

@@ -18,7 +18,7 @@ public static class OrchestrationTaskBatchingPolicy
 
     public static int ComputePriorityScore(IReadOnlyList<NormalizedIssue> issues, string? branch)
     {
-        var severityScore = issues.Max(issue => issue.IssueSeverity.PriorityScore);
+        var severityScore = issues.Max(issue => issue.SeverityValue.PriorityScore);
         var cheapFixBonus = issues.Count <= 3 ? 8 : 0;
         var branchBonus = string.IsNullOrWhiteSpace(branch) ? 0 : 2;
 

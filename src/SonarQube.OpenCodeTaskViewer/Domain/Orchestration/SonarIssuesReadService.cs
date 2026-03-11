@@ -47,17 +47,17 @@ public sealed class SonarIssuesReadService : ISonarIssuesReadService
                 continue;
 
             issues.Add(
-                new SonarIssueSummaryItem(
-                    issue.Key,
-                    issue.IssueType,
-                    issue.IssueSeverity,
-                    issue.Rule,
-                    issue.Message,
-                    issue.Component,
-                    issue.Line,
-                    issue.IssueStatus,
-                    issue.RelativePath,
-                    issue.AbsolutePath));
+                    new SonarIssueSummaryItem(
+                        issue.Key,
+                        issue.IssueTypeValue,
+                        issue.SeverityValue,
+                        issue.Rule,
+                        issue.Message,
+                        issue.Component,
+                        issue.Line,
+                        issue.IssueStatusValue,
+                        issue.RelativePath,
+                        issue.AbsolutePath));
         }
 
         var total = response.Total ?? issues.Count;

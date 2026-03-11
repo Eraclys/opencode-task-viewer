@@ -33,7 +33,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         return new InstructionProfileDto
         {
             MappingId = mappingId,
-            IssueType = profile?.ParsedIssueType ?? issueType,
+            IssueType = profile?.IssueTypeValue ?? issueType,
             Instructions = profile?.Instructions
         };
     }
@@ -45,7 +45,7 @@ public sealed class OrchestrationUseCases : IOrchestrationUseCases
         return new InstructionProfileDto
         {
             MappingId = profile.MappingId,
-            IssueType = profile.ParsedIssueType,
+            IssueType = profile.IssueTypeValue,
             Instructions = profile.Instructions,
             UpdatedAt = profile.UpdatedAt
         };

@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
 using SonarQube.OpenCodeTaskViewer.Persistence;
@@ -18,7 +19,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var first = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [
                 CreateIssue("sq-001"),
@@ -33,7 +34,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var second = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-001")],
             3,
@@ -54,7 +55,7 @@ public sealed class SqliteQueueRepositoryTests
 
         await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-old")],
             3,
@@ -62,7 +63,7 @@ public sealed class SqliteQueueRepositoryTests
 
         await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-new", "src/other-file.js")],
             3,
@@ -97,7 +98,7 @@ public sealed class SqliteQueueRepositoryTests
 
         await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-retry")],
             4,
@@ -181,7 +182,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var created = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [
                 CreateIssue("sq-cancel"),
@@ -194,7 +195,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var secondCreate = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-clear-2", "src/second-file.js")],
             3,
@@ -225,7 +226,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var created = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-review")],
             3,
@@ -255,7 +256,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var rejected = Assert.Single(await repository.ListQueue([QueueState.Rejected], 10));
         Assert.Equal("rejected", rejected.LastReviewAction);
-        Assert.Equal(TaskReviewAction.Rejected, rejected.ParsedLastReviewAction);
+        Assert.Equal(TaskReviewAction.Rejected, rejected.ReviewAction);
         Assert.Equal("Needs manual follow-up", rejected.LastReviewReason);
         Assert.NotNull(rejected.LastReviewedAt);
 
@@ -263,14 +264,14 @@ public sealed class SqliteQueueRepositoryTests
 
         var queuedAgain = Assert.Single(await repository.ListQueue([QueueState.Queued], 10));
         Assert.Equal("requeue", queuedAgain.LastReviewAction);
-        Assert.Equal(TaskReviewAction.Requeue, queuedAgain.ParsedLastReviewAction);
+        Assert.Equal(TaskReviewAction.Requeue, queuedAgain.ReviewAction);
         Assert.Equal("Retry with tuned prompt", queuedAgain.LastReviewReason);
         Assert.NotNull(queuedAgain.LastReviewedAt);
 
         var history = await repository.GetTaskReviewHistory(taskId);
         Assert.True(history.Count >= 2);
         Assert.Equal("requeue", history[0].Action);
-        Assert.Equal(TaskReviewAction.Requeue, history[0].ParsedAction);
+        Assert.Equal(TaskReviewAction.Requeue, history[0].ReviewAction);
     }
 
     [Fact]
@@ -282,7 +283,7 @@ public sealed class SqliteQueueRepositoryTests
 
         var created = await repository.EnqueueIssuesBatch(
             mapping,
-            "CODE_SMELL",
+            SonarIssueType.CodeSmell,
             "Keep the fix focused",
             [CreateIssue("sq-reprompt")],
             3,
@@ -319,14 +320,14 @@ public sealed class SqliteQueueRepositoryTests
         var queuedAgain = Assert.Single(await repository.ListQueue([QueueState.Queued], 10));
         Assert.Equal("Retry with a narrower patch", queuedAgain.Instructions);
         Assert.Equal("reprompt", queuedAgain.LastReviewAction);
-        Assert.Equal(TaskReviewAction.Reprompt, queuedAgain.ParsedLastReviewAction);
+        Assert.Equal(TaskReviewAction.Reprompt, queuedAgain.ReviewAction);
         Assert.Equal("Previous patch was too broad", queuedAgain.LastReviewReason);
         Assert.Null(queuedAgain.SessionId);
         Assert.Equal(0, queuedAgain.AttemptCount);
 
         var history = await repository.GetTaskReviewHistory(taskId);
         Assert.Equal("reprompt", history[0].Action);
-        Assert.Equal(TaskReviewAction.Reprompt, history[0].ParsedAction);
+        Assert.Equal(TaskReviewAction.Reprompt, history[0].ReviewAction);
     }
 
     static SqliteQueueRepository CreateRepository(string dbPath)

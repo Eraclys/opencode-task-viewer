@@ -1,3 +1,4 @@
+using OpenCode.Client;
 using SonarQube.OpenCodeTaskViewer.Domain;
 
 namespace SonarQube.OpenCodeTaskViewer.Server.Tests;
@@ -11,5 +12,5 @@ public sealed class SessionStatusPolicyTests
     [InlineData("working", true)]
     [InlineData("idle", false)]
     [InlineData("", false)]
-    public void IsRuntimeRunning_MapsKnownValues(string runtimeType, bool expected) => Assert.Equal(expected, SessionStatusPolicy.IsRuntimeRunning(runtimeType));
+    public void IsRuntimeRunning_MapsKnownValues(string runtimeType, bool expected) => Assert.Equal(expected, SessionStatusPolicy.IsRuntimeRunning(SessionRuntimeStatus.FromRaw(runtimeType)));
 }

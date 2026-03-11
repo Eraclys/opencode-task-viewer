@@ -15,9 +15,9 @@ public sealed class SessionTodoViewService
             todo.Priority);
     }
 
-    public List<SessionTodoDto> InferInProgressTodoFromRuntime(List<SessionTodoDto> todos, string runtimeType)
+    public List<SessionTodoDto> InferInProgressTodoFromRuntime(List<SessionTodoDto> todos, SessionRuntimeStatus runtimeStatus)
     {
-        if (!SessionStatusPolicy.IsRuntimeRunning(runtimeType))
+        if (!SessionStatusPolicy.IsRuntimeRunning(runtimeStatus))
             return todos;
 
         if (todos.Any(t => t.TaskStatus.IsInProgress))

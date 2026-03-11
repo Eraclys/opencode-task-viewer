@@ -33,7 +33,7 @@ public sealed class QueueDispatchService : IQueueDispatchService
     {
         var rule = string.IsNullOrWhiteSpace(item.Rule) ? "RULE" : item.Rule;
         var path = string.IsNullOrWhiteSpace(item.RelativePath) ? item.AbsolutePath ?? item.IssueKey : item.RelativePath;
-        var issueType = item.ParsedIssueType.Or("ISSUE") ?? "ISSUE";
+        var issueType = item.IssueTypeValue.Or("ISSUE") ?? "ISSUE";
 
         return $"[{issueType}] {rule} :: {path}";
     }
@@ -47,7 +47,7 @@ public sealed class QueueDispatchService : IQueueDispatchService
             $"Task key: {item.TaskKey ?? item.IssueKey}",
             $"Project: {item.SonarProjectKey}",
             $"Directory: {item.Directory}",
-            $"Issue type: {item.ParsedIssueType.Or("UNKNOWN") ?? "UNKNOWN"}",
+            $"Issue type: {item.IssueTypeValue.Or("UNKNOWN") ?? "UNKNOWN"}",
             $"Rule: {item.Rule ?? "UNKNOWN"}",
             $"Issue count: {Math.Max(1, item.IssueCount)}"
         };

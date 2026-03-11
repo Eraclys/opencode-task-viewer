@@ -1,4 +1,5 @@
 using OpenCode.Client;
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
 
@@ -88,11 +89,11 @@ public sealed class WorkingSessionsReadServiceTests
             DateTimeOffset now,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<InstructionProfileRecord> UpsertInstructionProfile(
             int mappingId,
-            string issueType,
+            SonarIssueType issueType,
             string instructions,
             DateTimeOffset now,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

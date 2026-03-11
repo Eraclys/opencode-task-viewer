@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
 
 namespace SonarQube.OpenCodeTaskViewer.Persistence;
@@ -207,7 +208,7 @@ LIMIT 1",
         return MapMapping(insertedRow);
     }
 
-    public async Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default)
+    public async Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default)
     {
         using var conn = _openConnection();
 
@@ -227,7 +228,7 @@ LIMIT 1",
                 new
                 {
                     MappingId = mappingId,
-                    IssueType = issueType
+                    IssueType = issueType.Value
                 },
                 cancellationToken: cancellationToken));
 
@@ -236,7 +237,7 @@ LIMIT 1",
 
     public async Task<InstructionProfileRecord> UpsertInstructionProfile(
         int mappingId,
-        string issueType,
+        SonarIssueType issueType,
         string instructions,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
@@ -255,7 +256,7 @@ ON CONFLICT(mapping_id, issue_type) DO UPDATE SET
                 new
                 {
                     MappingId = mappingId,
-                    IssueType = issueType,
+                    IssueType = issueType.Value,
                     Instructions = instructions,
                     CreatedAt = nowIso,
                     UpdatedAt = nowIso
@@ -278,7 +279,7 @@ LIMIT 1",
                 new
                 {
                     MappingId = mappingId,
-                    IssueType = issueType
+                    IssueType = issueType.Value
                 },
                 cancellationToken: cancellationToken));
 

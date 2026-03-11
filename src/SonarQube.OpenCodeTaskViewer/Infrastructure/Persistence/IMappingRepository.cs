@@ -1,3 +1,5 @@
+using SonarQube.Client;
+
 namespace SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
 
 public interface IMappingRepository
@@ -15,11 +17,11 @@ public interface IMappingRepository
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
-    Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, string issueType, CancellationToken cancellationToken = default);
+    Task<InstructionProfileRecord?> GetInstructionProfile(int mappingId, SonarIssueType issueType, CancellationToken cancellationToken = default);
 
     Task<InstructionProfileRecord> UpsertInstructionProfile(
         int mappingId,
-        string issueType,
+        SonarIssueType issueType,
         string instructions,
         DateTimeOffset now,
         CancellationToken cancellationToken = default);

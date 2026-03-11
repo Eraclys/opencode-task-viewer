@@ -1,3 +1,4 @@
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 
 namespace SonarQube.OpenCodeTaskViewer.Infrastructure.Persistence;
@@ -6,7 +7,7 @@ public interface IQueueRepository
 {
     Task<(List<QueueItemRecord> CreatedItems, List<QueueSkip> Skipped)> EnqueueIssuesBatch(
         MappingRecord mapping,
-        string? type,
+        SonarIssueType type,
         string instructionText,
         IReadOnlyList<NormalizedIssue> issues,
         int maxAttempts,

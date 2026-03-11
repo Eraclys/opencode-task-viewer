@@ -55,13 +55,13 @@ public sealed class QueueItemSessionSummaryMapper
             TaskInstructions = item.Instructions,
             TaskIssueCount = item.IssueCount,
             IssueKey = string.IsNullOrWhiteSpace(item.IssueKey) ? null : item.IssueKey,
-            IssueType = item.ParsedIssueType,
-            IssueSeverity = item.ParsedSeverity,
+            IssueType = item.IssueTypeValue,
+            IssueSeverity = item.SeverityValue,
             IssueRule = item.Rule,
             IssuePath = item.RelativePath ?? item.AbsolutePath,
             IssueLine = item.Line,
             LastError = item.LastError,
-            LastReviewAction = item.ParsedLastReviewAction,
+            LastReviewAction = item.ReviewAction,
             LastReviewReason = item.LastReviewReason,
             LastReviewedAt = item.LastReviewedAt
         };

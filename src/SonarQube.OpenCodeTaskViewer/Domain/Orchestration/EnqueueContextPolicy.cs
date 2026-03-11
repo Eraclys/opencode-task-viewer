@@ -1,3 +1,5 @@
+using SonarQube.Client;
+
 namespace SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 
 public static class EnqueueContextPolicy
@@ -10,5 +12,5 @@ public static class EnqueueContextPolicy
         return (defaultInstructions ?? string.Empty).Trim();
     }
 
-    public static bool ShouldPersistInstructionProfile(string? normalizedIssueType, string instructionText) => !string.IsNullOrWhiteSpace(normalizedIssueType) && !string.IsNullOrWhiteSpace(instructionText);
+    public static bool ShouldPersistInstructionProfile(SonarIssueType issueType, string instructionText) => issueType.HasValue && !string.IsNullOrWhiteSpace(instructionText);
 }

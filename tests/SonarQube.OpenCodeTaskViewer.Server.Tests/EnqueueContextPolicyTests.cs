@@ -1,3 +1,4 @@
+using SonarQube.Client;
 using SonarQube.OpenCodeTaskViewer.Domain.Orchestration;
 
 namespace SonarQube.OpenCodeTaskViewer.Server.Tests;
@@ -22,5 +23,6 @@ public sealed class EnqueueContextPolicyTests
     [InlineData("CODE_SMELL", "text", true)]
     [InlineData(null, "text", false)]
     [InlineData("CODE_SMELL", "", false)]
-    public void ShouldPersistInstructionProfile_RequiresTypeAndText(string? type, string text, bool expected) => Assert.Equal(expected, EnqueueContextPolicy.ShouldPersistInstructionProfile(type, text));
+    public void ShouldPersistInstructionProfile_RequiresTypeAndText(string? type, string text, bool expected)
+        => Assert.Equal(expected, EnqueueContextPolicy.ShouldPersistInstructionProfile(SonarIssueType.FromRaw(type), text));
 }

@@ -7,5 +7,5 @@ public sealed record TaskReviewHistoryRecord(
     string? Reason,
     DateTimeOffset CreatedAt)
 {
-    public TaskReviewAction ParsedAction => TaskReviewAction.FromRaw(Action);
+    public TaskReviewAction ReviewAction => TaskReviewAction.FromRaw(Action);
 }
