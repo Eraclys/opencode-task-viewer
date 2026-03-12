@@ -154,13 +154,12 @@ public sealed class UiTests
             await page.GetByTestId("orch-settings-toggle").ClickAsync();
             await Expect(page.GetByTestId("orch-delete-mapping-select")).ToBeVisibleAsync();
 
-            await page
-                .GetByTestId("orch-delete-mapping-select")
-                .SelectOptionAsync(
-                    new[]
-                    {
-                        "1"
-                    });
+            var deleteMappingSelect = page.GetByTestId("orch-delete-mapping-select");
+            var deleteMappingOption = deleteMappingSelect.Locator("option").Nth(1);
+            var deleteMappingValue = await deleteMappingOption.GetAttributeAsync("value");
+
+            Assert.False(string.IsNullOrWhiteSpace(deleteMappingValue));
+            await deleteMappingSelect.SelectOptionAsync(deleteMappingValue);
 
             page.Dialog += (_, dialog) => _ = dialog.AcceptAsync();
             await page.GetByTestId("orch-delete-mapping-btn").ClickAsync();

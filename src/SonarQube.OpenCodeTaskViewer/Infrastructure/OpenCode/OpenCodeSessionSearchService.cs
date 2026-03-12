@@ -199,10 +199,16 @@ public sealed class OpenCodeSessionSearchService
             var worktree = DirectoryPath.Parse(project.Worktree);
             var candidates = new List<string>();
 
-            if (worktree is { Value: not "/" and not "\\" })
-                candidates.Add(worktree.Value.Value);
+            if (worktree is { IsRoot: false } parsedWorktree)
+                candidates.Add(parsedWorktree.Value);
 
-            candidates.AddRange(project.SandboxDirectories.Select(DirectoryPath.Parse).Where(value => value.HasValue).Select(value => value!.Value.Value));
+            foreach (var sandboxDirectory in project.SandboxDirectories)
+            {
+                var parsedSandbox = DirectoryPath.Parse(sandboxDirectory);
+
+                if (parsedSandbox is { IsRoot: false } sandbox)
+                    candidates.Add(sandbox.Value);
+            }
 
             foreach (var candidate in candidates)
             {

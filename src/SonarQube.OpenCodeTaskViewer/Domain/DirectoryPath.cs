@@ -11,6 +11,8 @@ public readonly record struct DirectoryPath
 
     public string Value { get; }
 
+    public bool IsRoot => Value is "/" or "\\";
+
     public string CacheKey => ToForwardSlash(Value) ?? string.Empty;
 
     public List<string> Variants => GetVariants(Value);

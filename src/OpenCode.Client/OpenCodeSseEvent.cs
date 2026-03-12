@@ -8,26 +8,3 @@ public sealed class OpenCodeSseEvent
 
     [JsonPropertyName("payload")] public OpenCodeSsePayload? Payload { get; init; }
 }
-
-public sealed class OpenCodeSsePayload
-{
-    [JsonPropertyName("type")] public string? Type { get; init; }
-
-    [JsonPropertyName("properties")] public OpenCodeSseProperties? Properties { get; init; }
-}
-
-public sealed class OpenCodeSseProperties
-{
-    [JsonPropertyName("sessionID")] public string? LegacySessionId { get; init; }
-
-    [JsonPropertyName("sessionId")] public string? SessionId { get; init; }
-
-    [JsonPropertyName("status")] public OpenCodeSseStatus? Status { get; init; }
-
-    [JsonPropertyName("type")] public string? Type { get; init; }
-}
-
-public sealed class OpenCodeSseStatus
-{
-    [JsonPropertyName("type")] public string? Type { get; init; }
-}

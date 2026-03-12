@@ -40,7 +40,7 @@ dotnet tool uninstall -g SonarQube.OpenCodeTaskViewer
 ## Run from Source
 
 ```bash
-dotnet run --project src/TaskViewer.Server/TaskViewer.Server.csproj
+dotnet run --project src/SonarQube.OpenCodeTaskViewer.Server/SonarQube.OpenCodeTaskViewer.Server.csproj
 ```
 
 Open http://127.0.0.1:3456
@@ -105,22 +105,22 @@ it with `ORCHESTRATOR_DB_PATH` if you want a repo-local or custom location.
 ## Tests
 
 ```bash
-dotnet test TaskViewer.slnx
+dotnet test SonarQube.OpenCodeTaskViewer.slnx
 ```
 
 Playwright browser install (first run):
 
 ```bash
-dotnet build tests/TaskViewer.E2E.Tests/TaskViewer.E2E.Tests.csproj
-powershell ./tests/TaskViewer.E2E.Tests/bin/Debug/net9.0/playwright.ps1 install chromium
+dotnet build tests/SonarQube.OpenCodeTaskViewer.E2E.Tests/SonarQube.OpenCodeTaskViewer.E2E.Tests.csproj
+powershell ./tests/SonarQube.OpenCodeTaskViewer.E2E.Tests/bin/Debug/net9.0/playwright.ps1 install chromium
 ```
 
 ## Publish to NuGet.org
 
 ```bash
-dotnet build TaskViewer.slnx
-dotnet test TaskViewer.slnx
-dotnet pack -c Release src/TaskViewer.Server/TaskViewer.Server.csproj -o ./artifacts/nupkg
+dotnet build SonarQube.OpenCodeTaskViewer.slnx
+dotnet test SonarQube.OpenCodeTaskViewer.slnx
+dotnet pack -c Release src/SonarQube.OpenCodeTaskViewer.Server/SonarQube.OpenCodeTaskViewer.Server.csproj -o ./artifacts/nupkg
 dotnet tool install --tool-path ./artifacts/tool-test SonarQube.OpenCodeTaskViewer --add-source ./artifacts/nupkg
 ./artifacts/tool-test/sonar-taskviewer
 dotnet nuget push ./artifacts/nupkg/SonarQube.OpenCodeTaskViewer.0.1.0.nupkg --source https://api.nuget.org/v3/index.json --api-key <NUGET_API_KEY>

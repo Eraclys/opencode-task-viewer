@@ -1,4 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>SonarQube.OpenCodeTaskViewer.Core</PackageId>
+    </PropertyGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\OpenCode.Client\OpenCode.Client.csproj"/>
         <ProjectReference Include="..\SonarQube.Client\SonarQube.Client.csproj"/>

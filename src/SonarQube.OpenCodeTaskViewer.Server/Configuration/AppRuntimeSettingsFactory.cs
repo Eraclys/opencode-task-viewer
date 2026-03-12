@@ -13,6 +13,11 @@ public static class AppRuntimeSettingsFactory
     public static void BindInto(AppRuntimeSettingsOptions options, IConfiguration configuration)
     {
         configuration.Bind(options);
+        configuration.GetSection("TaskViewer").Bind(options.TaskViewer);
+        configuration.GetSection("SonarQube.OpenCodeTaskViewer").Bind(options.TaskViewer);
+        configuration.GetSection("OpenCode").Bind(options.OpenCode);
+        configuration.GetSection("SonarQube").Bind(options.SonarQube);
+        configuration.GetSection("Orchestration").Bind(options.Orchestration);
 
         options.TaskViewer.Host = FirstNonEmpty(configuration["HOST"], options.TaskViewer.Host);
         options.TaskViewer.Port = FirstNonEmpty(configuration["PORT"], options.TaskViewer.Port);

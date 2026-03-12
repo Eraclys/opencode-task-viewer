@@ -42,7 +42,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var server = app.Services.GetRequiredService<IServer>();
     var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
     var actual = addresses?.FirstOrDefault() ?? app.Urls.FirstOrDefault() ?? $"http://{viewerHost}:{viewerPort}";
-    Console.WriteLine($"OpenCode Task Viewer running at {actual}");
+    Console.WriteLine($"SonarQube OpenCode Task Viewer running at {actual}");
     Console.WriteLine($"VIEWER_URL={actual}");
     Console.WriteLine($"Using OpenCode server: {opencodeUrl}");
     Console.WriteLine($"Using SonarQube mode: {sonarMode}");
